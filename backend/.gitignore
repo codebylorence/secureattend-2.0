@@ -1,0 +1,68 @@
+# =========================
+# Node.js Backend .gitignore
+# =========================
+
+# --- Node Modules ---
+node_modules/
+
+# --- Environment Variables ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# --- Logs ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+logs/
+*.log
+
+# --- Database Files (if any local testing) ---
+*.sqlite
+*.db
+*.sql
+*.bak
+
+# --- System Files ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# --- Temporary Files ---
+tmp/
+temp/
+*.tmp
+*.swp
+*.lock
+*.pid
+*.seed
+
+# --- IDE / Editor Files ---
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# --- Build / Output ---
+dist/
+build/
+.cache/
+coverage/
+
+# --- Test Files ---
+coverage/
+*.lcov
+
+# --- Docker / Deployment ---
+.dockerignore
+docker-compose.yml
+Dockerfile
+
+# --- Misc ---
+package-lock.json
