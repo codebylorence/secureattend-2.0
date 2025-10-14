@@ -11,8 +11,8 @@ export default function AppRouter() {
         <Route path="/" element={<Login />} />
 
         <Route element={<AdminLayout />}>
-          <Route path="/admin-dashboard" element={<AdminDashboard />} />
-          <Route path="/admin-employees" element={<Employees />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/employees" element={<Employees />} />
         </Route>
       </Routes>
     </BrowserRouter>
