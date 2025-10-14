@@ -9,7 +9,7 @@ import { MdSettings } from "react-icons/md";
 
 function Sidebar({ role }) {
   return (
-    <div className="w-60 bg-[#1E3A8A] text-white min-h-screen p-4 mt-25 flex fixed">
+    <div className="w-60 bg-[#1E3A8A] text-white min-h-screen p-4 mt-25 flex inset-x-0 top-0 bottom-0 fixed">
       <ul className="space-y-8">
         {/* Common Links for All Roles */}
         {/* <li>
@@ -22,7 +22,7 @@ function Sidebar({ role }) {
             <li className="flex gap-2">
               <MdDashboard size="30"/>
               <Link to="/admin/dashboard" className="hover:text-gray-300 flex items-center">
-                Dashboar
+                Dashboard
               </Link>
             </li>
             <li className="flex gap-2">

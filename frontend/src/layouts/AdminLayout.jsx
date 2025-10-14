@@ -4,11 +4,11 @@ import Navbar from "../components/Navbar";
 
 export default function AdminLayout() {
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="grid h-screen pl-5 sm:pl-70 bg-gray-50">
       <Sidebar role="admin" />
-      <div className="flex-1 flex flex-col">
+      <div>
         <Navbar title="Admin Dashboard" />
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 mt-30">
           <Outlet /> {/* This is where your pages render */}
         </main>
       </div>
