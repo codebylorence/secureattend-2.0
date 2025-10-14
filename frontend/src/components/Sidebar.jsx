@@ -22,7 +22,7 @@ function Sidebar({ role }) {
             <li className="flex gap-2">
               <MdDashboard size="30"/>
               <Link to="/admin/dashboard" className="hover:text-gray-300 flex items-center">
-                Dashboard
+                Dashboar
               </Link>
             </li>
             <li className="flex gap-2">
