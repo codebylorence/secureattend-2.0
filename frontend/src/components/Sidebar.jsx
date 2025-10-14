@@ -9,8 +9,7 @@ import { MdSettings } from "react-icons/md";
 
 function Sidebar({ role }) {
   return (
-    <div className="w-64 bg-blue-900 text-white min-h-screen p-4 mt-5">
-      <h2 className="text-xl mb-6">SecureAttend</h2>
+    <div className="w-60 bg-[#1E3A8A] text-white min-h-screen p-4 mt-25 flex fixed">
       <ul className="space-y-8">
         {/* Common Links for All Roles */}
         {/* <li>
