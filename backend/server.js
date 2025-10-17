@@ -10,9 +10,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Routes (temporary test)
-app.get("/", (req, res) => res.send("SecureAttend Backend Running"));
-
 //Routes
 app.use("/api/employees", employeeRoutes);
 

@@ -1,56 +1,44 @@
-import Employee from "../models/employee.js";
+import {
+  getAllEmployees,
+  createEmployee,
+  removeEmployee,
+} from "../services/employeeService.js";
 
-// ✅ Add employee
-export const addEmployee = async (req, res) => {
-  try {
-    const newEmployee = await Employee.create(req.body);
-    res.status(201).json(newEmployee);
-  } catch (err) {
-    res.status(500).json({ message: "Error adding employee", error: err.message });
-  }
-};
-
-// ✅ Get all employees
+// GET /api/employees
 export const getEmployees = async (req, res) => {
   try {
-    const employees = await Employee.findAll();
+    const employees = await getAllEmployees();
     res.status(200).json(employees);
-  } catch (err) {
-    res.status(500).json({ message: "Error fetching employees", error: err.message });
+  } catch (error) {
+    console.error("Error fetching employees:", error);
+    res.status(500).json({ message: "Error fetching employees" });
   }
 };
 
-// ✅ Get single employee by ID
-export const getEmployeeById = async (req, res) => {
+// POST /api/employees
+export const addEmployee = async (req, res) => {
   try {
-    const employee = await Employee.findByPk(req.params.id);
-    if (!employee) return res.status(404).json({ message: "Employee not found" });
-    res.status(200).json(employee);
-  } catch (err) {
-    res.status(500).json({ message: "Error fetching employee", error: err.message });
+    const newEmployee = await createEmployee(req.body);
+    res.status(201).json(newEmployee);
+  } catch (error) {
+    console.error("Error adding employee:", error);
+    res.status(500).json({ message: "Error adding employee" });
   }
 };
 
-// ✅ Update employee
-export const updateEmployee = async (req, res) => {
-  try {
-    const employee = await Employee.findByPk(req.params.id);
-    if (!employee) return res.status(404).json({ message: "Employee not found" });
-    await employee.update(req.body);
-    res.status(200).json({ message: "Employee updated successfully", employee });
-  } catch (err) {
-    res.status(500).json({ message: "Error updating employee", error: err.message });
-  }
-};
-
-// ✅ Delete employee
+// DELETE /api/employees/:id
 export const deleteEmployee = async (req, res) => {
   try {
-    const employee = await Employee.findByPk(req.params.id);
-    if (!employee) return res.status(404).json({ message: "Employee not found" });
-    await employee.destroy();
+    const { id } = req.params;
+    const deleted = await removeEmployee(id);
+
+    if (!deleted) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
     res.status(200).json({ message: "Employee deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ message: "Error deleting employee", error: err.message });
+  } catch (error) {
+    console.error("Error deleting employee:", error);
+    res.status(500).json({ message: "Error deleting employee" });
   }
 };

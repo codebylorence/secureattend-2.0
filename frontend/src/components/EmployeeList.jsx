@@ -7,8 +7,10 @@ const EmployeeList = forwardRef((props, ref) => {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  //  Fetch employees from API
   const loadEmployees = async () => {
     try {
+      setLoading(true);
       const data = await fetchEmployees();
       setEmployees(data);
     } catch (error) {
@@ -18,11 +20,12 @@ const EmployeeList = forwardRef((props, ref) => {
     }
   };
 
-  // 🔁 Expose loadEmployees to parent via ref
+  //  Allow parent components to trigger reload
   useImperativeHandle(ref, () => ({
     loadEmployees,
   }));
 
+  //  Initial load
   useEffect(() => {
     loadEmployees();
   }, []);
@@ -53,17 +56,23 @@ const EmployeeList = forwardRef((props, ref) => {
                 <th className="py-3 px-4 text-left font-medium">Action</th>
               </tr>
             </thead>
+
             <tbody className="text-gray-700">
               {employees.length > 0 ? (
                 employees.map((emp) => (
-                  <tr key={emp.id} className="border-b bg-white hover:bg-gray-50">
+                  <tr
+                    key={emp.id}
+                    className="border-b bg-white hover:bg-gray-50 transition"
+                  >
                     <td className="py-3 px-4">{emp.employee_id}</td>
                     <td className="py-3 px-4">{emp.fullname}</td>
                     <td className="py-3 px-4">{emp.department}</td>
                     <td className="py-3 px-4">{emp.position}</td>
                     <td className="py-3 px-4">{emp.status}</td>
+
+                    {/* ✅ Pass employee ID and refresh function */}
                     <td className="py-3 px-4">
-                      <EmpAction />
+                      <EmpAction id={emp.id} onDeleted={loadEmployees} />
                     </td>
                   </tr>
                 ))

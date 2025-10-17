@@ -26,10 +26,10 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
       await addEmployee(formData);
       onAdded(); // Refresh employee list
       onClose(); // Close modal
-      alert("✅ Employee added successfully!");
+      alert("Employee added successfully!");
     } catch (error) {
       console.error("Error adding employee:", error);
-      alert("❌ Failed to add employee");
+      alert("Failed to add employee");
     }
   };
 
