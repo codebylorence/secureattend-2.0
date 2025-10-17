@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { syncDatabase } from "./models/index.js";
+import sequelize from "./config/database.js";
+import employeeRoutes from "./routes/employeeRoutes.js";
 
 dotenv.config();
 const app = express();
@@ -10,6 +12,16 @@ app.use(express.json());
 
 // Routes (temporary test)
 app.get("/", (req, res) => res.send("SecureAttend Backend Running"));
+
+//Routes
+app.use("/api/employees", employeeRoutes);
+
+// Database connection
+sequelize
+  .sync()
+  .then(() => console.log("✅ Database synced successfully"))
+  .catch((err) => console.error("❌ Database connection failed:", err));
+
 
 // Start Server
 const PORT = process.env.PORT || 5000;
