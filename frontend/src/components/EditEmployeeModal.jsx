@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { addEmployee } from "../api/EmployeeApi";
+import React, { useState, useEffect } from "react";
+import { updateEmployee } from "../api/EmployeeApi";
 
-export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
+export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated }) {
   const [formData, setFormData] = useState({
     employee_id: "",
     fullname: "",
@@ -12,8 +12,22 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     status: "Active",
   });
 
-  
-  const departments = ["Zone A", "Zone B", "Zone C", "Zone D", "Zone E","Zone F"];
+  // 🔁 When modal opens, populate fields with selected employee
+  useEffect(() => {
+    if (employee) {
+      setFormData({
+        employee_id: employee.employee_id || "",
+        fullname: employee.fullname || "",
+        department: employee.department || "",
+        position: employee.position || "",
+        contact_number: employee.contact_number || "",
+        email: employee.email || "",
+        status: employee.status || "Active",
+      });
+    }
+  }, [employee]);
+
+  const departments = ["Zone A", "Zone B", "Zone C", "Warehouse Admin", "HR Department"];
   const positions = ["Picker", "Packer", "Inventory Clerk", "Supervisor", "Team Leader"];
 
   const handleChange = (e) => {
@@ -23,13 +37,13 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await addEmployee(formData);
-      onAdded(); // Refresh employee list
-      onClose(); // Close modal
-      alert("Employee added successfully!");
+      await updateEmployee(employee.id, formData);
+      alert("Employee updated successfully!");
+      onUpdated();
+      onClose();
     } catch (error) {
-      console.error("Error adding employee:", error);
-      alert("Failed to add employee");
+      console.error("Error updating employee:", error);
+      alert("Failed to update employee");
     }
   };
 
@@ -38,7 +52,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative">
-        <h2 className="text-lg font-semibold mb-4 text-[#1E3A8A]">Add New Employee</h2>
+        <h2 className="text-lg font-semibold mb-4 text-[#1E3A8A]">Edit Employee</h2>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           {/* Employee ID */}
@@ -51,6 +65,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               onChange={handleChange}
               required
               className="w-full border border-gray-300 rounded-md p-2"
+              disabled
             />
           </div>
 
@@ -67,7 +82,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
             />
           </div>
 
-          {/* Department Dropdown */}
+          {/* Department */}
           <div>
             <label className="block text-sm font-medium text-gray-700">Department</label>
             <select
@@ -78,15 +93,15 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               className="w-full border border-gray-300 rounded-md p-2 bg-white"
             >
               <option value="">Select Department</option>
-              {departments.map((dept, idx) => (
-                <option key={idx} value={dept}>
+              {departments.map((dept) => (
+                <option key={dept} value={dept}>
                   {dept}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Position Dropdown */}
+          {/* Position */}
           <div>
             <label className="block text-sm font-medium text-gray-700">Position</label>
             <select
@@ -97,8 +112,8 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               className="w-full border border-gray-300 rounded-md p-2 bg-white"
             >
               <option value="">Select Position</option>
-              {positions.map((pos, idx) => (
-                <option key={idx} value={pos}>
+              {positions.map((pos) => (
+                <option key={pos} value={pos}>
                   {pos}
                 </option>
               ))}
@@ -113,7 +128,6 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               name="contact_number"
               value={formData.contact_number}
               onChange={handleChange}
-              required
               className="w-full border border-gray-300 rounded-md p-2"
             />
           </div>
@@ -126,7 +140,6 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              required
               className="w-full border border-gray-300 rounded-md p-2"
             />
           </div>
@@ -158,7 +171,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               type="submit"
               className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md hover:bg-blue-900"
             >
-              Save
+              Save Changes
             </button>
           </div>
         </form>

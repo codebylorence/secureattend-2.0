@@ -1,44 +1,59 @@
-import React from "react";
+// EmpAction.jsx
+import React, { useState } from "react";
 import { FaEdit } from "react-icons/fa";
 import { MdDelete } from "react-icons/md";
 import { FaFingerprint } from "react-icons/fa";
 import { deleteEmployee } from "../api/EmployeeApi";
+import EditEmployeeModal from "./EditEmployeeModal";
 
-export default function EmpAction({ id, onDeleted }) {
-  // ✅ Handle delete click
+export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+
   const handleDelete = async () => {
-    const confirmDelete = window.confirm("Are you sure you want to delete this employee?");
-    if (!confirmDelete) return;
-
-    try {
-      await deleteEmployee(id);
-      alert("Employee deleted successfully!");
-      if (onDeleted) onDeleted(); // refresh employee list
-    } catch (error) {
-      console.error("Error deleting employee:", error);
-      alert("Failed to delete employee.");
+    if (window.confirm("Are you sure you want to delete this employee?")) {
+      try {
+        await deleteEmployee(id);
+        alert("Employee deleted successfully!");
+        onDeleted();
+      } catch (error) {
+        console.error("Error deleting employee:", error);
+        alert("Failed to delete employee");
+      }
     }
   };
 
   return (
-    <div className="flex gap-2">
-      {/* Fingerprint (future enrollment feature) */}
-      <button className="bg-[#51A451] w-[35px] h-[35px] flex items-center justify-center rounded">
-        <FaFingerprint color="white" size="25" />
-      </button>
+    <>
+      <div className="flex gap-2">
+        <button className="bg-[#51A451] w-[35px] h-[35px] flex items-center justify-center rounded">
+          <FaFingerprint color="white" size="25" />
+        </button>
 
-      {/* Edit */}
-      <button className="bg-[#4545AE] w-[35px] h-[35px] flex items-center justify-center rounded">
-        <FaEdit color="white" size="25" />
-      </button>
+        {/* Edit button */}
+        <button
+          onClick={() => setIsEditOpen(true)}
+          className="bg-[#4545AE] w-[35px] h-[35px] flex items-center justify-center rounded hover:bg-blue-700"
+        >
+          <FaEdit color="white" size="25" />
+        </button>
 
-      {/* Delete */}
-      <button
-        onClick={handleDelete}
-        className="bg-[#DC3545] w-[35px] h-[35px] flex items-center justify-center rounded hover:bg-red-700 transition"
-      >
-        <MdDelete color="white" size="25" />
-      </button>
-    </div>
+        <button
+          onClick={handleDelete}
+          className="bg-[#DC3545] w-[35px] h-[35px] flex items-center justify-center rounded hover:bg-red-700"
+        >
+          <MdDelete color="white" size="25" />
+        </button>
+      </div>
+
+      {/* Edit Employee Modal */}
+      {isEditOpen && (
+        <EditEmployeeModal
+          isOpen={isEditOpen}
+          onClose={() => setIsEditOpen(false)}
+          employee={employee}
+          onUpdated={onUpdated}
+        />
+      )}
+    </>
   );
 }

@@ -1,4 +1,9 @@
-import React, { useEffect, useState, forwardRef, useImperativeHandle } from "react";
+import React, {
+  useEffect,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import EmpAction from "./EmpAction";
 import { MdManageAccounts } from "react-icons/md";
 import { fetchEmployees } from "../api/EmployeeApi";
@@ -72,7 +77,12 @@ const EmployeeList = forwardRef((props, ref) => {
 
                     {/* ✅ Pass employee ID and refresh function */}
                     <td className="py-3 px-4">
-                      <EmpAction id={emp.id} onDeleted={loadEmployees} />
+                      <EmpAction
+                        id={emp.id}
+                        employee={emp}
+                        onDeleted={loadEmployees}
+                        onUpdated={loadEmployees}
+                      />
                     </td>
                   </tr>
                 ))

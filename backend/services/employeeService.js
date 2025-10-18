@@ -15,3 +15,12 @@ export const removeEmployee = async (id) => {
   const deleted = await Employee.destroy({ where: { id } });
   return deleted;
 };
+
+//  Update employee by ID
+export const updateEmployee = async (id, updatedData) => {
+  const employee = await Employee.findByPk(id);
+  if (!employee) return null;
+
+  await employee.update(updatedData);
+  return employee;
+};

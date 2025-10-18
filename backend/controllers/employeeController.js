@@ -2,6 +2,7 @@ import {
   getAllEmployees,
   createEmployee,
   removeEmployee,
+  updateEmployee
 } from "../services/employeeService.js";
 
 // GET /api/employees
@@ -40,5 +41,25 @@ export const deleteEmployee = async (req, res) => {
   } catch (error) {
     console.error("Error deleting employee:", error);
     res.status(500).json({ message: "Error deleting employee" });
+  }
+};
+
+// ✏️ PUT /api/employees/:id
+export const editEmployee = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedEmployee = await updateEmployee(id, req.body);
+
+    if (!updatedEmployee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    res.status(200).json({
+      message: "Employee updated successfully",
+      employee: updatedEmployee,
+    });
+  } catch (error) {
+    console.error("Error updating employee:", error);
+    res.status(500).json({ message: "Error updating employee" });
   }
 };
