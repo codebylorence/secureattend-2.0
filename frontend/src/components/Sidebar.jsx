@@ -1,102 +1,70 @@
 import { Link } from "react-router-dom";
-import { MdDashboard } from "react-icons/md";
-import { MdGroups } from "react-icons/md";
-import { MdCalendarToday } from "react-icons/md";
-import { MdOutlineHowToReg } from "react-icons/md";
-import { MdIntegrationInstructions } from "react-icons/md";
-import { MdOutlineBusiness } from "react-icons/md";
-import { MdSettings } from "react-icons/md";
+import {
+  MdDashboard,
+  MdGroups,
+  MdCalendarToday,
+  MdOutlineHowToReg,
+  MdIntegrationInstructions,
+  MdOutlineBusiness,
+  MdSettings,
+  MdCalendarMonth,
+} from "react-icons/md";
 
 function Sidebar({ role }) {
   return (
     <div className="w-60 bg-[#1E3A8A] text-white min-h-screen p-4 mt-25 flex inset-x-0 top-0 bottom-0 fixed">
       <ul className="space-y-8">
-        {/* Common Links for All Roles */}
-        {/* <li>
-          <Link to="/dashboard" className="hover:text-gray-300">Dashboard</Link>
-        </li> */}
 
-        {/* Admin Only */}
+        {/* ================= ADMIN ================= */}
         {role === "admin" && (
           <>
-            <li className="flex gap-2">
-              <MdDashboard size="30"/>
-              <Link to="/admin/dashboard" className="hover:text-gray-300 flex items-center">
-                Dashboard
-              </Link>
-            </li>
-            <li className="flex gap-2">
-              <MdGroups size="30"/>
-              <Link to="/admin/employees" className="hover:text-gray-300 flex items-center">
-                Employees
-              </Link>
-            </li>
-            <li className="flex gap-2">
-              <MdCalendarToday size="30"/>
-              <Link to="/admin/schedule" className="hover:text-gray-300 flex items-center">
-                Manage Schedule
-              </Link>
-            </li>
-            <li className="flex gap-2">
-              <MdOutlineHowToReg size="30"/>
-              <Link to="/admin/attendance" className="hover:text-gray-300 flex items-center">
-                Attendance
-              </Link>
-            </li>
-            <li className="flex gap-2">
-              <MdIntegrationInstructions size="30"/>
-              <Link to="/admin/reports" className="hover:text-gray-300 flex items-center">
-                Reports
-              </Link>
-            </li>
-            <li className="flex gap-2">
-              <MdOutlineBusiness size="30"/>
-              <Link to="/admin/departments" className="hover:text-gray-300 flex items-center">
-                Departments
-              </Link>
-            </li>
-            <li className="flex gap-2">
-              <MdSettings size="30"/>
-              <Link to="/admin/settings" className="hover:text-gray-300 flex items-center">
-                Settings
-              </Link>
-            </li>
+            <SidebarItem icon={<MdDashboard size={30} />} to="/admin/dashboard" text="Dashboard" />
+            <SidebarItem icon={<MdGroups size={30} />} to="/admin/employees" text="Employees" />
+            <SidebarItem icon={<MdCalendarToday size={30} />} to="/admin/schedule" text="Manage Schedule" />
+            <SidebarItem icon={<MdOutlineHowToReg size={30} />} to="/admin/attendance" text="Attendance" />
+            <SidebarItem icon={<MdIntegrationInstructions size={30} />} to="/admin/reports" text="Reports" />
+            <SidebarItem icon={<MdOutlineBusiness size={30} />} to="/admin/departments" text="Departments" />
+            <SidebarItem icon={<MdSettings size={30} />} to="/admin/settings" text="Settings" />
           </>
         )}
 
-        {/* Team Leader Only */}
+        {/* ================= TEAM LEADER ================= */}
         {role === "teamleader" && (
           <>
-            <li>
-              <Link to="/team/attendance" className="hover:text-gray-300">
-                Team Attendance
-              </Link>
-            </li>
-            <li>
-              <Link to="/team/schedule" className="hover:text-gray-300">
-                Team Schedule
-              </Link>
-            </li>
+            {/* Employee features (inherited) */}
+            <SidebarItem icon={<MdDashboard size={30} />} to="/team/mydashboard" text="Dashboard" />
+            <SidebarItem icon={<MdOutlineHowToReg size={30} />} to="/team/myattendance" text="My Attendance" />
+            <SidebarItem icon={<MdCalendarToday size={30} />} to="/team/myschedule" text="My Schedule" />
+
+            {/* Extra team leader tools */}
+            <div className="border-t border-gray-400 my-4 opacity-50"></div>
+            <SidebarItem icon={<MdGroups size={30} />} to="/team/dashboard" text="Team Dashboard" />
+            <SidebarItem icon={<MdCalendarMonth size={30} />} to="/team/schedule" text="Team Schedule" />
           </>
         )}
 
-        {/* Employee Only */}
+        {/* ================= EMPLOYEE ================= */}
         {role === "employee" && (
           <>
-            <li>
-              <Link to="/employee/attendance" className="hover:text-gray-300">
-                My Attendance
-              </Link>
-            </li>
-            <li>
-              <Link to="/employee/schedule" className="hover:text-gray-300">
-                My Schedule
-              </Link>
-            </li>
+            <SidebarItem icon={<MdDashboard size={30} />} to="/employee/dashboard" text="Dashboard" />
+            <SidebarItem icon={<MdOutlineHowToReg size={30} />} to="/employee/myattendance" text="My Attendance" />
+            <SidebarItem icon={<MdCalendarToday size={30} />} to="/employee/schedule" text="My Schedule" />
           </>
         )}
       </ul>
     </div>
+  );
+}
+
+// ✅ Reusable sidebar item component
+function SidebarItem({ icon, to, text }) {
+  return (
+    <li className="flex gap-2 items-center">
+      {icon}
+      <Link to={to} className="hover:text-gray-300 flex items-center">
+        {text}
+      </Link>
+    </li>
   );
 }
 
