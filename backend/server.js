@@ -16,13 +16,13 @@ app.use("/api/employees", employeeRoutes);
 // Database connection
 sequelize
   .sync()
-  .then(() => console.log("✅ Database synced successfully"))
-  .catch((err) => console.error("❌ Database connection failed:", err));
+  .then(() => console.log("Database synced successfully"))
+  .catch((err) => console.error("Database connection failed:", err));
 
 
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
   await syncDatabase();
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

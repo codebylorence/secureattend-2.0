@@ -44,7 +44,7 @@ export const deleteEmployee = async (req, res) => {
   }
 };
 
-// ✏️ PUT /api/employees/:id
+//  PUT /api/employees/:id
 export const editEmployee = async (req, res) => {
   try {
     const { id } = req.params;
