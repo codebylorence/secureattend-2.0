@@ -1,4 +1,7 @@
-import React from 'react'
+import React from "react";
+import ManageDepartment from "../components/ManageDepartment";
+import DropdownZone from "../components/DropdownZone";
+import AddDeptButton from "../components/AddDeptButton";
 
 export default function Departments() {
   return (
@@ -9,6 +12,19 @@ export default function Departments() {
           Departments
         </h1>
       </div>
+
+      <div className="flex justify-between my-6">
+        <div className="flex items-center gap-4">
+          <p className="text-[#374151] mr-5">Filter :</p>
+          <DropdownZone />
+        </div>
+
+        <div className="flex">
+          <AddDeptButton />
+        </div>
+      </div>
+
+      <ManageDepartment />
     </div>
-  )
+  );
 }

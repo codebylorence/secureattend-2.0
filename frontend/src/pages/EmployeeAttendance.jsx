@@ -1,4 +1,7 @@
-import React from 'react'
+import DropdownZone from "../components/DropdownZone";
+import DropdownDateFilter from "../components/DropdownDateFilter";
+import SearchBar from "../components/SearchBar";
+import AttendRec from "../components/AttendRec";
 
 export default function EmployeeAttendance() {
   return (
@@ -9,6 +12,17 @@ export default function EmployeeAttendance() {
           Attendance Records
         </h1>
       </div>
+
+      <div className="flex justify-between my-6">
+        <div className="flex items-center gap-4">
+          <p className="text-[#374151] mr-5">Filter :</p>
+          <DropdownZone />
+          <DropdownDateFilter />
+        </div>
+        <SearchBar />
+      </div>
+
+      <AttendRec />
     </div>
-  )
+  );
 }
