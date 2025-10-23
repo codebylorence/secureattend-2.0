@@ -19,11 +19,11 @@ export const getEmployees = async (req, res) => {
 // POST /api/employees
 export const addEmployee = async (req, res) => {
   try {
-    const newEmployee = await createEmployee(req.body);
-    res.status(201).json(newEmployee);
+    const result = await createEmployee(req.body);
+    return res.status(201).json(result);
   } catch (error) {
-    console.error("Error adding employee:", error);
-    res.status(500).json({ message: "Error adding employee" });
+    console.error("Error creating employee:", error);
+    return res.status(500).json({ message: "Error creating employee", error: error.message });
   }
 };
 

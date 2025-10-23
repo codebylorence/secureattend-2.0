@@ -4,6 +4,9 @@ import dotenv from "dotenv";
 import { syncDatabase } from "./models/index.js";
 import sequelize from "./config/database.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import "./models/employee.js";
+import "./models/user.js";
 
 dotenv.config();
 const app = express();
@@ -12,10 +15,10 @@ app.use(express.json());
 
 //Routes
 app.use("/api/employees", employeeRoutes);
+app.use("/api/auth", userRoutes);
 
 // Database connection
-sequelize
-  .sync()
+sequelize.sync({ alter: true }) // Use alter:true during dev, remove in prod
   .then(() => console.log("Database synced successfully"))
   .catch((err) => console.error("Database connection failed:", err));
 

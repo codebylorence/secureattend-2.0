@@ -8,7 +8,7 @@ export default function AttendRec() {
         <div className="bg-[#1E3A8A] text-white flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-2">
             <FaClock size={20}/> 
-            <h2 className="font-semibold text-white">Today's Attendance</h2>
+            <h2 className="font-semibold text-white">Attendance Records</h2>
           </div>
 
           <div className="flex items-center text-sm">

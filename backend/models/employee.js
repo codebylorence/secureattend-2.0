@@ -4,33 +4,19 @@ import sequelize from "../config/database.js";
 const Employee = sequelize.define("Employee", {
   id: {
     type: DataTypes.INTEGER,
-    primaryKey: true,
     autoIncrement: true,
+    primaryKey: true,
   },
   employee_id: {
     type: DataTypes.STRING,
     allowNull: false,
     unique: true,
   },
-  fullname: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  department: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  position: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  contact_number: {
-    type: DataTypes.STRING,
-  },
-  email: {
-    type: DataTypes.STRING,
-    validate: { isEmail: true },
-  },
+  fullname: DataTypes.STRING,
+  department: DataTypes.STRING,
+  position: DataTypes.STRING,
+  contact_number: DataTypes.STRING,
+  email: DataTypes.STRING,
   status: {
     type: DataTypes.ENUM("Active", "Inactive"),
     defaultValue: "Active",

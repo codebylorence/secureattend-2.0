@@ -1,27 +1,25 @@
-import axios from "axios";
-
-const API_URL = "http://localhost:5000/api/employees";
+import api from "./axiosConfig"
 
 // Fetch all employees
 export const fetchEmployees = async () => {
-  const response = await axios.get(API_URL);
+  const response = await api.get("/employees");
   return response.data;
 };
 
 // Add a new employee
 export const addEmployee = async (employeeData) => {
-  const response = await axios.post(API_URL, employeeData);
+  const response = await api.post("/employees", employeeData);
   return response.data;
 };
 
 // Delete an employee
 export const deleteEmployee = async (id) => {
-  const response = await axios.delete(`${API_URL}/${id}`);
+  const response = await api.delete(`/employees/${id}`);
   return response.data;
 };
 
 // Update an employee
 export const updateEmployee = async (id, employeeData) => {
-  const response = await axios.put(`${API_URL}/${id}`, employeeData);
+  const response = await api.put(`/employees/${id}`, employeeData);
   return response.data;
 };
