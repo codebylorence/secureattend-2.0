@@ -10,3 +10,12 @@ export const loginUser = async (credentials) => {
     throw error.response?.data?.message || "Login failed";
   }
 };
+
+export const fetchUserProfile = async (token) => {
+  const res = await api.get(`/auth/profile`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return res.data;
+};

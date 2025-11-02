@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { IoNotifications } from "react-icons/io5";
 import { FaUserCircle, FaSignOutAlt } from "react-icons/fa";
-import Profile from "../assets/img/profile.png";
 import { useNavigate } from "react-router-dom";
 
 export default function Navbar() {

@@ -3,7 +3,10 @@ import Employee from "../models/employee.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-//  LOGIN SERVICE
+// 🔒 Use the secret from .env for both signing & verification
+const JWT_SECRET = process.env.JWT_SECRET || "secureattend_secret_key";
+
+// 🔑 LOGIN SERVICE
 export const verifyLogin = async (username, password) => {
   const user = await User.findOne({
     where: { username },
@@ -18,7 +21,7 @@ export const verifyLogin = async (username, password) => {
   // Generate JWT
   const token = jwt.sign(
     { id: user.id, role: user.role, username: user.username },
-    "secureattend_secret_key",
+    JWT_SECRET,
     { expiresIn: "2h" }
   );
 
@@ -34,7 +37,7 @@ export const verifyLogin = async (username, password) => {
   };
 };
 
-//  CHANGE USERNAME / PASSWORD
+// 🔐 CHANGE USERNAME / PASSWORD
 export const changeUserCredentials = async (userId, username, password) => {
   const user = await User.findByPk(userId);
   if (!user) throw new Error("User not found");

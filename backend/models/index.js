@@ -10,7 +10,7 @@ const syncDatabase = async () => {
     await sequelize.sync();
     console.log(" Tables synchronized successfully");
 
-    // 🧩 Create default admin account if not existing
+    //  Create default admin account if not existing
     await createDefaultAdmin();
 
   } catch (error) {
@@ -18,7 +18,7 @@ const syncDatabase = async () => {
   }
 };
 
-// 🧠 Helper function to ensure admin exists
+//  Helper function to ensure admin exists
 const createDefaultAdmin = async () => {
   try {
     const existingAdmin = await User.findOne({ where: { role: "admin" } });

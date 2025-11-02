@@ -3,6 +3,7 @@ import DropdownStatus from "../components/DropdownStatus";
 import DropdownZone from "../components/DropdownZone";
 import SearchBar from "../components/SearchBar";
 import TodaysAttendance from "../components/TodaysAttendance";
+import WelcomeSection from "../components/WelcomeSection";
 
 export default function Dashboard() {
   return (
@@ -11,14 +12,8 @@ export default function Dashboard() {
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
         <h1 className="text-[#374151] text-[21px] font-semibold">Dashboard</h1>
       </div>
-
-      {/* Welcome Section */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-[#1E3A8A]">Welcome, Admin</h2>
-        <p className="mt-1 text-gray-600 font-normal">
-          Sept. 18, 2025 | 8:00 AM
-        </p>
-      </div>
+      
+      <WelcomeSection />
       <AdminMetrics />
 
       <div className="flex justify-between my-6">

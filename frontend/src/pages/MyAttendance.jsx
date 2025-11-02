@@ -1,7 +1,6 @@
 import React from "react";
 import EmployeeMetrics from "../components/EmployeeMetrics";
 import DropdownStatus from "../components/DropdownStatus";
-import DropdownZone from "../components/DropdownZone";
 import DropdownDateFilter from "../components/DropdownDateFilter";
 import MyAttendRec from "../components/MyAttendRec";
 

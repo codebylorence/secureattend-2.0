@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { FaFingerprint } from "react-icons/fa";
-import { loginUser } from "../api/UserApi"; // ✅ import login API
+import { loginUser } from "../api/UserApi"; 
 import { useNavigate } from "react-router-dom";
+import { IoMdEye } from "react-icons/io";
+import { IoMdEyeOff } from "react-icons/io";
 
 export default function Login() {
   const [formData, setFormData] = useState({ username: "", password: "" });
@@ -22,7 +24,7 @@ export default function Login() {
     try {
       const data = await loginUser(formData);
 
-      // ✅ Store token and user info in localStorage
+      // Store token and user info in localStorage
       localStorage.setItem("token", data.token);
       localStorage.setItem("role", data.user.role);
       localStorage.setItem("username", data.user.username);
@@ -98,7 +100,9 @@ export default function Login() {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-2 text-gray-500 hover:text-[#1E3A8A]"
               >
-                {showPassword ? "🙈" : "👁️"}
+                {showPassword ? 
+                <IoMdEyeOff size={25}/>
+                : <IoMdEye size={25} />}
               </button>
             </div>
           </div>

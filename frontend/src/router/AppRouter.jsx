@@ -15,12 +15,14 @@ import EmployeeAttendance from "../pages/EmployeeAttendance";
 import Reports from "../pages/Reports";
 import Departments from "../pages/Departments";
 import Settings from "../pages/Settings";
+import Profile from "../pages/Profile";
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/profile" element={<Profile />} />
 
         <Route element={<AdminLayout />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
