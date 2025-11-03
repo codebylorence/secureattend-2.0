@@ -1,0 +1,11 @@
+[18:33:05] 🔌 User clicked Connect Device
+[18:33:05] 🔌 Initializing ZKTeco device...
+[18:33:06] 📦 Device count detected: 2
+[18:33:07] 📏 Sensor: 275x375
+[18:33:07] ✅ ZKTeco device initialized successfully.
+[18:33:07] ✅ Device connected successfully.
+[18:33:08] ⚠️ Enrollment aborted — missing Employee ID.
+[18:33:14] 🖐️ Starting enrollment for EMP001...
+[18:33:14] 🖐️ Starting enrollment for EMP001...
+[18:33:14] 👉 Please place finger #1
+[18:33:17] ⏳ Waiting for finger #1 (2s)

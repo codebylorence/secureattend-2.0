@@ -68,3 +68,8 @@ export const updateEmployee = async (id, updatedData) => {
   await employee.update(updatedData);
   return employee;
 };
+
+export const getEmployeeByEmployeeId = async (employee_id) => {
+  return await Employee.findOne({ where: { employee_id } });
+};
+
