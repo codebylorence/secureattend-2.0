@@ -1,4 +1,8 @@
-import React from 'react'
+import AssignSched from "../components/AssignSched";
+import TemplateSched from "../components/TemplateSched";
+import ViewSched from "../components/ViewSched";
+
+
 
 export default function ManageSchedule() {
   return (
@@ -9,6 +13,10 @@ export default function ManageSchedule() {
           Manage Schedule
         </h1>
       </div>
+
+      <TemplateSched />
+      <AssignSched />
+      <ViewSched />
     </div>
   )
 }

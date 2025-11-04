@@ -33,7 +33,7 @@ export default function Navbar() {
           onClick={() => setShowProfileMenu(!showProfileMenu)}
         >
           <img
-            src="https://scontent.fmnl33-3.fna.fbcdn.net/v/t39.30808-1/472020402_566286066169802_7055273986583081106_n.jpg?stp=dst-jpg_s200x200_tt6&_nc_cat=110&ccb=1-7&_nc_sid=e99d92&_nc_eui2=AeGU0TWw03kXMsF3TJWdCMVsV6hpqbCo74NXqGmpsKjvgyaDvVDnuycRe06yBkHa9PatDY9aZ6zTgkX1eKCUQGE6&_nc_ohc=njDec7phJ-gQ7kNvwFhnDwc&_nc_oc=AdnT1EjLs-TUfepEmqXt4mAijFN17e4pdnlVTOT5UM62JGMwAIzMxjtIGxVycaekRuA&_nc_zt=24&_nc_ht=scontent.fmnl33-3.fna&_nc_gid=H9KcBtSlIdABTf5ZEVd_SQ&oh=00_AfePzmNxRoXzPKBzHJIph8gH1dxGOAYGMhiP2a1sA1VSww&oe=69002E90"
+            src="https://scontent.fmnl30-2.fna.fbcdn.net/v/t39.30808-1/472020402_566286066169802_7055273986583081106_n.jpg?stp=dst-jpg_s200x200_tt6&_nc_cat=110&ccb=1-7&_nc_sid=e99d92&_nc_eui2=AeGU0TWw03kXMsF3TJWdCMVsV6hpqbCo74NXqGmpsKjvgyaDvVDnuycRe06yBkHa9PatDY9aZ6zTgkX1eKCUQGE6&_nc_ohc=soJ7CIaO9iAQ7kNvwGRLnK7&_nc_oc=Adkrvc8YB-FylwcD0rgUifaViIAh1loNoqsXBAgR3NAnmx_Vv-1r06YJ8nlhBNukz-E&_nc_zt=24&_nc_ht=scontent.fmnl30-2.fna&_nc_gid=qX1lXJLijQ3wZClEuFd_-w&oh=00_AfjD4eE67AQkG3WN6oqksk5wBgRUE-8YFYKMZln45XXhAQ&oe=690F9010"
             alt="Profile"
             className="w-10 h-10 rounded-full border-2 border-white"
           />
@@ -46,7 +46,7 @@ export default function Navbar() {
             {/* Profile Info */}
             <div className="flex items-center gap-3 border-b border-gray-200 pb-3 mb-3">
               <img
-                src="https://scontent.fmnl33-3.fna.fbcdn.net/v/t39.30808-1/472020402_566286066169802_7055273986583081106_n.jpg?stp=dst-jpg_s200x200_tt6&_nc_cat=110&ccb=1-7&_nc_sid=e99d92&_nc_eui2=AeGU0TWw03kXMsF3TJWdCMVsV6hpqbCo74NXqGmpsKjvgyaDvVDnuycRe06yBkHa9PatDY9aZ6zTgkX1eKCUQGE6&_nc_ohc=njDec7phJ-gQ7kNvwFhnDwc&_nc_oc=AdnT1EjLs-TUfepEmqXt4mAijFN17e4pdnlVTOT5UM62JGMwAIzMxjtIGxVycaekRuA&_nc_zt=24&_nc_ht=scontent.fmnl33-3.fna&_nc_gid=H9KcBtSlIdABTf5ZEVd_SQ&oh=00_AfePzmNxRoXzPKBzHJIph8gH1dxGOAYGMhiP2a1sA1VSww&oe=69002E90"
+                src="https://scontent.fmnl30-2.fna.fbcdn.net/v/t39.30808-1/472020402_566286066169802_7055273986583081106_n.jpg?stp=dst-jpg_s200x200_tt6&_nc_cat=110&ccb=1-7&_nc_sid=e99d92&_nc_eui2=AeGU0TWw03kXMsF3TJWdCMVsV6hpqbCo74NXqGmpsKjvgyaDvVDnuycRe06yBkHa9PatDY9aZ6zTgkX1eKCUQGE6&_nc_ohc=soJ7CIaO9iAQ7kNvwGRLnK7&_nc_oc=Adkrvc8YB-FylwcD0rgUifaViIAh1loNoqsXBAgR3NAnmx_Vv-1r06YJ8nlhBNukz-E&_nc_zt=24&_nc_ht=scontent.fmnl30-2.fna&_nc_gid=qX1lXJLijQ3wZClEuFd_-w&oh=00_AfjD4eE67AQkG3WN6oqksk5wBgRUE-8YFYKMZln45XXhAQ&oe=690F9010"
                 alt="User Avatar"
                 className="w-10 h-10 rounded-full"
               />
