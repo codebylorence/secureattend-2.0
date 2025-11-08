@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Linq;
 using libzkfpcsharp;
 
 namespace BiometricEnrollmentApp.Services
@@ -10,8 +11,15 @@ namespace BiometricEnrollmentApp.Services
         private IntPtr _dbHandle = IntPtr.Zero;
         private bool _initialized;
 
+        // Public sensor info for the UI to render raw image buffers when available
+        public int SensorWidth { get; private set; } = 0;
+        public int SensorHeight { get; private set; } = 0;
+        public int ExpectedImageSize => SensorWidth * SensorHeight;
+
         // 🔹 Raise this event so the UI can show progress messages
         public event Action<string>? OnStatus;
+
+        public event Action<byte[]>? OnImageCaptured;
 
         private void UpdateStatus(string msg)
         {
@@ -63,7 +71,7 @@ namespace BiometricEnrollmentApp.Services
                     return false;
                 }
 
-                // 🔹 Read sensor info
+                // 🔹 Read sensor info and expose it
                 int size = 4;
                 byte[] pv = new byte[4];
                 zkfp2.GetParameters(_deviceHandle, 1, pv, ref size);
@@ -71,6 +79,9 @@ namespace BiometricEnrollmentApp.Services
                 size = 4;
                 zkfp2.GetParameters(_deviceHandle, 2, pv, ref size);
                 int height = BitConverter.ToInt32(pv, 0);
+
+                SensorWidth = width;
+                SensorHeight = height;
 
                 UpdateStatus($"📏 Sensor: {width}x{height}");
                 _initialized = true;
@@ -95,9 +106,8 @@ namespace BiometricEnrollmentApp.Services
             try
             {
                 UpdateStatus($"🖐️ Starting enrollment for {employeeId}...");
-                Thread.Sleep(1000); // let sensor warm up
+                Thread.Sleep(1000);
 
-                // Get real sensor size
                 int size = 4;
                 byte[] pv = new byte[4];
                 zkfp2.GetParameters(_deviceHandle, 1, pv, ref size);
@@ -105,10 +115,23 @@ namespace BiometricEnrollmentApp.Services
                 size = 4;
                 zkfp2.GetParameters(_deviceHandle, 2, pv, ref size);
                 int height = BitConverter.ToInt32(pv, 0);
+
                 int imageBufferSize = width * height;
+                UpdateStatus($"DEBUG: Calculated image buffer size = {imageBufferSize}");
 
                 byte[] imageBuffer = new byte[imageBufferSize];
-                byte[][] templates = { new byte[2048], new byte[2048], new byte[2048] };
+                byte[][] templates = { new byte[4096], new byte[4096], new byte[4096] };
+
+                // ✅ Ensure DB is initialized before capture
+                if (_dbHandle == IntPtr.Zero)
+                {
+                    _dbHandle = zkfp2.DBInit();
+                    if (_dbHandle == IntPtr.Zero)
+                    {
+                        UpdateStatus("❌ Failed to initialize fingerprint DB.");
+                        return null;
+                    }
+                }
 
                 for (int i = 0; i < 3; i++)
                 {
@@ -118,12 +141,24 @@ namespace BiometricEnrollmentApp.Services
 
                     while (retry < 60)
                     {
-                        int len = 2048;
-                        int ret = zkfp2.AcquireFingerprint(_deviceHandle, imageBuffer, templates[i], ref len);
+                        // tmplLen is the template/compressed length returned by SDK (not the image bytes)
+                        int tmplLen = templates[i].Length; // request max template size
+                        int ret = zkfp2.AcquireFingerprint(_deviceHandle, imageBuffer, templates[i], ref tmplLen);
 
-                        if (ret == zkfp.ZKFP_ERR_OK && len > 0)
+                        // DEBUG: log return code and template length
+                        UpdateStatus($"DEBUG: AcquireFingerprint ret={ret}, templateLen={tmplLen}, attempt={retry + 1}");
+
+                        if (ret == zkfp.ZKFP_ERR_OK && tmplLen > 0)
                         {
-                            UpdateStatus($"✅ Captured {i + 1}/3 ({len} bytes)");
+                            UpdateStatus($"✅ Captured {i + 1}/3 (template {tmplLen} bytes)");
+
+                            // IMPORTANT: send the FULL raw image buffer to the UI for preview.
+                            // The SDK writes the raw grayscale pixel data into imageBuffer (size = SensorWidth*SensorHeight).
+                            // We will send the full imageBuffer (not the template slice).
+                            var imgFull = new byte[imageBuffer.Length];
+                            Array.Copy(imageBuffer, imgFull, imageBuffer.Length);
+                            OnImageCaptured?.Invoke(imgFull);
+
                             captured = true;
                             break;
                         }
@@ -144,20 +179,11 @@ namespace BiometricEnrollmentApp.Services
                     Thread.Sleep(800);
                 }
 
-                // Ensure DB handle exists
-                if (_dbHandle == IntPtr.Zero)
-                {
-                    _dbHandle = zkfp2.DBInit();
-                    if (_dbHandle == IntPtr.Zero)
-                    {
-                        UpdateStatus("❌ Failed to initialize DB before merge.");
-                        return null;
-                    }
-                }
 
-                byte[] merged = new byte[2048];
-                int mergedLen = 2048;
+                byte[] merged = new byte[4096];
+                int mergedLen = merged.Length;
                 int mergeResult = zkfp2.DBMerge(_dbHandle, templates[0], templates[1], templates[2], merged, ref mergedLen);
+                UpdateStatus($"DEBUG: DBMerge result={mergeResult}, mergedLen={mergedLen}");
 
                 if (mergeResult == zkfp.ZKFP_ERR_OK)
                 {
@@ -175,7 +201,6 @@ namespace BiometricEnrollmentApp.Services
                 return null;
             }
         }
-
 
         public void Close()
         {
