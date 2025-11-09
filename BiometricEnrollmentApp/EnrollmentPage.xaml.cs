@@ -1,19 +1,25 @@
 using System;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using BiometricEnrollmentApp.Services;
+using System.Collections.Generic;
+using System.Linq;
+
 
 namespace BiometricEnrollmentApp
 {
+    // Matches your API JSON: "employeeId", "fullname", "department"
+    public record EmployeeDto(string employeeId, string fullname, string department);
+
     public partial class EnrollmentPage : Page
     {
         private readonly ZKTecoService _zkService;
         private readonly DataService _dataService = new();
 
-        // small in-memory fallback credential (replace in production)
         private const string FallbackAdminUser = "admin";
         private const string FallbackAdminPass = "secret123";
 
@@ -22,7 +28,6 @@ namespace BiometricEnrollmentApp
             InitializeComponent();
             _zkService = zkService;
 
-            // subscribe to service events
             _zkService.OnImageCaptured += ImgCaptured;
             _zkService.OnStatus += msg =>
             {
@@ -30,8 +35,12 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write($"[ZK STATUS] {msg}");
             };
 
-            // start locked: overlay visible and buttons disabled (XAML already sets this)
-            SetControlsEnabled(false);
+            SetControlsEnabled(false); // disable until admin login
+
+            var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
+            syncTimer.Elapsed += async (_, _) => await SyncDeletionsFromServerAsync();
+            syncTimer.Start();
+
         }
 
         private void SetControlsEnabled(bool enabled)
@@ -77,7 +86,6 @@ namespace BiometricEnrollmentApp
 
         private void AdminCancelBtn_Click(object sender, RoutedEventArgs e)
         {
-            // Navigate back to AttendancePage instead of just clearing fields
             try
             {
                 var attendancePage = new AttendancePage(_zkService);
@@ -90,8 +98,6 @@ namespace BiometricEnrollmentApp
             }
         }
 
-
-        // Not async — no awaits inside
         private void AdminLoginBtn_Click(object sender, RoutedEventArgs e)
         {
             string username = AdminUsername.Text.Trim();
@@ -106,12 +112,9 @@ namespace BiometricEnrollmentApp
                 return;
             }
 
-            // Try to validate via DataService if available (non-breaking if not)
             bool ok = false;
             try
             {
-                // If your DataService has a ValidateAdmin method (bool ValidateAdmin(user, pass)), it will be used.
-                // Use reflection to avoid hard dependency; if present we call it.
                 var validateMethod = _dataService?.GetType().GetMethod("ValidateAdmin");
                 if (validateMethod != null)
                 {
@@ -119,28 +122,23 @@ namespace BiometricEnrollmentApp
                     if (result is bool b && b) ok = true;
                 }
             }
-            catch
-            {
-                // ignore reflection errors — fallback below
-            }
+            catch { }
 
-            // fallback check if DataService didn't validate
             if (!ok)
             {
-                // simple constant-time-ish comparison (not production-grade)
                 ok = SecureEquals(username, FallbackAdminUser) && SecureEquals(password, FallbackAdminPass);
             }
 
             if (ok)
             {
-                // hide overlay and enable controls
                 AdminOverlay.Visibility = Visibility.Collapsed;
                 SetControlsEnabled(true);
-
-                // focus EmployeeIdInput for convenience
                 EmployeeIdInput.Focus();
                 StatusText.Text = "🔒 Admin authenticated. You may proceed.";
                 LogHelper.Write("[ADMIN] login successful.");
+
+                // 🔄 Run sync check after successful login
+                _ = Task.Run(SyncDeletionsFromServerAsync);
             }
             else
             {
@@ -150,7 +148,6 @@ namespace BiometricEnrollmentApp
             }
         }
 
-        // constant-time string compare
         private static bool SecureEquals(string a, string b)
         {
             if (a == null || b == null) return false;
@@ -161,7 +158,7 @@ namespace BiometricEnrollmentApp
             return diff == 0;
         }
 
-        // ---------------- existing handlers (Connect / Enroll / Back) ----------------
+        // ---------------- Main handlers ----------------
 
         private void BackBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -200,16 +197,34 @@ namespace BiometricEnrollmentApp
                 return;
             }
 
-            // ✅ Step 1: Check from Web API
+            // -------- Step 1: Get employee info (fullname + department) --------
+            string name = string.Empty;        // will map fullname → name
+            string department = string.Empty;
+
             try
             {
                 using var client = new HttpClient();
                 string url = $"http://localhost:5000/employees/{empId}";
                 var response = await client.GetAsync(url);
+
                 if (!response.IsSuccessStatusCode)
                 {
                     StatusText.Text = "❌ Employee does not exist in the system.";
                     return;
+                }
+
+                try
+                {
+                    var emp = await response.Content.ReadFromJsonAsync<EmployeeDto?>();
+                    if (emp != null)
+                    {
+                        name = emp.fullname ?? string.Empty; // map fullname to name
+                        department = emp.department ?? string.Empty;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Write($"Could not parse employee JSON: {ex.Message}");
                 }
             }
             catch (Exception ex)
@@ -218,16 +233,15 @@ namespace BiometricEnrollmentApp
                 return;
             }
 
-            // ✅ Step 2: Check if already enrolled locally
+            // -------- Step 2: Check if already enrolled locally --------
             var existing = _dataService.GetAllEnrollments().Find(e => e.EmployeeId == empId);
-
             if (!string.IsNullOrEmpty(existing.EmployeeId))
             {
                 StatusText.Text = "⚠️ Employee already enrolled.";
                 return;
             }
 
-            // ✅ Step 3: Proceed with fingerprint enrollment
+            // -------- Step 3: Proceed with enrollment --------
             StatusText.Text = "🖐️ Please place your finger 3 times...";
             EnrollBtn.IsEnabled = false;
 
@@ -236,8 +250,9 @@ namespace BiometricEnrollmentApp
                 string? template = await Task.Run(() => _zkService.EnrollFingerprint(empId));
                 if (!string.IsNullOrEmpty(template))
                 {
-                    _dataService.SaveEnrollment(empId, template);
+                    _dataService.SaveEnrollment(empId, template, name, department);
                     StatusText.Text = $"✅ Enrollment saved locally for {empId}";
+                    LogHelper.Write($"Enrollment saved for {empId} ({name}, {department})");
                 }
                 else
                 {
@@ -247,6 +262,40 @@ namespace BiometricEnrollmentApp
             finally
             {
                 EnrollBtn.IsEnabled = true;
+            }
+        }
+
+        private async Task SyncDeletionsFromServerAsync()
+        {
+            try
+            {
+                using var client = new HttpClient();
+                string url = "http://localhost:5000/employees"; // endpoint returning all active employees
+                var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
+
+                if (employees == null)
+                {
+                    LogHelper.Write("⚠️ Could not fetch employees from server.");
+                    return;
+                }
+
+                var apiIds = employees.Select(e => e.employeeId).ToHashSet();
+                var local = _dataService.GetAllEnrollments();
+
+                foreach (var enroll in local)
+                {
+                    if (!apiIds.Contains(enroll.EmployeeId))
+                    {
+                        LogHelper.Write($"❌ Employee {enroll.EmployeeId} missing on server — deleting local record.");
+                        _dataService.DeleteEnrollment(enroll.EmployeeId);
+                    }
+                }
+
+                LogHelper.Write("✅ Sync check complete: local DB matches server.");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Sync deletion check failed: {ex.Message}");
             }
         }
     }

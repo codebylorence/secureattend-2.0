@@ -37,7 +37,10 @@
                             Orientation="Horizontal"
                             HorizontalAlignment="Center"
                             Margin="0,0,0,20">
-                    <TextBlock Text="Employee ID:" VerticalAlignment="Center" Foreground="#334155" Margin="0,0,8,0"/>
+                    <TextBlock Text="Employee ID:"
+                               VerticalAlignment="Center"
+                               Foreground="#334155"
+                               Margin="0,0,8,0"/>
                     <TextBox x:Name="EmployeeIdInput"
                              Width="260"
                              Height="32"
@@ -148,33 +151,133 @@
             </Grid>
         </Border>
 
-        <!-- Admin Login Overlay (top-level in same Page Grid so it blocks the UI) -->
+
+        <!-- Admin login overlay — REPLACE YOUR OLD AdminOverlay BLOCK WITH THIS -->
         <Border x:Name="AdminOverlay"
-                Background="#88000000"  
-                Visibility="Visible"  
+                Background="#80000000"
+                Visibility="Visible"
                 HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch">
-            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Border Background="White" CornerRadius="10" Padding="20" Width="420">
+                VerticalAlignment="Stretch"
+                Opacity="1">
+
+            <Grid HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Border Background="White"
+                        CornerRadius="15"
+                        Padding="28"
+                        Width="420"
+                        BorderBrush="#E2E8F0"
+                        BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="Admin Login" FontSize="20" FontWeight="Bold" Margin="0,0,0,8"/>
-                        <TextBlock Text="Enter admin username and password to continue." FontSize="12" Foreground="#475569" Margin="0,0,0,12"/>
-                        
-                        <TextBlock Text="Username" FontSize="13" Margin="0,6,0,2"/>
-                        <TextBox x:Name="AdminUsername" Height="32"/>
 
-                        <TextBlock Text="Password" FontSize="13" Margin="0,8,0,2"/>
-                        <PasswordBox x:Name="AdminPassword" Height="32"/>
+                        <!-- Header -->
+                        <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                Margin="0,0,0,14">
+                            <TextBlock Text="Admin Login"
+                                       FontSize="20"
+                                       FontWeight="Bold"
+                                       Foreground="#1E293B"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
 
-                        <TextBlock x:Name="AdminLoginStatus" Foreground="Red" Margin="0,8,0,0" Visibility="Collapsed"/>
+                        <TextBlock Text="Enter your admin credentials to proceed."
+                                   FontSize="13"
+                                   Foreground="#475569"
+                                   TextAlignment="Center"
+                                   Margin="0,0,0,18"/>
 
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-                            <Button x:Name="AdminCancelBtn" Content="Cancel" Width="90" Margin="0,0,8,0" Click="AdminCancelBtn_Click"/>
-                            <Button x:Name="AdminLoginBtn" Content="Login" Width="100" Click="AdminLoginBtn_Click"/>
+                        <!-- Username -->
+                        <StackPanel Margin="0,0,0,12">
+                            <TextBlock Text="Username"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="#334155"
+                                       Margin="0,0,0,6"/>
+                            <Border Background="#F8FAFC"
+                                    BorderBrush="#CBD5E1"
+                                    BorderThickness="1">
+                                <TextBox x:Name="AdminUsername"
+                                         Height="36"
+                                         Padding="8"
+                                         FontSize="14"
+                                         Background="Transparent"
+                                         BorderThickness="0"/>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Password -->
+                        <StackPanel Margin="0,0,0,8">
+                            <TextBlock Text="Password"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       Foreground="#334155"
+                                       Margin="0,0,0,6"/>
+                            <Border Background="#F8FAFC"
+                                    BorderBrush="#CBD5E1"
+                                    BorderThickness="1">
+                                <PasswordBox x:Name="AdminPassword"
+                                             Height="36"
+                                             Padding="8"
+                                             FontSize="14"
+                                             Background="Transparent"
+                                             BorderThickness="0"/>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Status message (collapsed by default) -->
+                        <TextBlock x:Name="AdminLoginStatus"
+                                   Text="Invalid credentials"
+                                   Foreground="#B91C1C"
+                                   FontSize="13"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,8,0,0"/>
+
+                        <!-- Buttons -->
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Margin="0,18,0,0">
+                            <Button x:Name="AdminCancelBtn"
+                                    Content="Cancel"
+                                    Width="100"
+                                    Height="36"
+                                    FontWeight="SemiBold"
+                                    Background="#E2E8F0"
+                                    Foreground="#1E293B"
+                                    BorderBrush="#CBD5E1"
+                                    BorderThickness="1"
+                                    Click="AdminCancelBtn_Click"/>
+                            <Button x:Name="AdminLoginBtn"
+                                    Content="Login"
+                                    Width="100"
+                                    Height="36"
+                                    FontWeight="SemiBold"
+                                    Margin="8,0,0,0"
+                                    Background="#2563EB"
+                                    Foreground="White"
+                                    BorderBrush="#2563EB"
+                                    BorderThickness="1"
+                                    Click="AdminLoginBtn_Click"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>
+
+            <!-- Fade-in animation for the overlay -->
+            <Border.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="0"
+                                    To="1"
+                                             Duration="0:0:0.28"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Border.Triggers>
         </Border>
+
     </Grid>
 </Page>

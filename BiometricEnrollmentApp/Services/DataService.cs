@@ -1,7 +1,8 @@
 using Microsoft.Data.Sqlite;
 using System;
-using System.Collections.Generic;
 using System.IO;
+using System.Data.SQLite;
+using System.Collections.Generic;
 
 namespace BiometricEnrollmentApp.Services
 {
@@ -73,5 +74,27 @@ namespace BiometricEnrollmentApp.Services
 
             return list;
         }
+
+        public void DeleteEnrollment(string employeeId)
+        {
+            try
+            {
+                using var conn = new SQLiteConnection(_dbPath);
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "DELETE FROM enrollments WHERE employee_id = @id";
+                cmd.Parameters.AddWithValue("@id", employeeId);
+                int rows = cmd.ExecuteNonQuery();
+
+                LogHelper.Write(rows > 0
+                    ? $"🗑️ Deleted enrollment for {employeeId}"
+                    : $"⚠️ No enrollment found for {employeeId} to delete.");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error deleting enrollment for {employeeId}: {ex.Message}");
+            }
+        }
+
     }
 }

@@ -145,9 +145,6 @@ namespace BiometricEnrollmentApp.Services
                         int tmplLen = templates[i].Length; // request max template size
                         int ret = zkfp2.AcquireFingerprint(_deviceHandle, imageBuffer, templates[i], ref tmplLen);
 
-                        // DEBUG: log return code and template length
-                        UpdateStatus($"DEBUG: AcquireFingerprint ret={ret}, templateLen={tmplLen}, attempt={retry + 1}");
-
                         if (ret == zkfp.ZKFP_ERR_OK && tmplLen > 0)
                         {
                             UpdateStatus($"✅ Captured {i + 1}/3 (template {tmplLen} bytes)");
