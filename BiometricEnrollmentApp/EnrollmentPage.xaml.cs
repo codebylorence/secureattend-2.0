@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
@@ -8,7 +9,6 @@ using System.Windows.Media.Imaging;
 using BiometricEnrollmentApp.Services;
 using System.Collections.Generic;
 using System.Linq;
-
 
 namespace BiometricEnrollmentApp
 {
@@ -26,8 +26,9 @@ namespace BiometricEnrollmentApp
         public EnrollmentPage(ZKTecoService zkService)
         {
             InitializeComponent();
-            _zkService = zkService;
+            _zkService = zkService ?? new ZKTecoService();
 
+            // Hook SDK events
             _zkService.OnImageCaptured += ImgCaptured;
             _zkService.OnStatus += msg =>
             {
@@ -35,17 +36,22 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write($"[ZK STATUS] {msg}");
             };
 
-            SetControlsEnabled(false); // disable until admin login
+            SetControlsEnabled(false); // disabled until admin login
 
-            var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
-            syncTimer.Elapsed += async (_, _) => await SyncDeletionsFromServerAsync();
-            syncTimer.Start();
+            // Do NOT auto-run destructive sync on a timer — keep only a safe checker if you want.
+            // If you still want periodic non-destructive checks, uncomment and adjust the timer code below.
 
+            // var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
+            // syncTimer.Elapsed += async (_, _) => await SafeSyncCheckAsync();
+            // syncTimer.Start();
+
+            // Auto-init device & load templates on page load
+            Loaded += EnrollmentPage_Loaded;
         }
 
         private void SetControlsEnabled(bool enabled)
         {
-            ConnectBtn.IsEnabled = enabled;
+            // No Connect button — only enable enroll button (for admin)
             EnrollBtn.IsEnabled = enabled;
         }
 
@@ -80,6 +86,41 @@ namespace BiometricEnrollmentApp
                 System.Windows.Media.PixelFormats.Gray8, null, rawImage, stride);
             bmp.Freeze();
             return bmp;
+        }
+
+        // Called when the page loads: ensure device initialized and load stored templates into SDK
+        private void EnrollmentPage_Loaded(object? sender, RoutedEventArgs e)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    // Ensure device is initialized (idempotent)
+                    if (_zkService.EnsureInitialized())
+                    {
+                        try
+                        {
+                            // Load stored templates into SDK memory (so identify works immediately)
+                            _zkService.LoadEnrollmentsToSdk(_dataService);
+                            Dispatcher.Invoke(() => StatusText.Text = "Device connected and templates loaded.");
+                        }
+                        catch (Exception ex)
+                        {
+                            LogHelper.Write($"⚠️ LoadEnrollmentsToSdk error: {ex.Message}");
+                            Dispatcher.Invoke(() => StatusText.Text = "Device connected (load templates failed).");
+                        }
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() => StatusText.Text = "⚠️ Device not connected.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Write($"⚠️ EnrollmentPage initialization failed: {ex.Message}");
+                    Dispatcher.Invoke(() => StatusText.Text = $"Init error: {ex.Message}");
+                }
+            });
         }
 
         // ---------------- Admin overlay handlers ----------------
@@ -136,9 +177,7 @@ namespace BiometricEnrollmentApp
                 EmployeeIdInput.Focus();
                 StatusText.Text = "🔒 Admin authenticated. You may proceed.";
                 LogHelper.Write("[ADMIN] login successful.");
-
-                // 🔄 Run sync check after successful login
-                _ = Task.Run(SyncDeletionsFromServerAsync);
+                // Do NOT call destructive sync automatically here.
             }
             else
             {
@@ -165,28 +204,7 @@ namespace BiometricEnrollmentApp
             NavigationService?.GoBack();
         }
 
-        private void ConnectBtn_Click(object sender, RoutedEventArgs e)
-        {
-            ConnectBtn.IsEnabled = false;
-            Task.Run(() =>
-            {
-                bool connected = _zkService.Initialize();
-                Dispatcher.Invoke(() =>
-                {
-                    if (connected)
-                    {
-                        StatusText.Text = "✅ Device connected successfully.";
-                        EnrollBtn.IsEnabled = true;
-                        ConnectBtn.IsEnabled = false;
-                    }
-                    else
-                    {
-                        StatusText.Text = "❌ Failed to connect device.";
-                        ConnectBtn.IsEnabled = true;
-                    }
-                });
-            });
-        }
+        // removed ConnectBtn_Click entirely (no connect button on page any more)
 
         private async void EnrollBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -198,7 +216,7 @@ namespace BiometricEnrollmentApp
             }
 
             // -------- Step 1: Get employee info (fullname + department) --------
-            string name = string.Empty;        // will map fullname → name
+            string name = string.Empty;
             string department = string.Empty;
 
             try
@@ -218,7 +236,7 @@ namespace BiometricEnrollmentApp
                     var emp = await response.Content.ReadFromJsonAsync<EmployeeDto?>();
                     if (emp != null)
                     {
-                        name = emp.fullname ?? string.Empty; // map fullname to name
+                        name = emp.fullname ?? string.Empty;
                         department = emp.department ?? string.Empty;
                     }
                 }
@@ -233,26 +251,44 @@ namespace BiometricEnrollmentApp
                 return;
             }
 
-            // -------- Step 2: Check if already enrolled locally --------
-            var existing = _dataService.GetAllEnrollments().Find(e => e.EmployeeId == empId);
-            if (!string.IsNullOrEmpty(existing.EmployeeId))
-            {
-                StatusText.Text = "⚠️ Employee already enrolled.";
-                return;
-            }
-
-            // -------- Step 3: Proceed with enrollment --------
+            // -------- Step 2: Proceed with enrollment (we now always insert a new enrollment row) --------
             StatusText.Text = "🖐️ Please place your finger 3 times...";
             EnrollBtn.IsEnabled = false;
 
             try
             {
+                // perform enrollment (blocking on background thread)
                 string? template = await Task.Run(() => _zkService.EnrollFingerprint(empId));
                 if (!string.IsNullOrEmpty(template))
                 {
-                    _dataService.SaveEnrollment(empId, template, name, department);
-                    StatusText.Text = $"✅ Enrollment saved locally for {empId}";
-                    LogHelper.Write($"Enrollment saved for {empId} ({name}, {department})");
+                    // Save enrollment and get the inserted row id
+                    long rowId = _data_service_save_enrollment(empId, template, name, department);
+
+                    if (rowId > 0)
+                    {
+                        // Load the new template into SDK using row id as fid
+                        try
+                        {
+                            var blob = Convert.FromBase64String(template);
+                            bool loaded = _zkService.AddTemplateToSdk((int)rowId, blob);
+                            if (!loaded)
+                            {
+                                LogHelper.Write($"⚠️ Enrollment saved but AddTemplateToSdk returned false for row {rowId}.");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogHelper.Write($"💥 Failed to add template to SDK for row {rowId}: {ex.Message}");
+                        }
+
+                        StatusText.Text = $"✅ Enrollment saved locally for {empId} (row {rowId})";
+                        LogHelper.Write($"Enrollment saved for {empId} ({name}, {department}) -> row {rowId}");
+                    }
+                    else
+                    {
+                        StatusText.Text = $"❌ Failed to save enrollment for {empId}";
+                        LogHelper.Write($"❌ SaveEnrollment returned {rowId} for {empId}");
+                    }
                 }
                 else
                 {
@@ -265,6 +301,40 @@ namespace BiometricEnrollmentApp
             }
         }
 
+        // ---------------- Safe sync helpers ----------------
+
+        /// <summary>
+        /// Non-destructive check: queries server and logs which local enrollments are missing on server.
+        /// Useful to run on a timer for monitoring but does NOT delete anything.
+        /// </summary>
+        private async Task SafeSyncCheckAsync()
+        {
+            try
+            {
+                using var client = new HttpClient();
+                string url = "http://localhost:5000/employees";
+                var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
+                if (employees == null || employees.Count == 0) return;
+
+                var apiIds = employees.Select(e => e.employeeId).ToHashSet();
+                var local = _data_service_get().GetAllEnrollments();
+                var missing = local.Where(l => !apiIds.Contains(l.EmployeeId)).Select(l => l.EmployeeId).ToList();
+                if (missing.Count > 0)
+                {
+                    LogHelper.Write($"⚠️ Sync check found {missing.Count} local employees missing on server: {string.Join(',', missing)} (no deletion performed).");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"Safe sync check failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Destructive sync: deletes local enrollments missing on server after creating a backup.
+        /// This method is available but is NOT called automatically anywhere.
+        /// Call manually only when you are sure.
+        /// </summary>
         private async Task SyncDeletionsFromServerAsync()
         {
             try
@@ -273,30 +343,82 @@ namespace BiometricEnrollmentApp
                 string url = "http://localhost:5000/employees"; // endpoint returning all active employees
                 var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
 
+                // Guard: if the API returned null or an empty list, skip deletion entirely.
                 if (employees == null)
                 {
-                    LogHelper.Write("⚠️ Could not fetch employees from server.");
+                    LogHelper.Write("⚠️ Sync aborted: server returned null for employees list.");
+                    return;
+                }
+
+                if (employees.Count == 0)
+                {
+                    // Defensive: server returned empty list -> do not delete local records.
+                    LogHelper.Write("⚠️ Sync aborted: server returned an empty employees list. No deletions performed.");
                     return;
                 }
 
                 var apiIds = employees.Select(e => e.employeeId).ToHashSet();
                 var local = _dataService.GetAllEnrollments();
 
+                // If server returned fewer IDs than local count, log and require manual confirmation (skip delete).
+                if (apiIds.Count < local.Count)
+                {
+                    LogHelper.Write($"⚠️ Server list smaller than local ({apiIds.Count} < {local.Count}) — skipping automatic deletion. Run manual sync if you really want to prune.");
+                    return;
+                }
+
+                // Make a backup of the DB before any destructive operation
+                try
+                {
+                    var dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "biometric_local.db");
+                    if (File.Exists(dbPath))
+                    {
+                        var backupPath = dbPath + ".bak." + DateTime.Now.ToString("yyyyMMddHHmmss");
+                        File.Copy(dbPath, backupPath);
+                        LogHelper.Write($"🗄️ Backup created before sync: {backupPath}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Write($"⚠️ Failed to create DB backup before sync: {ex.Message} — aborting deletion for safety.");
+                    return;
+                }
+
+                int deleted = 0;
                 foreach (var enroll in local)
                 {
                     if (!apiIds.Contains(enroll.EmployeeId))
                     {
-                        LogHelper.Write($"❌ Employee {enroll.EmployeeId} missing on server — deleting local record.");
-                        _dataService.DeleteEnrollment(enroll.EmployeeId);
+                        LogHelper.Write($"❌ Employee {enroll.EmployeeId} missing on server — deleting local record (after backup).");
+                        _data_service_get().DeleteEnrollment(enroll.EmployeeId);
+                        deleted++;
                     }
                 }
 
-                LogHelper.Write("✅ Sync check complete: local DB matches server.");
+                LogHelper.Write($"✅ Sync check complete: local DB pruned. {deleted} local enrollment(s) deleted.");
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Sync deletion check failed: {ex.Message}");
             }
         }
+
+        // small wrapper for DataService.SaveEnrollment so we can centralize logging or adjust behavior
+        private long _data_service_save_enrollment(string employeeId, string templateBase64, string? name, string? department)
+        {
+            try
+            {
+                var id = _dataService.SaveEnrollment(employeeId, templateBase64, name, department);
+                return id;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 _data_service_save_enrollment error: {ex.Message}");
+                return -1;
+            }
+        }
+
+        // helper to centralize use of data service (keeps future refactors simple)
+        private DataService _data_service_get() => _dataService;
     }
 }

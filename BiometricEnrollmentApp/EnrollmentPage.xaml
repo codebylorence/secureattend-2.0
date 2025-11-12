@@ -56,16 +56,6 @@
                             Orientation="Horizontal"
                             HorizontalAlignment="Center"
                             Margin="0,10,0,30">
-                    <Button x:Name="ConnectBtn"
-                            Content="🔌 Connect Device"
-                            Width="180"
-                            Height="45"
-                            FontSize="16"
-                            Background="#2563eb"
-                            Foreground="White"
-                            Margin="5"
-                            Click="ConnectBtn_Click"
-                            IsEnabled="False"/>
                     <Button x:Name="EnrollBtn"
                             Content="🖐️ Enroll Fingerprint"
                             Width="200"
