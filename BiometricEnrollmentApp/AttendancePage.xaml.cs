@@ -13,6 +13,7 @@ namespace BiometricEnrollmentApp
     {
         private readonly ZKTecoService _zkService;
         private readonly DataService _dataService;
+        private readonly ApiService _apiService;
         private CancellationTokenSource? _overlayCts;
 
         public AttendancePage() : this(new ZKTecoService()) { }
@@ -22,6 +23,7 @@ namespace BiometricEnrollmentApp
             InitializeComponent();
             _zkService = zkService ?? new ZKTecoService();
             _dataService = new DataService();
+            _apiService = new ApiService();
 
             _zkService.OnStatus += (msg) => Dispatcher.Invoke(() => UpdateStatus(msg));
             Loaded += AttendancePage_Loaded;
@@ -37,8 +39,14 @@ namespace BiometricEnrollmentApp
                     if (_zkService.EnsureInitialized())
                     {
                         // Load templates to SDK so identify works immediately
+                        LogHelper.Write("Loading enrollments to SDK...");
                         _zkService.LoadEnrollmentsToSdk(_data_service_get());
-                        Dispatcher.Invoke(() => UpdateStatus("Device connected and templates loaded."));
+                        
+                        // Verify templates were loaded
+                        var enrollments = _data_service_get().GetAllEnrollmentsWithRowId();
+                        LogHelper.Write($"Total enrollments in database: {enrollments.Count}");
+                        
+                        Dispatcher.Invoke(() => UpdateStatus($"Device connected. {enrollments.Count} templates loaded."));
                     }
                     else
                     {
@@ -107,21 +115,28 @@ namespace BiometricEnrollmentApp
             }
         }
 
-        private void CancelOverlayBtn_Click(object sender, RoutedEventArgs e)
-        {
-            _overlayCts?.Cancel();
-            HideOverlay();
-            UpdateStatus("Scan cancelled.");
-        }
+
 
         private async void ScanFingerBtn_Click(object sender, RoutedEventArgs e)
         {
-            ShowOverlay("Place finger on the scanner...");
+            var scanWindow = new ScanWindow();
             _overlayCts = new CancellationTokenSource();
+
+            // Start scan process in background
+            var scanTask = Task.Run(() => CaptureIdentifyAndProcess(_overlayCts.Token, scanWindow), _overlayCts.Token);
+
+            // Show window modally
+            var result = scanWindow.ShowDialog();
+
+            if (scanWindow.WasCancelled)
+            {
+                _overlayCts?.Cancel();
+                UpdateStatus("Scan cancelled.");
+            }
 
             try
             {
-                await Task.Run(() => CaptureIdentifyAndProcess(_overlayCts.Token), _overlayCts.Token);
+                await scanTask;
             }
             catch (OperationCanceledException)
             {
@@ -139,62 +154,67 @@ namespace BiometricEnrollmentApp
             }
         }
 
-        private void ShowOverlay(string initialStatus)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                try
-                {
-                    OverlayGrid.Visibility = Visibility.Visible;
-                    OverlayNameText.Text = "Name Placeholder";
-                    OverlayIdText.Text = "ID Placeholder";
-                    OverlayStatusText.Text = initialStatus;
-                    PhotoPlaceholderText.Text = "PHOTO";
-                }
-                catch { /* UI may not exist in some contexts */ }
-            });
-        }
 
-        private void HideOverlay()
-        {
-            Dispatcher.Invoke(() =>
-            {
-                try { OverlayGrid.Visibility = Visibility.Collapsed; } catch { }
-            });
-        }
 
-        private void CaptureIdentifyAndProcess(CancellationToken ct)
+        private void CaptureIdentifyAndProcess(CancellationToken ct, ScanWindow window)
         {
             // 1) Ensure device initialized (idempotent)
             if (!_zkService.EnsureInitialized())
             {
-                Dispatcher.Invoke(() => OverlayStatusText.Text = "❌ Device not initialized.");
+                window.UpdateStatus("❌ Device not initialized.");
                 Thread.Sleep(900);
-                HideOverlay();
+                Dispatcher.Invoke(() => window.Close());
                 return;
+            }
+            
+            // Reload templates to ensure SDK DB is up to date
+            try
+            {
+                LogHelper.Write("Reloading templates before identification...");
+                _zkService.LoadEnrollmentsToSdk(_data_service_get());
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"Warning: Failed to reload templates: {ex.Message}");
             }
 
             // 2) Capture single template
-            Dispatcher.Invoke(() => OverlayStatusText.Text = "Scanning fingerprint (single-scan)...");
+            window.UpdateStatus("Scanning fingerprint...");
             string? capturedBase64 = null;
             try
             {
-                capturedBase64 = _zkService.CaptureSingleTemplate();
+                // Check if cancelled before capturing
+                ct.ThrowIfCancellationRequested();
+                capturedBase64 = _zkService.CaptureSingleTemplate(10, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                LogHelper.Write("Fingerprint capture cancelled by user");
+                Dispatcher.Invoke(() => window.Close());
+                return;
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"Capture error: {ex}");
             }
 
-            if (string.IsNullOrEmpty(capturedBase64))
+            // Check if cancelled after capture attempt
+            if (ct.IsCancellationRequested)
             {
-                Dispatcher.Invoke(() => OverlayStatusText.Text = "⚠️ No fingerprint captured.");
-                Thread.Sleep(1200);
-                HideOverlay();
+                LogHelper.Write("Scan cancelled after capture attempt");
+                Dispatcher.Invoke(() => window.Close());
                 return;
             }
 
-            Dispatcher.Invoke(() => OverlayStatusText.Text = "Captured. Identifying...");
+            if (string.IsNullOrEmpty(capturedBase64))
+            {
+                window.UpdateStatus("⚠️ No fingerprint captured.");
+                Thread.Sleep(1200);
+                Dispatcher.Invoke(() => window.Close());
+                return;
+            }
+
+            window.UpdateStatus("Captured. Identifying...");
 
             // 3) Try SDK identify (preferred)
             bool sdkMatched = false;
@@ -210,27 +230,40 @@ namespace BiometricEnrollmentApp
                 try { capturedBytes = Convert.FromBase64String(capturedBase64); }
                 catch
                 {
-                    Dispatcher.Invoke(() => OverlayStatusText.Text = "⚠️ Captured template corrupt.");
+                    window.UpdateStatus("⚠️ Captured template corrupt.");
                     Thread.Sleep(900);
-                    HideOverlay();
+                    Dispatcher.Invoke(() => window.Close());
                     return;
                 }
 
+                LogHelper.Write($"Attempting SDK identification with template size: {capturedBytes.Length} bytes");
+                
                 var (fid, score) = _zkService.IdentifyTemplate(capturedBytes);
+                LogHelper.Write($"SDK IdentifyTemplate returned: fid={fid}, score={score}");
+                
                 if (fid > 0)
                 {
                     matchedFid = fid;
                     matchedScore = score;
                     // Map fid -> employee id
                     var emp = _data_service_get().GetEmployeeIdByRowId(fid);
+                    LogHelper.Write($"Mapped fid={fid} to employee_id={emp}");
+                    
                     if (!string.IsNullOrEmpty(emp))
                     {
                         matchedEmployeeId = emp;
                         var info = _data_service_get().GetAllEnrollments().FirstOrDefault(e => e.EmployeeId == emp);
-                        matchedName = info.Name;
-                        matchedDept = info.Department;
-                        sdkMatched = true;
-                        LogHelper.Write($"🔍 SDK matched fid={fid} -> emp={emp} score={score}");
+                        if (info.EmployeeId != null)
+                        {
+                            matchedName = info.Name;
+                            matchedDept = info.Department;
+                            sdkMatched = true;
+                            LogHelper.Write($"🔍 SDK matched fid={fid} -> emp={emp} name={matchedName} score={score}");
+                        }
+                        else
+                        {
+                            LogHelper.Write($"⚠️ Employee info not found for {emp}");
+                        }
                     }
                     else
                     {
@@ -239,7 +272,7 @@ namespace BiometricEnrollmentApp
                 }
                 else
                 {
-                    LogHelper.Write("🔍 SDK did not find a match (fid<=0).");
+                    LogHelper.Write("🔍 SDK did not find a match (fid<=0). Will try fallback matching.");
                 }
 
                 // if SDK didn't match, fallback below
@@ -247,16 +280,19 @@ namespace BiometricEnrollmentApp
             catch (Exception ex)
             {
                 LogHelper.Write($"SDK identify invocation failed: {ex}");
+                LogHelper.Write($"Stack trace: {ex.StackTrace}");
             }
 
             // 4) If SDK didn't match, fall back to heuristic matching
             double bestScore = 0.0;
             if (!sdkMatched)
             {
-                Dispatcher.Invoke(() => OverlayStatusText.Text = "SDK identify unavailable/no-match — using fallback verification...");
+                window.UpdateStatus("Using fallback verification...");
                 var enrollments = _data_service_get().GetAllEnrollments();
                 var capturedBytes = Convert.FromBase64String(capturedBase64);
-                const double MatchThreshold = 0.72;
+                const double MatchThreshold = 0.65; // Lowered threshold for better matching
+                
+                LogHelper.Write($"Starting fallback matching against {enrollments.Count} enrollments");
 
                 foreach (var en in enrollments)
                 {
@@ -265,6 +301,9 @@ namespace BiometricEnrollmentApp
                     {
                         var storedBytes = Convert.FromBase64String(en.Template);
                         double sim = ComputeTemplateSimilarity(capturedBytes, storedBytes);
+                        
+                        LogHelper.Write($"Comparing with {en.EmployeeId} ({en.Name}): similarity={sim:F4}");
+                        
                         if (sim > bestScore)
                         {
                             bestScore = sim;
@@ -278,6 +317,7 @@ namespace BiometricEnrollmentApp
                             matchedEmployeeId = en.EmployeeId;
                             matchedName = en.Name;
                             matchedDept = en.Department;
+                            LogHelper.Write($"✅ Match found above threshold: {en.EmployeeId} with score {sim:F4}");
                             break;
                         }
                     }
@@ -288,30 +328,75 @@ namespace BiometricEnrollmentApp
                     }
                 }
 
+                LogHelper.Write($"Fallback matching complete. Best match: {matchedEmployeeId} with score {bestScore:F4}");
+
                 if (string.IsNullOrEmpty(matchedEmployeeId) || bestScore < MatchThreshold)
                 {
-                    Dispatcher.Invoke(() => OverlayStatusText.Text = $"❌ No matching employee (best score {bestScore:P0}).");
-                    Thread.Sleep(1500);
-                    HideOverlay();
+                    window.UpdateStatus($"❌ No matching employee found. Best score: {bestScore:P0}");
+                    LogHelper.Write($"❌ No match found. Best score {bestScore:F4} below threshold {MatchThreshold}");
+                    Thread.Sleep(2000);
+                    Dispatcher.Invoke(() => window.Close());
                     return;
                 }
 
-                LogHelper.Write($"Fallback matched {matchedEmployeeId} with score {bestScore:F2}");
+                LogHelper.Write($"✅ Fallback matched {matchedEmployeeId} ({matchedName}) with score {bestScore:F4}");
             }
 
-            // 5) Show placeholder photo + name + id
-            Dispatcher.Invoke(() =>
+            // 5) Get employee photo from backend API
+            string? photoBase64 = null;
+            try
             {
-                OverlayNameText.Text = string.IsNullOrEmpty(matchedName) ? "Name Placeholder" : matchedName;
-                OverlayIdText.Text = matchedEmployeeId;
-                OverlayStatusText.Text = sdkMatched
-                    ? $"Identified (fid={matchedFid}, score={matchedScore}) — processing..."
-                    : $"Identified (score {bestScore:P0}) — processing...";
-                PhotoPlaceholderText.Text = "PHOTO";
-            });
+                LogHelper.Write($"🔍 Fetching employee details for {matchedEmployeeId}...");
+                var employeeDetails = Task.Run(async () => await _apiService.GetEmployeeDetailsAsync(matchedEmployeeId)).Result;
+                
+                if (employeeDetails != null)
+                {
+                    LogHelper.Write($"✅ Employee details retrieved: {employeeDetails.Fullname}");
+                    
+                    if (!string.IsNullOrEmpty(employeeDetails.Photo))
+                    {
+                        photoBase64 = employeeDetails.Photo;
+                        int photoLength = employeeDetails.Photo.Length;
+                        LogHelper.Write($"✅ Photo retrieved for {matchedEmployeeId} (length: {photoLength} chars)");
+                    }
+                    else
+                    {
+                        LogHelper.Write($"⚠️ No photo data in employee record for {matchedEmployeeId}");
+                    }
+                }
+                else
+                {
+                    LogHelper.Write($"⚠️ Employee details not found for {matchedEmployeeId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Failed to retrieve employee details: {ex.Message}");
+                LogHelper.Write($"Stack trace: {ex.StackTrace}");
+            }
+
+            window.UpdateEmployeeInfo(matchedEmployeeId, matchedName, photoBase64);
+            // Check if cancelled before showing results
+            if (ct.IsCancellationRequested)
+            {
+                LogHelper.Write("Scan cancelled before showing results");
+                Dispatcher.Invoke(() => window.Close());
+                return;
+            }
+
+            window.UpdateStatus(sdkMatched
+                ? $"Identified! Processing attendance..."
+                : $"Identified (score {bestScore:P0})! Processing...");
 
             Thread.Sleep(1000);
-            ct.ThrowIfCancellationRequested();
+            
+            // Check if cancelled during display
+            if (ct.IsCancellationRequested)
+            {
+                LogHelper.Write("Scan cancelled during result display");
+                Dispatcher.Invoke(() => window.Close());
+                return;
+            }
 
             // 6) Clock-in / Clock-out using session API
             var now = DateTime.Now;
@@ -324,8 +409,18 @@ namespace BiometricEnrollmentApp
                 {
                     // clock-out the open session
                     double hours = _data_service_get().SaveClockOut(openSessionId, now);
-                    Dispatcher.Invoke(() => OverlayStatusText.Text = hours >= 0 ? $"✅ Clock-out recorded. Hours: {hours:F2}" : "⚠️ Clock-out failed.");
-                    Thread.Sleep(1000); // keep overlay visible 10s
+                    
+                    // Send clock-out to server
+                    var sessions = _data_service_get().GetTodaySessions();
+                    var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
+                    if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
+                    {
+                        DateTime clockInTime = DateTime.Parse(session.ClockIn);
+                        Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, "COMPLETED"));
+                    }
+                    
+                    window.UpdateStatus(hours >= 0 ? $"✅ Clock-out recorded. Hours: {hours:F2}" : "⚠️ Clock-out failed.");
+                    Thread.Sleep(2000);
                 }
                 else
                 {
@@ -339,34 +434,40 @@ namespace BiometricEnrollmentApp
                     catch (Exception ex)
                     {
                         LogHelper.Write($"Completed-session check failed: {ex}");
-                        hasCompleted = false; // safe default
+                        hasCompleted = false;
                     }
 
                     if (hasCompleted)
                     {
-                        Dispatcher.Invoke(() => OverlayStatusText.Text = $"⚠️ {matchedEmployeeId} already completed attendance for today. No new clock-in created.");
-                        Thread.Sleep(1000);
+                        window.UpdateStatus($"⚠️ Already completed attendance for today.");
+                        Thread.Sleep(2000);
                     }
                     else
                     {
                         // create new clock-in
                         long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, "IN");
-                        Dispatcher.Invoke(() => OverlayStatusText.Text = sid > 0 ? $"✅ Clock-in recorded at {now:HH:mm:ss}" : "⚠️ Clock-in failed.");
-                        Thread.Sleep(1000);
+                        
+                        // Send clock-in to server
+                        Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, "IN"));
+                        
+                        window.UpdateStatus(sid > 0 ? $"✅ Clock-in recorded at {now:HH:mm:ss}" : "⚠️ Clock-in failed.");
+                        Thread.Sleep(2000);
                     }
                 }
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"Clock-in/out processing failed: {ex}");
-                Dispatcher.Invoke(() => OverlayStatusText.Text = "⚠️ Attendance processing failed.");
-                Thread.Sleep(10000);
+                window.UpdateStatus("⚠️ Attendance processing failed.");
+                Thread.Sleep(2000);
             }
 
-            // Refresh UI & hide overlay
-            Dispatcher.Invoke(() => RefreshAttendances());
-            Thread.Sleep(600);
-            HideOverlay();
+            // Refresh UI & close window
+            Dispatcher.Invoke(() =>
+            {
+                RefreshAttendances();
+                window.Close();
+            });
         }
 
         /// <summary>

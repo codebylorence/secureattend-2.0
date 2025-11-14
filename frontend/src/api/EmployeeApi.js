@@ -23,3 +23,9 @@ export const updateEmployee = async (id, employeeData) => {
   const response = await api.put(`/employees/${id}`, employeeData);
   return response.data;
 };
+
+// Upload employee photo
+export const uploadEmployeePhoto = async (id, photoBase64) => {
+  const response = await api.put(`/employees/${id}/photo`, { photo: photoBase64 });
+  return response.data;
+};

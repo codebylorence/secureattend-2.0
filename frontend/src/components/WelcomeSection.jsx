@@ -1,13 +1,24 @@
-import React from "react";
+import { useState, useEffect } from "react";
 import CurrentDateTime from "./CurrentDateTime";
 
 export default function WelcomeSection() {
+  const [employeeName, setEmployeeName] = useState("");
+  const [department, setDepartment] = useState("");
 
-    const username = localStorage.getItem("username") || "Admin";
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const name = user.employee?.fullname || user.username || "Employee";
+    const dept = user.employee?.department || "";
+    setEmployeeName(name);
+    setDepartment(dept);
+  }, []);
 
   return (
     <div className="mb-6">
-      <h2 className="text-2xl font-bold text-[#1E3A8A]">Welcome, {username}</h2>
+      <h2 className="text-2xl font-bold text-[#1E3A8A]">Welcome, {employeeName}</h2>
+      {department && (
+        <p className="text-gray-600 font-medium">Department: {department}</p>
+      )}
       <p className="mt-1 text-gray-600 font-normal">
         <CurrentDateTime/>
       </p>

@@ -1,0 +1,103 @@
+using System;
+using System.Windows;
+using System.Windows.Media.Imaging;
+using BiometricEnrollmentApp.Services;
+
+namespace BiometricEnrollmentApp
+{
+    public partial class ScanWindow : Window
+    {
+        public bool WasCancelled { get; private set; }
+        public string? EmployeeId { get; set; }
+        public string? EmployeeName { get; set; }
+        public string? StatusMessage { get; set; }
+        public string? PhotoBase64 { get; set; }
+
+        public ScanWindow()
+        {
+            InitializeComponent();
+            WasCancelled = false;
+        }
+
+        public void UpdateStatus(string status)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                StatusText.Text = status;
+            });
+        }
+
+        public void UpdateEmployeeInfo(string employeeId, string name, string? photoBase64 = null)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                IdText.Text = employeeId;
+                NameText.Text = name;
+
+                if (!string.IsNullOrEmpty(photoBase64))
+                {
+                    try
+                    {
+                        LogHelper.Write($"📸 Attempting to load photo (length: {photoBase64.Length} chars)");
+                        
+                        // Remove data URI prefix if present (e.g., "data:image/jpeg;base64,")
+                        string base64Data = photoBase64;
+                        if (photoBase64.Contains(","))
+                        {
+                            int commaIndex = photoBase64.IndexOf(",");
+                            base64Data = photoBase64.Substring(commaIndex + 1);
+                            LogHelper.Write($"📸 Removed data URI prefix, new length: {base64Data.Length} chars");
+                        }
+
+                        byte[] imageBytes = Convert.FromBase64String(base64Data);
+                        LogHelper.Write($"📸 Decoded base64 to {imageBytes.Length} bytes");
+                        
+                        BitmapImage bitmap = new BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.StreamSource = new System.IO.MemoryStream(imageBytes);
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.EndInit();
+                        
+                        PhotoImage.Source = bitmap;
+                        PhotoImage.Visibility = Visibility.Visible;
+                        PhotoPlaceholderText.Visibility = Visibility.Collapsed;
+                        
+                        LogHelper.Write($"✅ Photo loaded and displayed successfully");
+                    }
+                    catch (Exception ex)
+                    {
+                        // If photo fails to load, keep placeholder
+                        LogHelper.Write($"💥 Failed to load photo: {ex.Message}");
+                        LogHelper.Write($"Stack trace: {ex.StackTrace}");
+                        
+                        // Ensure placeholder is visible
+                        PhotoImage.Visibility = Visibility.Collapsed;
+                        PhotoPlaceholderText.Visibility = Visibility.Visible;
+                    }
+                }
+                else
+                {
+                    LogHelper.Write($"⚠️ No photo data provided for {employeeId}");
+                    PhotoImage.Visibility = Visibility.Collapsed;
+                    PhotoPlaceholderText.Visibility = Visibility.Visible;
+                }
+            });
+        }
+
+        private void CancelButton_Click(object sender, RoutedEventArgs e)
+        {
+            WasCancelled = true;
+            DialogResult = false;
+            Close();
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (DialogResult == null)
+            {
+                WasCancelled = true;
+            }
+            base.OnClosing(e);
+        }
+    }
+}

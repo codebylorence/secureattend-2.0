@@ -358,7 +358,7 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
-        public string? CaptureSingleTemplate(int timeoutSeconds = 10)
+        public string? CaptureSingleTemplate(int timeoutSeconds = 10, CancellationToken cancellationToken = default)
         {
             if (!_initialized)
             {
@@ -386,6 +386,14 @@ namespace BiometricEnrollmentApp.Services
 
                 while (retry < maxRetry)
                 {
+                    // Check if cancellation requested
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        UpdateStatus("⚠️ Fingerprint capture cancelled.");
+                        LogHelper.Write("Fingerprint capture cancelled by user");
+                        return null;
+                    }
+
                     int tmplLen = templateBuf.Length;
                     int ret = zkfp2.AcquireFingerprint(_deviceHandle, imageBuffer, templateBuf, ref tmplLen);
 

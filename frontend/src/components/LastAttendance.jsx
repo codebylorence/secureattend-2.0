@@ -1,6 +1,60 @@
+import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa6";
+import { getAttendances } from "../api/AttendanceApi";
 
 export default function LastAttendance() {
+  const [lastAttendance, setLastAttendance] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+    
+    // Auto-refresh every 10 seconds
+    const interval = setInterval(() => {
+      fetchData();
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      // Get current user's employee_id from localStorage or context
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const employeeId = user.employee?.employee_id;
+      
+      console.log("LastAttendance - User:", user);
+      console.log("LastAttendance - Employee ID:", employeeId);
+      
+      if (employeeId) {
+        const data = await getAttendances({ employee_id: employeeId });
+        console.log("LastAttendance - Fetched data:", data);
+        // Get the most recent completed attendance
+        const completed = data.filter(a => a.status === "COMPLETED");
+        if (completed.length > 0) {
+          setLastAttendance(completed[0]);
+        }
+      } else {
+        console.log("LastAttendance - No employee ID found");
+      }
+    } catch (error) {
+      console.error("Error fetching last attendance:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const formatTime = (dateString) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
   return (
     <>
       <div className="bg-white shadow rounded-md overflow-hidden">
@@ -20,18 +74,30 @@ export default function LastAttendance() {
                 <th className="py-3 px-4 text-left font-medium">Date</th>
                 <th className="py-3 px-4 text-left font-medium">Clock In</th>
                 <th className="py-3 px-4 text-left font-medium">Clock Out</th>
-                <th className="py-3 px-4 text-left font-medium">Hour Worked</th>
-                <th className="py-3 px-4 text-left font-medium">Shift</th>
+                <th className="py-3 px-4 text-left font-medium">Hours Worked</th>
+                <th className="py-3 px-4 text-left font-medium">Status</th>
               </tr>
             </thead>
             <tbody className="text-gray-700">
-              <tr className="border-b-1 bg-white">
-                <td className="py-3 px-4">Sept. 18, 2025</td>
-                <td className="py-3 px-4">9:01 AM</td>
-                <td className="py-3 px-4">6:01 PM</td>
-                <td className="py-3 px-4">8 hrs</td>
-                <td className="py-3 px-4">Opening</td>
-              </tr>
+              {loading ? (
+                <tr>
+                  <td colSpan="5" className="py-4 px-4 text-center">Loading...</td>
+                </tr>
+              ) : !lastAttendance ? (
+                <tr>
+                  <td colSpan="5" className="py-4 px-4 text-center">No completed attendance records found</td>
+                </tr>
+              ) : (
+                <tr className="border-b-1 bg-white">
+                  <td className="py-3 px-4">{formatDate(lastAttendance.date)}</td>
+                  <td className="py-3 px-4">{formatTime(lastAttendance.clock_in)}</td>
+                  <td className="py-3 px-4">{formatTime(lastAttendance.clock_out)}</td>
+                  <td className="py-3 px-4">
+                    {lastAttendance.total_hours ? `${lastAttendance.total_hours.toFixed(2)} hrs` : "-"}
+                  </td>
+                  <td className="py-3 px-4 text-green-600 font-medium">Completed</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

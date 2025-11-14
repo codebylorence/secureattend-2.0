@@ -5,8 +5,12 @@ import { syncDatabase } from "./models/index.js";
 import sequelize from "./config/database.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import attendanceRoutes from "./routes/attendanceRoutes.js";
+import departmentRoutes from "./routes/departmentRoutes.js";
 import "./models/employee.js";
 import "./models/user.js";
+import "./models/attendance.js";
+import "./models/department.js";
 
 dotenv.config();
 
@@ -17,6 +21,8 @@ app.use(express.json());
 // --- EXISTING ROUTES ---
 app.use("/api/employees", employeeRoutes);
 app.use("/api/auth", userRoutes);
+app.use("/api/attendances", attendanceRoutes);
+app.use("/api/departments", departmentRoutes);
 app.use("/employees", employeeRoutes);
 
 

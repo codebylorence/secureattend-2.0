@@ -19,3 +19,8 @@ export const fetchUserProfile = async (token) => {
   });
   return res.data;
 };
+
+export const fetchTeamLeaders = async () => {
+  const response = await api.get("/auth/teamleaders");
+  return response.data;
+};

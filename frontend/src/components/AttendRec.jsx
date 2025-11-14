@@ -1,6 +1,59 @@
+import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa6";
+import { getAttendances } from "../api/AttendanceApi";
+import { fetchEmployees } from "../api/EmployeeApi";
 
 export default function AttendRec() {
+  const [attendances, setAttendances] = useState([]);
+  const [employees, setEmployees] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [limit, setLimit] = useState(10);
+
+  useEffect(() => {
+    fetchData();
+    
+    // Auto-refresh every 10 seconds
+    const interval = setInterval(() => {
+      fetchData();
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [attendanceData, employeeData] = await Promise.all([
+        getAttendances(),
+        fetchEmployees()
+      ]);
+      
+      const employeeMap = {};
+      employeeData.forEach(emp => {
+        employeeMap[emp.employee_id] = emp;
+      });
+      
+      setAttendances(attendanceData);
+      setEmployees(employeeMap);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const formatTime = (dateString) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  const displayedAttendances = attendances.slice(0, limit);
+
   return (
     <>
       <div className="bg-white shadow rounded-md overflow-hidden">
@@ -16,7 +69,8 @@ export default function AttendRec() {
             <input
               type="number"
               min="1"
-              defaultValue="1"
+              value={limit}
+              onChange={(e) => setLimit(parseInt(e.target.value) || 1)}
               className="w-12 text-center border border-gray-300 rounded-md text-black bg-white"
             />
             <span className="ml-2">Entries</span>
@@ -37,26 +91,33 @@ export default function AttendRec() {
               </tr>
             </thead>
             <tbody className="text-gray-700">
-              <tr className="border-b-1 bg-white">
-                <td className="py-3 px-4">Sept. 18, 2025</td>
-                <td className="py-3 px-4">John Doe</td>
-                <td className="py-3 px-4">9:01 AM</td>
-                <td className="py-3 px-4">6:01 PM</td>
-                <td className="py-3 px-4">Zone A</td>
-                <td className="py-3 px-4 text-green-600 font-medium">
-                  On Time
-                </td>
-              </tr>
-              <tr className="bg-white">
-                <td className="py-3 px-4">Sept. 19, 2025</td>
-                <td className="py-3 px-4">John Doe</td>
-                <td className="py-3 px-4">9:05 AM</td>
-                <td className="py-3 px-4">6:05 PM</td>
-                <td className="py-3 px-4">Zone B</td>
-                <td className="py-3 px-4 text-green-600 font-medium">
-                  On Time
-                </td>
-              </tr>
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="py-4 px-4 text-center">Loading...</td>
+                </tr>
+              ) : displayedAttendances.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-4 px-4 text-center">No attendance records found</td>
+                </tr>
+              ) : (
+                displayedAttendances.map((attendance) => {
+                  const employee = employees[attendance.employee_id] || {};
+                  return (
+                    <tr key={attendance.id} className="border-b-1 bg-white">
+                      <td className="py-3 px-4">{formatDate(attendance.date)}</td>
+                      <td className="py-3 px-4">{employee.fullname || attendance.employee_id}</td>
+                      <td className="py-3 px-4">{formatTime(attendance.clock_in)}</td>
+                      <td className="py-3 px-4">{formatTime(attendance.clock_out)}</td>
+                      <td className="py-3 px-4">{employee.department || "-"}</td>
+                      <td className="py-3 px-4 font-medium">
+                        <span className={attendance.status === "COMPLETED" ? "text-green-600" : "text-blue-600"}>
+                          {attendance.status === "COMPLETED" ? "Completed" : "Clocked In"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

@@ -1,0 +1,99 @@
+using System;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace BiometricEnrollmentApp.Services
+{
+    public class ApiService
+    {
+        private readonly HttpClient _httpClient;
+        private readonly string _baseUrl;
+
+        public ApiService(string baseUrl = "http://localhost:5000")
+        {
+            _httpClient = new HttpClient();
+            _baseUrl = baseUrl;
+        }
+
+        public async Task<EmployeeDetails?> GetEmployeeDetailsAsync(string employeeId)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/employees/{employeeId}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    var employee = JsonSerializer.Deserialize<EmployeeDetails>(json, new JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    
+                    LogHelper.Write($"✅ Retrieved employee details for {employeeId}");
+                    return employee;
+                }
+                else
+                {
+                    LogHelper.Write($"⚠️ Failed to get employee details: {response.StatusCode}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting employee details: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<bool> SendAttendanceAsync(string employeeId, DateTime clockIn, DateTime? clockOut = null, string status = "IN")
+        {
+            try
+            {
+                var payload = new
+                {
+                    employee_id = employeeId,
+                    clock_in = clockIn.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    clock_out = clockOut?.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    status = status
+                };
+
+                var json = JsonSerializer.Serialize(payload);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync($"{_baseUrl}/api/attendances", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    LogHelper.Write($"✅ Attendance sent to server for {employeeId}");
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"⚠️ Failed to send attendance: {response.StatusCode} - {errorContent}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error sending attendance to server: {ex.Message}");
+                return false;
+            }
+        }
+    }
+
+    public class EmployeeDetails
+    {
+        public int Id { get; set; }
+        public string? Employee_Id { get; set; }
+        public string? Fullname { get; set; }
+        public string? Department { get; set; }
+        public string? Position { get; set; }
+        public string? Contact_Number { get; set; }
+        public string? Email { get; set; }
+        public string? Photo { get; set; }
+        public string? Status { get; set; }
+    }
+}

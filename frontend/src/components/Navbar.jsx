@@ -1,20 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { IoNotifications } from "react-icons/io5";
-import { FaUserCircle, FaSignOutAlt } from "react-icons/fa";
+import { FaUserCircle, FaSignOutAlt, FaUser } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
 export default function Navbar() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [photo, setPhoto] = useState(null);
   const navigate = useNavigate();
 
   const username = localStorage.getItem("username") || "Admin";
   const role = localStorage.getItem("role") || "admin";
 
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    setPhoto(user.employee?.photo);
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("username");
+    localStorage.removeItem("user");
     navigate("/");
+  };
+
+  const getProfileRoute = () => {
+    if (role === "admin") return "/admin/profile";
+    if (role === "teamleader") return "/team/profile";
+    return "/employee/profile";
   };
 
   return (
@@ -32,11 +45,17 @@ export default function Navbar() {
           className="flex items-center gap-2 cursor-pointer select-none"
           onClick={() => setShowProfileMenu(!showProfileMenu)}
         >
-          <img
-            src="https://scontent.fmnl30-2.fna.fbcdn.net/v/t39.30808-1/472020402_566286066169802_7055273986583081106_n.jpg?stp=dst-jpg_s200x200_tt6&_nc_cat=110&ccb=1-7&_nc_sid=e99d92&_nc_eui2=AeGU0TWw03kXMsF3TJWdCMVsV6hpqbCo74NXqGmpsKjvgyaDvVDnuycRe06yBkHa9PatDY9aZ6zTgkX1eKCUQGE6&_nc_ohc=soJ7CIaO9iAQ7kNvwGRLnK7&_nc_oc=Adkrvc8YB-FylwcD0rgUifaViIAh1loNoqsXBAgR3NAnmx_Vv-1r06YJ8nlhBNukz-E&_nc_zt=24&_nc_ht=scontent.fmnl30-2.fna&_nc_gid=qX1lXJLijQ3wZClEuFd_-w&oh=00_AfjD4eE67AQkG3WN6oqksk5wBgRUE-8YFYKMZln45XXhAQ&oe=690F9010"
-            alt="Profile"
-            className="w-10 h-10 rounded-full border-2 border-white"
-          />
+          {photo ? (
+            <img
+              src={photo}
+              alt="Profile"
+              className="w-10 h-10 rounded-full border-2 border-white object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full border-2 border-white bg-gray-300 flex items-center justify-center">
+              <FaUser className="text-gray-600" size={20} />
+            </div>
+          )}
           <p className="text-white text-sm font-medium">{username}</p>
         </div>
 
@@ -45,11 +64,17 @@ export default function Navbar() {
           <div className="absolute right-0 top-14 bg-white shadow-lg rounded-lg w-52 p-4 z-50">
             {/* Profile Info */}
             <div className="flex items-center gap-3 border-b border-gray-200 pb-3 mb-3">
-              <img
-                src="https://scontent.fmnl30-2.fna.fbcdn.net/v/t39.30808-1/472020402_566286066169802_7055273986583081106_n.jpg?stp=dst-jpg_s200x200_tt6&_nc_cat=110&ccb=1-7&_nc_sid=e99d92&_nc_eui2=AeGU0TWw03kXMsF3TJWdCMVsV6hpqbCo74NXqGmpsKjvgyaDvVDnuycRe06yBkHa9PatDY9aZ6zTgkX1eKCUQGE6&_nc_ohc=soJ7CIaO9iAQ7kNvwGRLnK7&_nc_oc=Adkrvc8YB-FylwcD0rgUifaViIAh1loNoqsXBAgR3NAnmx_Vv-1r06YJ8nlhBNukz-E&_nc_zt=24&_nc_ht=scontent.fmnl30-2.fna&_nc_gid=qX1lXJLijQ3wZClEuFd_-w&oh=00_AfjD4eE67AQkG3WN6oqksk5wBgRUE-8YFYKMZln45XXhAQ&oe=690F9010"
-                alt="User Avatar"
-                className="w-10 h-10 rounded-full"
-              />
+              {photo ? (
+                <img
+                  src={photo}
+                  alt="User Avatar"
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center">
+                  <FaUser className="text-gray-600" />
+                </div>
+              )}
               <div>
                 <p className="font-semibold text-gray-800 text-sm">
                   {username}
@@ -62,7 +87,7 @@ export default function Navbar() {
             <button
               onClick={() => {
                 setShowProfileMenu(false);
-                navigate("/profile");
+                navigate(getProfileRoute());
               }}
               className="flex items-center gap-2 text-gray-700 hover:text-[#1E3A8A] text-sm mb-3 w-full text-left"
             >

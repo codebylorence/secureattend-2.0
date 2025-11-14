@@ -40,3 +40,25 @@ export const getUserProfile = async (req, res) => {
     res.status(500).json({ error: "Failed to load user profile" });
   }
 };
+
+// 👥 GET TEAM LEADERS
+export const getTeamLeaders = async (req, res) => {
+  try {
+    const teamLeaders = await User.findAll({
+      where: { role: "teamleader" },
+      attributes: ["id", "username"],
+      include: [
+        {
+          model: Employee,
+          as: "employee",
+          attributes: ["employee_id", "fullname"],
+        },
+      ],
+    });
+
+    res.status(200).json(teamLeaders);
+  } catch (error) {
+    console.error("Error fetching team leaders:", error);
+    res.status(500).json({ error: "Failed to fetch team leaders" });
+  }
+};

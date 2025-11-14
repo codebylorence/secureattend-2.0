@@ -17,6 +17,10 @@ const Employee = sequelize.define("Employee", {
   position: DataTypes.STRING,
   contact_number: DataTypes.STRING,
   email: DataTypes.STRING,
+  photo: {
+    type: DataTypes.TEXT('long'),
+    allowNull: true,
+  },
   status: {
     type: DataTypes.ENUM("Active", "Inactive"),
     defaultValue: "Active",

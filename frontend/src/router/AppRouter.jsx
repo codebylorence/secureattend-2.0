@@ -22,7 +22,6 @@ export default function AppRouter() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
-        <Route path="/profile" element={<Profile />} />
 
         <Route element={<AdminLayout />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
@@ -32,13 +31,14 @@ export default function AppRouter() {
           <Route path="/admin/reports" element={<Reports />} />
           <Route path="/admin/departments" element={<Departments />} />
           <Route path="/admin/settings" element={<Settings />} />
-
+          <Route path="/admin/profile" element={<Profile />} />
         </Route>
 
         <Route element={<EmployeeLayout />}>
           <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
           <Route path="/employee/myattendance" element={<MyAttendance />} />
           <Route path="/employee/schedule" element={<MySchedule />} />
+          <Route path="/employee/profile" element={<Profile />} />
         </Route>
 
         <Route element={<TeamLeaderLayout />}>
@@ -47,6 +47,7 @@ export default function AppRouter() {
           <Route path="/team/myschedule" element={<MySchedule />} />
           <Route path="/team/dashboard" element={<TeamDashboard />} />
           <Route path="/team/schedule" element={<TeamSchedule />} />
+          <Route path="/team/profile" element={<Profile />} />
         </Route>
       </Routes>
     </BrowserRouter>

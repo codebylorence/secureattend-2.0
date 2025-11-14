@@ -1,9 +1,15 @@
-import React from "react";
+import { useState } from "react";
 import ManageDepartment from "../components/ManageDepartment";
 import DropdownZone from "../components/DropdownZone";
 import AddDeptButton from "../components/AddDeptButton";
 
 export default function Departments() {
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleDepartmentAdded = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
   return (
     <div className="pr-10 bg-gray-50">
       {/* Header */}
@@ -20,11 +26,11 @@ export default function Departments() {
         </div>
 
         <div className="flex">
-          <AddDeptButton />
+          <AddDeptButton onDepartmentAdded={handleDepartmentAdded} />
         </div>
       </div>
 
-      <ManageDepartment />
+      <ManageDepartment key={refreshKey} />
     </div>
   );
 }

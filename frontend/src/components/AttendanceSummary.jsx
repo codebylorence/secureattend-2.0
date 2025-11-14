@@ -1,11 +1,49 @@
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { useState, useEffect } from "react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
 import { FaClock } from "react-icons/fa";
+import { getAttendances } from "../api/AttendanceApi";
 
 export default function AttendanceSummary() {
-  const attendanceData = [
-    { name: "Present", value: 75 },
-    { name: "Absent", value: 25 },
-  ];
+  const [attendanceData, setAttendanceData] = useState([
+    { name: "Present", value: 0 },
+    { name: "Absent", value: 0 },
+  ]);
+
+  useEffect(() => {
+    fetchAttendanceSummary();
+  }, []);
+
+  const fetchAttendanceSummary = async () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const employeeId = user.employee?.employee_id;
+
+      if (!employeeId) return;
+
+      // Get last 30 days of attendance
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const allAttendances = await getAttendances({ employee_id: employeeId });
+      
+      // Count completed attendances in last 30 days
+      const recentAttendances = allAttendances.filter(att => {
+        const attDate = new Date(att.date);
+        return attDate >= thirtyDaysAgo && att.status === "COMPLETED";
+      });
+
+      const present = recentAttendances.length;
+      const workingDays = 30; // Approximate working days
+      const absent = Math.max(0, workingDays - present);
+
+      setAttendanceData([
+        { name: "Present", value: present },
+        { name: "Absent", value: absent },
+      ]);
+    } catch (error) {
+      console.error("Error fetching attendance summary:", error);
+    }
+  };
 
   const COLORS = ["#3B82F6", "#EF4444"];
 
@@ -14,12 +52,12 @@ export default function AttendanceSummary() {
       <div className="flex items-center justify-between bg-[#1E3A8A] text-white px-4 py-2 rounded-t-md">
         <div className="flex items-center gap-2">
           <FaClock />
-          <h3 className="font-medium">Attendance Summary</h3>
+          <h3 className="font-medium">Attendance Summary (Last 30 Days)</h3>
         </div>
       </div>
 
       <div className="h-48 flex items-center justify-center">
-        <ResponsiveContainer width="60%" height="80%">
+        <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={attendanceData}
@@ -28,6 +66,7 @@ export default function AttendanceSummary() {
               innerRadius={40}
               outerRadius={60}
               dataKey="value"
+              label={({ name, value }) => `${name}: ${value}`}
             >
               {attendanceData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index]} />
