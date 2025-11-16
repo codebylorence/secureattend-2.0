@@ -18,25 +18,14 @@ export default function AssignSched() {
     days: [],
   });
 
+  // Predefined shift templates
+  const shiftTemplates = [
+    { name: "Opening Shift", start: "8:00 AM", end: "4:00 PM" },
+    { name: "Closing Shift", start: "4:00 PM", end: "12:00 AM" },
+    { name: "Graveyard Shift", start: "12:00 AM", end: "8:00 AM" },
+  ];
+
   const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-  // Generate time options (12-hour format)
-  const generateTimeOptions = () => {
-    const times = [];
-    for (let hour = 1; hour <= 12; hour++) {
-      for (let min of ['00', '15', '30', '45']) {
-        times.push(`${hour}:${min} AM`);
-      }
-    }
-    for (let hour = 1; hour <= 12; hour++) {
-      for (let min of ['00', '15', '30', '45']) {
-        times.push(`${hour}:${min} PM`);
-      }
-    }
-    return times;
-  };
-
-  const timeOptions = generateTimeOptions();
 
   useEffect(() => {
     fetchEmployeesData();
@@ -71,6 +60,27 @@ export default function AssignSched() {
     }
   };
 
+  const handleShiftChange = (shiftName) => {
+    // Find the shift template
+    const template = shiftTemplates.find(t => t.name === shiftName);
+    
+    if (template) {
+      setFormData({
+        ...formData,
+        shift_name: template.name,
+        start_time: template.start,
+        end_time: template.end
+      });
+    } else {
+      setFormData({
+        ...formData,
+        shift_name: "",
+        start_time: "",
+        end_time: ""
+      });
+    }
+  };
+
   const handleDayToggle = (day) => {
     setFormData((prev) => ({
       ...prev,
@@ -88,7 +98,20 @@ export default function AssignSched() {
     }
 
     try {
-      await createSchedule(formData);
+      // Get the employee's department
+      const employee = employees.find(emp => emp.employee_id === formData.employee_id);
+      const department = employee?.department || "";
+
+      // Get current user for created_by
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const createdBy = user.employee?.employee_id || "admin";
+
+      await createSchedule({
+        ...formData,
+        department: department,
+        is_template: false,
+        created_by: createdBy
+      });
       alert("Schedule assigned successfully!");
       setFormData({
         employee_id: "",
@@ -100,7 +123,8 @@ export default function AssignSched() {
       fetchSchedules();
     } catch (error) {
       console.error("Error assigning schedule:", error);
-      alert("Failed to assign schedule");
+      const errorMsg = error.response?.data?.message || "Failed to assign schedule";
+      alert(`Failed to assign schedule: ${errorMsg}`);
     }
   };
 
@@ -133,9 +157,54 @@ export default function AssignSched() {
     return creator ? creator.fullname : createdBy;
   };
 
-  const filteredSchedules = selectedDepartment
+  // Sort employees by department, then by position (Supervisor first), then by name
+  const sortedEmployees = [...employees].sort((a, b) => {
+    // First sort by department
+    if (a.department !== b.department) {
+      return (a.department || "").localeCompare(b.department || "");
+    }
+    
+    // Then by position (Supervisor first)
+    const positionOrder = { "Supervisor": 0, "Team Leader": 1 };
+    const aOrder = positionOrder[a.position] ?? 99;
+    const bOrder = positionOrder[b.position] ?? 99;
+    
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+    
+    // Finally by name
+    return (a.fullname || "").localeCompare(b.fullname || "");
+  });
+
+  // Filter and sort schedules
+  const filteredSchedules = (selectedDepartment
     ? schedules.filter((schedule) => getEmployeeDepartment(schedule.employee_id) === selectedDepartment)
-    : schedules;
+    : schedules
+  ).sort((a, b) => {
+    const deptA = getEmployeeDepartment(a.employee_id);
+    const deptB = getEmployeeDepartment(b.employee_id);
+    
+    // Sort by department first
+    if (deptA !== deptB) {
+      return deptA.localeCompare(deptB);
+    }
+    
+    // Then by employee position (Supervisor first)
+    const empA = employees.find(e => e.employee_id === a.employee_id);
+    const empB = employees.find(e => e.employee_id === b.employee_id);
+    
+    const positionOrder = { "Supervisor": 0, "Team Leader": 1 };
+    const aOrder = positionOrder[empA?.position] ?? 99;
+    const bOrder = positionOrder[empB?.position] ?? 99;
+    
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+    
+    // Finally by employee name
+    return getEmployeeName(a.employee_id).localeCompare(getEmployeeName(b.employee_id));
+  });
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -144,7 +213,7 @@ export default function AssignSched() {
       </h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Employee Selection */}
+        {/* Employee and Shift Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -156,9 +225,9 @@ export default function AssignSched() {
               className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white"
             >
               <option value="">Choose Employee</option>
-              {employees.map((emp) => (
+              {sortedEmployees.map((emp) => (
                 <option key={emp.id} value={emp.employee_id}>
-                  {emp.fullname} ({emp.employee_id})
+                  {emp.fullname} ({emp.employee_id}) - {emp.department || "No Dept"} - {emp.position}
                 </option>
               ))}
             </select>
@@ -166,59 +235,34 @@ export default function AssignSched() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Shift Name
+              Shift Template
             </label>
             <select
               value={formData.shift_name}
-              onChange={(e) => setFormData({ ...formData, shift_name: e.target.value })}
+              onChange={(e) => handleShiftChange(e.target.value)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white"
             >
-              <option value="">Select Shift</option>
-              <option value="Opening Shift">Opening Shift</option>
-              <option value="Closing Shift">Closing Shift</option>
-              <option value="Graveyard Shift">Graveyard Shift</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Time Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Start Time
-            </label>
-            <select
-              value={formData.start_time}
-              onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white"
-            >
-              <option value="">Select Start Time</option>
-              {timeOptions.map((time) => (
-                <option key={`start-${time}`} value={time}>
-                  {time}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              End Time
-            </label>
-            <select
-              value={formData.end_time}
-              onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white"
-            >
-              <option value="">Select End Time</option>
-              {timeOptions.map((time) => (
-                <option key={`end-${time}`} value={time}>
-                  {time}
+              <option value="">Select Shift Template</option>
+              {shiftTemplates.map((template) => (
+                <option key={template.name} value={template.name}>
+                  {template.name} ({template.start} - {template.end})
                 </option>
               ))}
             </select>
           </div>
         </div>
+
+        {/* Display Selected Shift Times */}
+        {formData.shift_name && formData.start_time && formData.end_time && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <p className="text-sm text-gray-700">
+              <strong>Selected Shift:</strong> {formData.shift_name}
+            </p>
+            <p className="text-sm text-gray-700">
+              <strong>Time:</strong> {formData.start_time} - {formData.end_time}
+            </p>
+          </div>
+        )}
 
         {/* Days Selection */}
         <div>
@@ -308,46 +352,106 @@ export default function AssignSched() {
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {filteredSchedules.map((schedule) => (
-                    <div
-                      key={schedule.id}
-                      className="flex justify-between items-center border border-gray-200 rounded-md p-4 hover:bg-gray-50"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium text-gray-800">
-                            {getEmployeeName(schedule.employee_id)}
-                          </p>
-                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                            {getEmployeeDepartment(schedule.employee_id)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 font-medium">
-                          {schedule.shift_name}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          ⏰ {schedule.start_time} - {schedule.end_time}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          📅 {schedule.days.join(", ")}
-                        </p>
-                        {schedule.created_by && (
-                          <p className="text-xs text-purple-600 mt-1">
-                            👤 Assigned by: {getCreatorName(schedule.created_by)}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => {
-                          handleDelete(schedule.id);
-                        }}
-                        className="text-red-600 hover:text-red-800 p-2"
-                        title="Delete Schedule"
+                  {/* Group schedules by employee */}
+                  {Object.entries(
+                    filteredSchedules.reduce((acc, schedule) => {
+                      const empId = schedule.employee_id;
+                      if (!acc[empId]) {
+                        acc[empId] = [];
+                      }
+                      acc[empId].push(schedule);
+                      return acc;
+                    }, {})
+                  ).map(([employeeId, employeeSchedules]) => {
+                    const employee = employees.find(e => e.employee_id === employeeId);
+                    const isSupervisor = employee?.position === "Supervisor";
+                    const isTeamLeader = employee?.position === "Team Leader";
+                    
+                    // Collect all shifts for this employee
+                    const allShifts = [];
+                    employeeSchedules.forEach(schedule => {
+                      if (schedule.shifts && Array.isArray(schedule.shifts)) {
+                        schedule.shifts.forEach(shift => {
+                          allShifts.push({
+                            ...shift,
+                            scheduleId: schedule.id,
+                            created_by: schedule.created_by
+                          });
+                        });
+                      } else {
+                        allShifts.push({
+                          shift_name: schedule.shift_name,
+                          start_time: schedule.start_time,
+                          end_time: schedule.end_time,
+                          days: schedule.days,
+                          scheduleId: schedule.id,
+                          created_by: schedule.created_by
+                        });
+                      }
+                    });
+                    
+                    return (
+                      <div
+                        key={employeeId}
+                        className="border border-gray-200 rounded-md p-4 hover:bg-gray-50"
                       >
-                        <MdDelete size={20} />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-3">
+                              <p className="font-semibold text-gray-800">
+                                {getEmployeeName(employeeId)}
+                              </p>
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                {getEmployeeDepartment(employeeId)}
+                              </span>
+                              {isSupervisor && (
+                                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded font-medium">
+                                  Supervisor
+                                </span>
+                              )}
+                              {isTeamLeader && (
+                                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">
+                                  Team Leader
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Display all shifts */}
+                            <div className="space-y-2 ml-3">
+                              {allShifts.map((shift, idx) => (
+                                <div key={idx} className="border-l-2 border-blue-300 pl-3">
+                                  <p className="text-sm font-medium text-gray-700">
+                                    {shift.shift_name}
+                                  </p>
+                                  <p className="text-sm text-gray-600">
+                                    ⏰ {shift.start_time} - {shift.end_time}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    📅 {shift.days.join(", ")}
+                                  </p>
+                                  {shift.created_by && (
+                                    <p className="text-xs text-purple-600 mt-1">
+                                      Assigned by: {getCreatorName(shift.created_by)}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <button
+                            onClick={() => {
+                              handleDelete(employeeSchedules[0].id);
+                            }}
+                            className="text-red-600 hover:text-red-800 p-2"
+                            title="Delete All Schedules for this Employee"
+                          >
+                            <MdDelete size={20} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

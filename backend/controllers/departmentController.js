@@ -62,6 +62,7 @@ export const updateDepartment = async (req, res) => {
     }
 
     const oldName = department.name;
+    const oldManager = department.manager;
 
     await department.update({
       name: name || department.name,
@@ -69,11 +70,41 @@ export const updateDepartment = async (req, res) => {
       manager: manager !== undefined ? manager : department.manager
     });
 
+    // If department name changed, update all employees in that department
     if (name && name !== oldName) {
       await Employee.update(
         { department: name },
         { where: { department: oldName } }
       );
+    }
+
+    // If manager changed, update the team leader's department
+    if (manager !== undefined && manager !== oldManager) {
+      // If a new manager is assigned
+      if (manager && manager !== "") {
+        await Employee.update(
+          { department: department.name },
+          { 
+            where: { 
+              fullname: manager,
+              position: "Team Leader"
+            } 
+          }
+        );
+      }
+
+      // If old manager was removed, optionally set their department to "No Department"
+      if (oldManager && oldManager !== "" && (!manager || manager === "")) {
+        await Employee.update(
+          { department: "No Department" },
+          { 
+            where: { 
+              fullname: oldManager,
+              position: "Team Leader"
+            } 
+          }
+        );
+      }
     }
 
     res.status(200).json(department);

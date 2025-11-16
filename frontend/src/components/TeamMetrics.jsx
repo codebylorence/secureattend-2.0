@@ -18,9 +18,11 @@ export default function TeamMetrics({ department }) {
         fetchEmployees()
       ]);
 
-      // Filter employees by department
+      // Filter employees by department (exclude team leaders from count)
       const departmentEmployees = employeeData.filter(emp => 
-        emp.department === department && emp.status === "Active"
+        emp.department === department && 
+        emp.status === "Active" &&
+        emp.position !== "Team Leader"
       );
       const departmentEmployeeIds = new Set(departmentEmployees.map(emp => emp.employee_id));
 
@@ -29,15 +31,17 @@ export default function TeamMetrics({ department }) {
         departmentEmployeeIds.has(att.employee_id)
       );
 
-      const present = departmentAttendances.length;
+      const present = departmentAttendances.filter(att => att.clock_in).length;
       const absent = departmentEmployees.length - present;
       
-      // Count late (clock in after 9:00 AM)
+      // Count late (clock in after 8:15 AM - 15 min grace period)
       const late = departmentAttendances.filter(att => {
+        if (!att.clock_in) return false;
         const clockIn = new Date(att.clock_in);
         const hours = clockIn.getHours();
         const minutes = clockIn.getMinutes();
-        return hours > 9 || (hours === 9 && minutes > 0);
+        // Consider late if after 8:15 AM
+        return hours > 8 || (hours === 8 && minutes > 15);
       }).length;
 
       setMetrics({ present, absent, late });

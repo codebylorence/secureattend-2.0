@@ -17,20 +17,30 @@ const Schedule = sequelize.define("Schedule", {
   },
   shift_name: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true, // Made nullable for multi-shift records
   },
   start_time: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true, // Made nullable for multi-shift records
   },
   end_time: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true, // Made nullable for multi-shift records
   },
   days: {
     type: DataTypes.JSON,
     allowNull: false,
     defaultValue: [],
+  },
+  shifts: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: "Array of shift objects: [{shift_name, start_time, end_time, days: []}]"
+  },
+  schedule_date: {
+    type: DataTypes.DATEONLY,
+    allowNull: true,
+    comment: "Specific date for this schedule instance (e.g., 2025-11-17)"
   },
   member_limit: {
     type: DataTypes.INTEGER,

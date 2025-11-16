@@ -61,39 +61,65 @@ export const addSchedule = async (req, res) => {
     console.log("Creating schedule with data:", req.body);
     
     // If assigning to an employee (not a template), check member limit
-    if (!req.body.is_template && req.body.employee_id) {
-      // Get the template for this department and shift
-      const templates = await getTemplatesByDepartment(req.body.department);
-      const template = templates.find(t => 
-        t.shift_name === req.body.shift_name &&
-        t.days.some(day => req.body.days.includes(day))
-      );
-      
-      if (template) {
-        // Check each day for member limit (use day_limits if available, otherwise member_limit)
-        for (const day of req.body.days) {
-          const existingAssignments = await getAllSchedules();
-          const assignmentsForDay = existingAssignments.filter(s => 
-            s.department === req.body.department &&
-            s.shift_name === req.body.shift_name &&
-            s.days.includes(day) &&
-            s.employee_id !== null
-          );
+    if (!req.body.is_template && req.body.employee_id && req.body.department) {
+      try {
+        // Get the template for this department and shift
+        const templates = await getTemplatesByDepartment(req.body.department);
+        const template = templates.find(t => 
+          t.shift_name === req.body.shift_name &&
+          t.days.some(day => req.body.days.includes(day))
+        );
+        
+        if (template) {
+          // Import Employee model to check positions
+          const { default: Employee } = await import("../models/employee.js");
           
-          // Get the limit for this specific day
-          let dayLimit = null;
-          if (template.day_limits && template.day_limits[day]) {
-            dayLimit = template.day_limits[day];
-          } else if (template.member_limit) {
-            dayLimit = template.member_limit;
+          // Check each day for member limit (use day_limits if available, otherwise member_limit)
+          for (const day of req.body.days) {
+            const existingAssignments = await getAllSchedules();
+            
+            // Filter assignments for this day/shift, excluding current employee and team leaders
+            const assignmentsForDay = [];
+            for (const s of existingAssignments) {
+              if (
+                s.department === req.body.department &&
+                s.shift_name === req.body.shift_name &&
+                s.days.includes(day) &&
+                s.employee_id !== null &&
+                s.employee_id !== req.body.employee_id  // Exclude the current employee being assigned
+              ) {
+                // Check if this employee is a team leader
+                const employee = await Employee.findOne({
+                  where: { employee_id: s.employee_id }
+                });
+                
+                // Only count non-team leaders towards the limit
+                if (employee && employee.position !== "Team Leader") {
+                  assignmentsForDay.push(s);
+                }
+              }
+            }
+            
+            // Get the limit for this specific day
+            let dayLimit = null;
+            if (template.day_limits && template.day_limits[day]) {
+              dayLimit = template.day_limits[day];
+            } else if (template.member_limit) {
+              dayLimit = template.member_limit;
+            }
+            
+            if (dayLimit && assignmentsForDay.length >= dayLimit) {
+              return res.status(400).json({ 
+                message: `Member limit reached for ${req.body.shift_name} on ${day}. Maximum ${dayLimit} members allowed.` 
+              });
+            }
           }
-          
-          if (dayLimit && assignmentsForDay.length >= dayLimit) {
-            return res.status(400).json({ 
-              message: `Member limit reached for ${req.body.shift_name} on ${day}. Maximum ${dayLimit} members allowed.` 
-            });
-          }
+        } else {
+          console.log(`⚠️ No template found for ${req.body.department} - ${req.body.shift_name}, skipping limit validation`);
         }
+      } catch (validationError) {
+        console.error("Error during member limit validation:", validationError);
+        // Don't fail the assignment if validation fails, just log it
       }
     }
     
@@ -173,6 +199,50 @@ export const editSchedule = async (req, res) => {
 export const removeSchedule = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // First, get the schedule details before deleting
+    const { default: Schedule } = await import("../models/schedule.js");
+    const scheduleToDelete = await Schedule.findByPk(id);
+    
+    if (!scheduleToDelete) {
+      return res.status(404).json({ message: "Schedule not found" });
+    }
+    
+    // If deleting a template, also delete the team leader's assigned schedule
+    if (scheduleToDelete.is_template && scheduleToDelete.department) {
+      try {
+        const { default: User } = await import("../models/user.js");
+        const { default: Employee } = await import("../models/employee.js");
+        
+        // Find team leader for this department
+        const teamLeaderUser = await User.findOne({
+          where: { role: "teamleader" },
+          include: [{
+            model: Employee,
+            as: "employee",
+            where: { department: scheduleToDelete.department }
+          }]
+        });
+        
+        if (teamLeaderUser && teamLeaderUser.employee) {
+          // Delete the team leader's assigned schedule that matches this template
+          await Schedule.destroy({
+            where: {
+              employee_id: teamLeaderUser.employee.employee_id,
+              shift_name: scheduleToDelete.shift_name,
+              department: scheduleToDelete.department,
+              is_template: false
+            }
+          });
+          console.log(`✅ Also deleted team leader's assigned schedule: ${teamLeaderUser.employee.employee_id}`);
+        }
+      } catch (cascadeError) {
+        console.error("Error deleting team leader's schedule:", cascadeError);
+        // Don't fail the template deletion if cascade delete fails
+      }
+    }
+    
+    // Delete the template/schedule
     const deleted = await deleteSchedule(id);
     
     if (!deleted) {
@@ -183,5 +253,17 @@ export const removeSchedule = async (req, res) => {
   } catch (error) {
     console.error("Error deleting schedule:", error);
     res.status(500).json({ message: "Error deleting schedule" });
+  }
+};
+
+// POST /api/schedules/cleanup - Manual cleanup of expired schedules
+export const cleanupExpiredSchedules = async (req, res) => {
+  try {
+    const { cleanupExpiredSchedules } = await import("../services/scheduleCleanupService.js");
+    await cleanupExpiredSchedules();
+    res.status(200).json({ message: "Expired schedules cleaned up successfully" });
+  } catch (error) {
+    console.error("Error cleaning up schedules:", error);
+    res.status(500).json({ message: "Error cleaning up schedules" });
   }
 };

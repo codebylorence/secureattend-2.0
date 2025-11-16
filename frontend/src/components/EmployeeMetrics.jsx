@@ -23,28 +23,57 @@ export default function EmployeeMetrics() {
       // Get last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setHours(0, 0, 0, 0);
 
       const allAttendances = await getAttendances({ employee_id: employeeId });
       
       const recentAttendances = allAttendances.filter(att => {
         const attDate = new Date(att.date);
+        attDate.setHours(0, 0, 0, 0);
         return attDate >= thirtyDaysAgo;
       });
 
-      const present = recentAttendances.filter(att => att.status === "COMPLETED").length;
+      // Count present days (completed attendance records)
+      const present = recentAttendances.filter(att => 
+        att.status === "COMPLETED" && att.clock_in && att.clock_out
+      ).length;
       
+      // Count late arrivals (clock in after scheduled start time or default 8:00 AM)
       const late = recentAttendances.filter(att => {
+        if (!att.clock_in) return false;
         const clockIn = new Date(att.clock_in);
-        return clockIn.getHours() > 9 || (clockIn.getHours() === 9 && clockIn.getMinutes() > 0);
+        const hours = clockIn.getHours();
+        const minutes = clockIn.getMinutes();
+        // Consider late if after 8:15 AM (15 min grace period)
+        return hours > 8 || (hours === 8 && minutes > 15);
       }).length;
 
-      const workingDays = 30;
+      // Calculate working days (excluding weekends)
+      let workingDays = 0;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      for (let d = new Date(thirtyDaysAgo); d <= today; d.setDate(d.getDate() + 1)) {
+        const dayOfWeek = d.getDay();
+        // Count Monday to Friday as working days
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          workingDays++;
+        }
+      }
+      
       const absent = Math.max(0, workingDays - present);
 
-      // Calculate total overtime (hours worked beyond 8 hours)
+      // Calculate total overtime (hours worked beyond 8 hours per day)
       const totalOvertime = recentAttendances.reduce((sum, att) => {
-        if (att.total_hours && att.total_hours > 8) {
-          return sum + (att.total_hours - 8);
+        if (att.clock_in && att.clock_out) {
+          const clockIn = new Date(att.clock_in);
+          const clockOut = new Date(att.clock_out);
+          const hoursWorked = (clockOut - clockIn) / (1000 * 60 * 60);
+          
+          // Count overtime if worked more than 8 hours
+          if (hoursWorked > 8) {
+            return sum + (hoursWorked - 8);
+          }
         }
         return sum;
       }, 0);

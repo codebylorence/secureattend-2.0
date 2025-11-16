@@ -190,11 +190,23 @@ export default function TemplateSched() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this template?")) return;
+    const template = templates.find(t => t.id === id);
+    const confirmMessage = template 
+      ? `⚠️ Delete Schedule Template?\n\n` +
+        `Template: ${template.shift_name}\n` +
+        `Department: ${template.department}\n\n` +
+        `This will also delete the team leader's assigned schedule for this shift.\n\n` +
+        `Are you sure you want to continue?`
+      : "Are you sure you want to delete this template?";
+    
+    if (!window.confirm(confirmMessage)) return;
     
     try {
       await deleteSchedule(id);
-      alert("Template deleted successfully!");
+      alert(
+        `✅ Template deleted successfully!\n\n` +
+        `The team leader's schedule has also been removed.`
+      );
       fetchTemplatesData();
     } catch (error) {
       console.error("Error deleting template:", error);
@@ -363,63 +375,72 @@ export default function TemplateSched() {
           <label className="block text-base font-medium text-gray-700 mb-3">
             Working Days & Member Limits
           </label>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {daysOfWeek.map((day) => {
-              // Check if ANY shift exists for this department on this day
-              const existingShift = newTemplate.department && templates.find(
-                (template) =>
-                  template.department === newTemplate.department &&
-                  template.days.includes(day)
-              );
-              
-              const hasConflict = !!existingShift;
-              const isSelected = newTemplate.days.includes(day);
-              
-              return (
-                <div key={day} className="flex items-center gap-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
-                  <button
-                    type="button"
-                    onClick={() => handleDayToggle(day)}
-                    disabled={hasConflict}
-                    className={`w-36 px-4 py-3 rounded-md text-base font-medium transition-colors ${
-                      hasConflict
-                        ? "bg-red-200 text-red-800 cursor-not-allowed opacity-60"
-                        : isSelected
-                        ? "bg-[#1E3A8A] text-white"
-                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    }`}
-                    title={hasConflict ? `${existingShift.shift_name} already exists for ${newTemplate.department} on ${day}` : ""}
-                  >
-                    {day}
-                    {hasConflict && " ⚠️"}
-                  </button>
+          
+          {!newTemplate.department ? (
+            <div className="p-6 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg text-center">
+              <p className="text-gray-500 text-base">
+                ⚠️ Please select a Department/Zone first to enable day selection
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {daysOfWeek.map((day) => {
+                  // Check if ANY shift exists for this department on this day
+                  const existingShift = newTemplate.department && templates.find(
+                    (template) =>
+                      template.department === newTemplate.department &&
+                      template.days.includes(day)
+                  );
                   
-                  {isSelected && (
-                    <div className="flex items-center gap-3 flex-1">
-                      <label className="text-base text-gray-600 whitespace-nowrap font-medium">
-                        Max Members:
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={newTemplate.dayLimits[day] || 1}
-                        onChange={(e) => handleDayLimitChange(day, e.target.value)}
-                        className="w-24 border border-gray-300 rounded-md px-4 py-2 text-base"
-                      />
+                  const hasConflict = !!existingShift;
+                  const isSelected = newTemplate.days.includes(day);
+                  
+                  return (
+                    <div key={day} className="flex items-center gap-4 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <button
+                        type="button"
+                        onClick={() => handleDayToggle(day)}
+                        disabled={hasConflict}
+                        className={`w-36 px-4 py-3 rounded-md text-base font-medium transition-colors ${
+                          hasConflict
+                            ? "bg-red-200 text-red-800 cursor-not-allowed opacity-60"
+                            : isSelected
+                            ? "bg-[#1E3A8A] text-white"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                        title={hasConflict ? `${existingShift.shift_name} already exists for ${newTemplate.department} on ${day}` : ""}
+                      >
+                        {day}
+                        {hasConflict && " ⚠️"}
+                      </button>
+                      
+                      {isSelected && (
+                        <div className="flex items-center gap-3 flex-1">
+                          <label className="text-base text-gray-600 whitespace-nowrap font-medium">
+                            Max Members:
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={newTemplate.dayLimits[day] || 1}
+                            onChange={(e) => handleDayLimitChange(day, e.target.value)}
+                            className="w-24 border border-gray-300 rounded-md px-4 py-2 text-base"
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {newTemplate.department && (
-            <p className="text-sm text-gray-500 mt-3">
-              ⚠️ Days marked with warning already have a shift for the selected department
-            </p>
+                  );
+                })}
+              </div>
+              <p className="text-sm text-gray-500 mt-3">
+                ⚠️ Days marked with warning already have a shift for the selected department
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                💡 Select days and set individual member limits for each day
+              </p>
+            </>
           )}
-          <p className="text-sm text-gray-500 mt-2">
-            💡 Select days and set individual member limits for each day
-          </p>
         </div>
 
         <button

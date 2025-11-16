@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { addEmployee } from "../api/EmployeeApi";
+import { addEmployee, fetchEmployees } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
 
 export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   const [formData, setFormData] = useState({
     employee_id: "",
     fullname: "",
-    department: "",
+    department: "No Department",
     position: "",
     contact_number: "",
     email: "",
@@ -24,8 +24,22 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
 
   const loadDepartments = async () => {
     try {
-      const data = await fetchDepartments();
-      setDepartments(data);
+      const [allDepartments, allEmployees] = await Promise.all([
+        fetchDepartments(),
+        fetchEmployees()
+      ]);
+
+      // Find departments that already have a team leader
+      const departmentsWithTeamLeader = allEmployees
+        .filter(emp => emp.position === "Team Leader")
+        .map(emp => emp.department);
+
+      // Filter out departments that already have a team leader
+      const availableDepartments = allDepartments.filter(
+        dept => !departmentsWithTeamLeader.includes(dept.name)
+      );
+
+      setDepartments(availableDepartments);
     } catch (error) {
       console.error("Error fetching departments:", error);
     }
@@ -89,16 +103,20 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               name="department"
               value={formData.department}
               onChange={handleChange}
-              required
               className="w-full border border-gray-300 rounded-md p-2 bg-white"
             >
-              <option value="">Select Department</option>
+              <option value="No Department">No Department</option>
               {departments.map((dept) => (
                 <option key={dept.id} value={dept.name}>
                   {dept.name}
                 </option>
               ))}
             </select>
+            {formData.position === "Team Leader" && departments.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                All departments already have team leaders
+              </p>
+            )}
           </div>
 
           {/* Position Dropdown */}

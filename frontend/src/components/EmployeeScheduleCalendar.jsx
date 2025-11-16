@@ -46,14 +46,10 @@ const EmployeeScheduleCalendar = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Set to start of today
     
-    // Generate events for only 1 week (7 days) starting from today
-    const oneWeekLater = new Date(today);
-    oneWeekLater.setDate(today.getDate() + 7);
-    
     // Get day name array
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    // Loop through each day in the next 7 days
+    // Generate events for only the current week (7 days from today)
     for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
       const date = new Date(today);
       date.setDate(today.getDate() + dayOffset);
@@ -62,31 +58,66 @@ const EmployeeScheduleCalendar = () => {
       
       // Check if employee has a schedule for this day
       scheduleData.forEach((schedule) => {
-        if (schedule.days.includes(dayName)) {
-          // Format date as YYYY-MM-DD in local time
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          const dateStr = `${year}-${month}-${day}`;
-          
-          // Convert 12-hour time to 24-hour format for calendar
-          const startTime = convertTo24Hour(schedule.start_time);
-          const endTime = convertTo24Hour(schedule.end_time);
-          
-          calendarEvents.push({
-            title: `${schedule.shift_name}`,
-            start: `${dateStr}T${startTime}`,
-            end: `${dateStr}T${endTime}`,
-            backgroundColor: getShiftColor(schedule.shift_name),
-            borderColor: getShiftColor(schedule.shift_name),
-            textColor: "white",
-            extendedProps: {
-              shiftName: schedule.shift_name,
-              startTime: schedule.start_time,
-              endTime: schedule.end_time,
-              department: schedule.department
+        // Format current date as YYYY-MM-DD
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+        
+        // Handle multi-shift records
+        if (schedule.shifts && Array.isArray(schedule.shifts)) {
+          schedule.shifts.forEach(shift => {
+            if (shift.days.includes(dayName)) {
+              const startTime = convertTo24Hour(shift.start_time);
+              const endTime = convertTo24Hour(shift.end_time);
+              
+              calendarEvents.push({
+                title: `${shift.shift_name}`,
+                start: `${dateStr}T${startTime}`,
+                end: `${dateStr}T${endTime}`,
+                backgroundColor: getShiftColor(shift.shift_name),
+                borderColor: getShiftColor(shift.shift_name),
+                textColor: "white",
+                extendedProps: {
+                  shiftName: shift.shift_name,
+                  startTime: shift.start_time,
+                  endTime: shift.end_time,
+                  department: schedule.department
+                }
+              });
             }
           });
+        } else {
+          // Legacy: single shift record
+          let shouldDisplay = false;
+          
+          if (schedule.schedule_date) {
+            const scheduleDate = new Date(schedule.schedule_date).toISOString().split('T')[0];
+            shouldDisplay = scheduleDate === dateStr;
+          } else {
+            shouldDisplay = schedule.days.includes(dayName);
+          }
+          
+          if (shouldDisplay) {
+            const startTime = convertTo24Hour(schedule.start_time);
+            const endTime = convertTo24Hour(schedule.end_time);
+            
+            calendarEvents.push({
+              title: `${schedule.shift_name}`,
+              start: `${dateStr}T${startTime}`,
+              end: `${dateStr}T${endTime}`,
+              backgroundColor: getShiftColor(schedule.shift_name),
+              borderColor: getShiftColor(schedule.shift_name),
+              textColor: "white",
+              extendedProps: {
+                shiftName: schedule.shift_name,
+                startTime: schedule.start_time,
+                endTime: schedule.end_time,
+                department: schedule.department,
+                scheduleDate: schedule.schedule_date
+              }
+            });
+          }
         }
       });
     }
@@ -191,11 +222,11 @@ const EmployeeScheduleCalendar = () => {
           
           <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin]}
-            initialView="dayGridMonth"
+            initialView="timeGridWeek"
             headerToolbar={{
               left: "prev,next today",
               center: "title",
-              right: "dayGridMonth,timeGridWeek",
+              right: "timeGridWeek,dayGridMonth",
             }}
             events={events}
             eventDisplay="block"
@@ -205,6 +236,9 @@ const EmployeeScheduleCalendar = () => {
               minute: '2-digit',
               meridiem: 'short'
             }}
+            slotMinTime="06:00:00"
+            slotMaxTime="24:00:00"
+            allDaySlot={false}
             height="auto"
           />
         </>

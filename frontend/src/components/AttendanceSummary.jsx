@@ -23,17 +23,32 @@ export default function AttendanceSummary() {
       // Get last 30 days of attendance
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setHours(0, 0, 0, 0);
 
       const allAttendances = await getAttendances({ employee_id: employeeId });
       
       // Count completed attendances in last 30 days
       const recentAttendances = allAttendances.filter(att => {
         const attDate = new Date(att.date);
-        return attDate >= thirtyDaysAgo && att.status === "COMPLETED";
+        attDate.setHours(0, 0, 0, 0);
+        return attDate >= thirtyDaysAgo && att.status === "COMPLETED" && att.clock_in && att.clock_out;
       });
 
       const present = recentAttendances.length;
-      const workingDays = 30; // Approximate working days
+      
+      // Calculate working days (excluding weekends)
+      let workingDays = 0;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      for (let d = new Date(thirtyDaysAgo); d <= today; d.setDate(d.getDate() + 1)) {
+        const dayOfWeek = d.getDay();
+        // Count Monday to Friday as working days
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          workingDays++;
+        }
+      }
+      
       const absent = Math.max(0, workingDays - present);
 
       setAttendanceData([

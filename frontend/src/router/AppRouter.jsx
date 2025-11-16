@@ -11,6 +11,7 @@ import TeamLeaderLayout from "../layouts/TeamLeaderLayout";
 import TeamDashboard from "../pages/TeamDashboard";
 import TeamSchedule from "../pages/TeamSchedule";
 import ManageSchedule from "../pages/ManageSchedule";
+import ViewSchedules from "../pages/ViewSchedules";
 import EmployeeAttendance from "../pages/EmployeeAttendance";
 import Reports from "../pages/Reports";
 import Departments from "../pages/Departments";
@@ -27,6 +28,7 @@ export default function AppRouter() {
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/employees" element={<Employees />} />
           <Route path="/admin/schedule" element={<ManageSchedule />} />
+          <Route path="/admin/view-schedules" element={<ViewSchedules />} />
           <Route path="/admin/attendance" element={<EmployeeAttendance />} />
           <Route path="/admin/reports" element={<Reports />} />
           <Route path="/admin/departments" element={<Departments />} />

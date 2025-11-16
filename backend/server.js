@@ -8,6 +8,7 @@ import userRoutes from "./routes/userRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
 import scheduleRoutes from "./routes/scheduleRoutes.js";
+import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
 import "./models/employee.js";
 import "./models/user.js";
 import "./models/attendance.js";
@@ -41,5 +42,8 @@ app.listen(PORT, async () => {
   await syncDatabase();
   console.log(`✅ Node.js Server running on port ${PORT}`);
   console.log(`📡 Connected Biometric Service expected at http://localhost:5000`);
+  
+  // Start the schedule cleanup job
+  startScheduleCleanupJob();
 });
 
