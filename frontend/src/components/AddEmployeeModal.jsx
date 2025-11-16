@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { addEmployee } from "../api/EmployeeApi";
+import { fetchDepartments } from "../api/DepartmentApi";
 
 export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   const [formData, setFormData] = useState({
@@ -12,9 +13,23 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     status: "Active",
   });
 
-  
-  const departments = ["Zone A", "Zone B", "Zone C", "Zone D", "Zone E","Zone F"];
+  const [departments, setDepartments] = useState([]);
   const positions = ["Picker", "Packer", "Inventory Clerk", "Supervisor", "Team Leader"];
+
+  useEffect(() => {
+    if (isOpen) {
+      loadDepartments();
+    }
+  }, [isOpen]);
+
+  const loadDepartments = async () => {
+    try {
+      const data = await fetchDepartments();
+      setDepartments(data);
+    } catch (error) {
+      console.error("Error fetching departments:", error);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -78,9 +93,9 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               className="w-full border border-gray-300 rounded-md p-2 bg-white"
             >
               <option value="">Select Department</option>
-              {departments.map((dept, idx) => (
-                <option key={idx} value={dept}>
-                  {dept}
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.name}>
+                  {dept.name}
                 </option>
               ))}
             </select>

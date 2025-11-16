@@ -31,9 +31,9 @@ export default function Navbar() {
   };
 
   return (
-    <div className="bg-[#1E3A8A] py-8 px-5 flex justify-between items-center fixed top-0 inset-x-0 z-50">
+    <div className="bg-[#1E3A8A] py-8 px-5 flex justify-between items-center fixed top-0 inset-x-0 z-20">
       {/* Title */}
-      <h1 className="text-2xl text-white font-bold">SecureAttend</h1>
+      <h1 className="text-2xl text-white font-bold pl-12 lg:pl-0">SecureAttend</h1>
 
       {/* Right Side */}
       <div className="flex items-center gap-6 relative">

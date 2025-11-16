@@ -19,11 +19,11 @@ function Sidebar({ role }) {
         {role === "admin" && (
           <>
             <SidebarItem icon={<MdDashboard size={30} />} to="/admin/dashboard" text="Dashboard" />
-            <SidebarItem icon={<MdGroups size={30} />} to="/admin/employees" text="Employees" />
             <SidebarItem icon={<MdCalendarToday size={30} />} to="/admin/schedule" text="Manage Schedule" />
             <SidebarItem icon={<MdOutlineHowToReg size={30} />} to="/admin/attendance" text="Attendance" />
-            <SidebarItem icon={<MdIntegrationInstructions size={30} />} to="/admin/reports" text="Reports" />
+            <SidebarItem icon={<MdGroups size={30} />} to="/admin/employees" text="Employees" />
             <SidebarItem icon={<MdOutlineBusiness size={30} />} to="/admin/departments" text="Departments" />
+            <SidebarItem icon={<MdIntegrationInstructions size={30} />} to="/admin/reports" text="Reports" />
             <SidebarItem icon={<MdSettings size={30} />} to="/admin/settings" text="Settings" />
           </>
         )}
