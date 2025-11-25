@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -15,6 +16,8 @@ namespace BiometricEnrollmentApp
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
         private CancellationTokenSource? _overlayCts;
+        private CancellationTokenSource? _continuousScanCts;
+        private static bool _isAttendancePageActive = false;
 
         public AttendancePage() : this(new ZKTecoService()) { }
 
@@ -27,15 +30,35 @@ namespace BiometricEnrollmentApp
 
             _zkService.OnStatus += (msg) => Dispatcher.Invoke(() => UpdateStatus(msg));
             Loaded += AttendancePage_Loaded;
+            Unloaded += AttendancePage_Unloaded;
+
+            // Auto-sync deleted employees every 5 minutes
+            var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
+            syncTimer.Elapsed += async (_, _) => await SyncDeletedEmployeesAsync();
+            syncTimer.Start();
+        }
+
+        private void AttendancePage_Unloaded(object? sender, RoutedEventArgs e)
+        {
+            // Stop continuous scanning when leaving attendance page
+            _isAttendancePageActive = false;
+            _continuousScanCts?.Cancel();
+            LogHelper.Write("📴 Attendance page unloaded - continuous scanning stopped");
         }
 
         private void AttendancePage_Loaded(object? sender, RoutedEventArgs e)
         {
+            // Mark attendance page as active
+            _isAttendancePageActive = true;
+            
             // initialize device and try loading enrollments into SDK DB (best-effort)
-            Task.Run(() =>
+            Task.Run(async () =>
             {
                 try
                 {
+                    // First, sync with server to remove deleted employees
+                    await SyncDeletedEmployeesAsync();
+
                     if (_zkService.EnsureInitialized())
                     {
                         // Load templates to SDK so identify works immediately
@@ -46,7 +69,10 @@ namespace BiometricEnrollmentApp
                         var enrollments = _data_service_get().GetAllEnrollmentsWithRowId();
                         LogHelper.Write($"Total enrollments in database: {enrollments.Count}");
                         
-                        Dispatcher.Invoke(() => UpdateStatus($"Device connected. {enrollments.Count} templates loaded."));
+                        Dispatcher.Invoke(() => UpdateStatus($"✅ Ready! {enrollments.Count} employees enrolled. Place finger to scan..."));
+                        
+                        // Start continuous scanning
+                        StartContinuousScanning();
                     }
                     else
                     {
@@ -63,6 +89,218 @@ namespace BiometricEnrollmentApp
             });
         }
 
+        private void StartContinuousScanning()
+        {
+            // Cancel any existing scanning task
+            _continuousScanCts?.Cancel();
+            _continuousScanCts = new CancellationTokenSource();
+            var token = _continuousScanCts.Token;
+
+            Task.Run(async () =>
+            {
+                LogHelper.Write("🔄 Starting continuous attendance scanning...");
+                
+                while (!token.IsCancellationRequested && _isAttendancePageActive)
+                {
+                    try
+                    {
+                        // Check if still on attendance page
+                        if (!_isAttendancePageActive)
+                        {
+                            LogHelper.Write("📴 Attendance page inactive - stopping scan loop");
+                            break;
+                        }
+
+                        // Check if device is still initialized
+                        if (!_zkService.EnsureInitialized())
+                        {
+                            await Task.Delay(2000, token);
+                            continue;
+                        }
+
+                        // Try to capture and identify
+                        await Task.Run(() => QuickScanAndProcess(), token);
+                        
+                        // Small delay between scans
+                        await Task.Delay(500, token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        LogHelper.Write("📴 Continuous scanning cancelled");
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"Continuous scan error: {ex.Message}");
+                        await Task.Delay(2000, token);
+                    }
+                }
+                
+                LogHelper.Write("🛑 Continuous attendance scanning stopped");
+            }, token);
+        }
+
+        private void QuickScanAndProcess()
+        {
+            try
+            {
+                // Quick capture (2 second timeout)
+                var capturedBase64 = _zkService.CaptureSingleTemplate(2, CancellationToken.None);
+                
+                if (string.IsNullOrEmpty(capturedBase64))
+                {
+                    return; // No finger detected, continue loop
+                }
+
+                Dispatcher.Invoke(() => UpdateStatus("🔍 Identifying..."));
+
+                // Identify
+                byte[] capturedBytes = Convert.FromBase64String(capturedBase64);
+                var (fid, score) = _zkService.IdentifyTemplate(capturedBytes);
+
+                LogHelper.Write($"SDK Identify result: fid={fid}, score={score}");
+
+                string matchedEmployeeId = string.Empty;
+                string matchedName = string.Empty;
+                bool matched = false;
+
+                // Try SDK match first (accept if fid > 0, regardless of score since score might be -1)
+                if (fid > 0)
+                {
+                    var enrollment = _data_service_get().GetAllEnrollmentsWithRowId()
+                        .FirstOrDefault(e => e.RowId == fid);
+
+                    if (!string.IsNullOrEmpty(enrollment.EmployeeId))
+                    {
+                        matchedEmployeeId = enrollment.EmployeeId;
+                        matchedName = enrollment.Name;
+                        matched = true;
+                        LogHelper.Write($"✅ SDK matched: {matchedName} ({matchedEmployeeId})");
+                    }
+                }
+
+                // If SDK didn't match, try fallback matching
+                if (!matched)
+                {
+                    LogHelper.Write("SDK didn't match, trying fallback matching...");
+                    var enrollments = _data_service_get().GetAllEnrollments();
+                    const double MatchThreshold = 0.55; // Lowered threshold
+                    double bestScore = 0.0;
+
+                    foreach (var en in enrollments)
+                    {
+                        if (string.IsNullOrEmpty(en.Template)) continue;
+                        try
+                        {
+                            var storedBytes = Convert.FromBase64String(en.Template);
+                            double sim = ComputeTemplateSimilarity(capturedBytes, storedBytes);
+                            
+                            if (sim > bestScore)
+                            {
+                                bestScore = sim;
+                                matchedEmployeeId = en.EmployeeId;
+                                matchedName = en.Name;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogHelper.Write($"Fallback compare error for {en.EmployeeId}: {ex.Message}");
+                            continue;
+                        }
+                    }
+
+                    if (bestScore >= MatchThreshold)
+                    {
+                        matched = true;
+                        LogHelper.Write($"✅ Fallback matched: {matchedName} ({matchedEmployeeId}) with score {bestScore:F4}");
+                    }
+                    else
+                    {
+                        LogHelper.Write($"❌ No match found. Best score: {bestScore:F4}");
+                    }
+                }
+
+                if (matched && !string.IsNullOrEmpty(matchedEmployeeId))
+                {
+                    Dispatcher.Invoke(() => UpdateStatus($"✅ Identified: {matchedName} ({matchedEmployeeId})"));
+                    
+                    // Process attendance - clock in/out logic
+                    var now = DateTime.Now;
+                    try
+                    {
+                        long openSessionId = _data_service_get().GetOpenSessionId(matchedEmployeeId, now);
+
+                        if (openSessionId > 0)
+                        {
+                            // clock-out the open session
+                            double hours = _data_service_get().SaveClockOut(openSessionId, now);
+                            
+                            // Send clock-out to server
+                            var sessions = _data_service_get().GetTodaySessions();
+                            var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
+                            if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
+                            {
+                                DateTime clockInTime = DateTime.Parse(session.ClockIn);
+                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, "COMPLETED"));
+                            }
+                            
+                            Dispatcher.Invoke(() => UpdateStatus(hours >= 0 ? $"✅ Clock-out recorded. Hours: {hours:F2}" : "⚠️ Clock-out failed."));
+                        }
+                        else
+                        {
+                            // No open session. Check if already completed today
+                            bool hasCompleted = false;
+                            try
+                            {
+                                var todaySessions = _data_service_get().GetTodaySessions();
+                                hasCompleted = todaySessions.Any(s => s.EmployeeId == matchedEmployeeId && string.Equals(s.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase));
+                            }
+                            catch (Exception ex)
+                            {
+                                LogHelper.Write($"Completed-session check failed: {ex}");
+                                hasCompleted = false;
+                            }
+
+                            if (hasCompleted)
+                            {
+                                Dispatcher.Invoke(() => UpdateStatus($"⚠️ Already completed attendance for today."));
+                            }
+                            else
+                            {
+                                // create new clock-in
+                                long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, "IN");
+                                
+                                // Send clock-in to server
+                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, "IN"));
+                                
+                                Dispatcher.Invoke(() => UpdateStatus(sid > 0 ? $"✅ Clock-in recorded at {now:HH:mm:ss}" : "⚠️ Clock-in failed."));
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"Clock-in/out processing failed: {ex}");
+                        Dispatcher.Invoke(() => UpdateStatus("⚠️ Attendance processing failed."));
+                    }
+                    
+                    // Refresh the grid
+                    Dispatcher.Invoke(() => RefreshAttendances());
+                    
+                    // Wait before next scan
+                    Thread.Sleep(2000);
+                }
+                else
+                {
+                    Dispatcher.Invoke(() => UpdateStatus("❌ Fingerprint not recognized. Try again..."));
+                    Thread.Sleep(1500);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"Quick scan error: {ex.Message}");
+            }
+        }
+
         private DataService _data_service_get() => _dataService;
 
         private void UpdateStatus(string message)
@@ -73,7 +311,15 @@ namespace BiometricEnrollmentApp
 
         private void GoEnrollBtn_Click(object sender, RoutedEventArgs e)
         {
-            try { NavigationService?.Navigate(new EnrollmentPage(_zkService)); }
+            try 
+            { 
+                // Stop continuous scanning before navigating to enrollment
+                _isAttendancePageActive = false;
+                _continuousScanCts?.Cancel();
+                LogHelper.Write("📴 Navigating to enrollment - stopping attendance scanning");
+                
+                NavigationService?.Navigate(new EnrollmentPage(_zkService)); 
+            }
             catch (Exception ex) { UpdateStatus($"❌ Navigation error: {ex.Message}"); }
         }
 
@@ -491,6 +737,95 @@ namespace BiometricEnrollmentApp
             double sizePenalty = 1.0 - (Math.Abs(a.Length - b.Length) / (double)Math.Max(a.Length, b.Length) * 0.2);
             if (sizePenalty < 0.6) sizePenalty = 0.6;
             return Math.Max(0.0, Math.Min(1.0, baseScore * sizePenalty));
+        }
+
+        /// <summary>
+        /// Sync with server: deletes local enrollments for employees that no longer exist on server.
+        /// Runs automatically on page load and every 5 minutes.
+        /// </summary>
+        private async Task SyncDeletedEmployeesAsync()
+        {
+            try
+            {
+                using var client = new System.Net.Http.HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(10);
+                string url = "http://localhost:5000/employees";
+                
+                var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
+
+                if (employees == null || employees.Count == 0)
+                {
+                    LogHelper.Write("⚠️ Sync skipped: server returned empty/null employees list.");
+                    return;
+                }
+
+                var activeEmployeeIds = employees
+                    .Where(e => e.employeeId != null)
+                    .Select(e => e.employeeId)
+                    .ToHashSet();
+                
+                var local = _dataService.GetAllEnrollments();
+                var toDelete = local.Where(enroll => !activeEmployeeIds.Contains(enroll.EmployeeId)).ToList();
+
+                if (toDelete.Count == 0)
+                {
+                    LogHelper.Write("✅ Sync: All enrollments match server.");
+                    return;
+                }
+
+                // Safety check: only abort if ALL records would be deleted
+                if (toDelete.Count == local.Count && local.Count > 0)
+                {
+                    LogHelper.Write($"⚠️ Sync aborted: Would delete ALL {local.Count} enrollments. Server might be returning wrong data.");
+                    return;
+                }
+
+                // Delete enrollments
+                int deleted = 0;
+                foreach (var enroll in toDelete)
+                {
+                    try
+                    {
+                        LogHelper.Write($"🗑️ Deleting enrollment for {enroll.EmployeeId} - not found on server");
+                        _dataService.DeleteEnrollment(enroll.EmployeeId);
+                        deleted++;
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"❌ Failed to delete {enroll.EmployeeId}: {ex.Message}");
+                    }
+                }
+
+                if (deleted > 0)
+                {
+                    LogHelper.Write($"✅ Sync complete: {deleted} enrollment(s) deleted.");
+                    Dispatcher.Invoke(() => UpdateStatus($"🔄 Synced: {deleted} deleted employee(s) removed."));
+                    
+                    // Reload templates into SDK
+                    try
+                    {
+                        _zkService.LoadEnrollmentsToSdk(_dataService);
+                        LogHelper.Write("🔄 Templates reloaded into SDK after sync.");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"⚠️ Failed to reload templates: {ex.Message}");
+                    }
+                }
+            }
+            catch (System.Net.Http.HttpRequestException)
+            {
+                // Server not reachable - expected when offline
+                LogHelper.Write("ℹ️ Sync skipped: Server not reachable");
+            }
+            catch (TaskCanceledException)
+            {
+                LogHelper.Write("ℹ️ Sync skipped: Request timed out");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Sync error: {ex.Message}");
+            }
         }
     }
 }

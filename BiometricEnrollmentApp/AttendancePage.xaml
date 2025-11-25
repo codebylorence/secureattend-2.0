@@ -139,36 +139,109 @@
     </Page.Resources>
 
     <Grid Margin="12" x:Name="RootGrid">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="400"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8" HorizontalAlignment="Left" VerticalAlignment="Center">
-            <!-- apply style keys where we want primary (accent) buttons: -->
-            <Button x:Name="GoEnrollBtn" Content="Go to Enrollment" Click="GoEnrollBtn_Click" Width="140" Style="{StaticResource PrimaryButton}" Margin="0,0,8,0"/>
-            <Button x:Name="ScanFingerBtn" Content="Scan Finger" Click="ScanFingerBtn_Click" Width="140" Style="{StaticResource NeutralButton}" Margin="0,0,8,0"/>
-            <Button x:Name="RefreshBtn" Content="Refresh List" Click="RefreshBtn_Click" Width="100" Style="{StaticResource NeutralButton}"/>
-        </StackPanel>
+        <!-- LEFT PANEL: Scanner Section -->
+        <Border Grid.Column="0" Background="{StaticResource CardBgBrush}" 
+                CornerRadius="12" Padding="20" Margin="0,0,12,0"
+                BorderBrush="#E6E9EE" BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-        <TextBlock x:Name="StatusTextBlock" Grid.Row="1" Text="Ready" Margin="0,0,0,8" Style="{StaticResource StatusTextStyle}" />
+                <!-- Title -->
+                <TextBlock Grid.Row="0" Text="🖐️ Fingerprint Scanner" 
+                           FontSize="20" FontWeight="Bold" 
+                           Foreground="{StaticResource PrimaryBrush}"
+                           Margin="0,0,0,16"/>
 
-        <Separator Grid.Row="2" Margin="0,6"/>
+                <!-- Status -->
+                <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" 
+                        CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                    <TextBlock x:Name="StatusTextBlock" Text="Ready to scan..." 
+                               TextWrapping="Wrap"
+                               FontSize="14" 
+                               Foreground="{StaticResource MutedBrush}"/>
+                </Border>
 
-        <!-- Data grid which will show either sessions or legacy attendances -->
-        <DataGrid x:Name="SessionsGrid" Grid.Row="3" AutoGenerateColumns="False" IsReadOnly="True" CanUserResizeRows="False">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="60"/>
-                <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="120"/>
-                <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="100"/>
-                <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="160"/>
-                <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="160"/>
-                <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="80"/>
-                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100"/>
-            </DataGrid.Columns>
-        </DataGrid>
+                <!-- Fingerprint Image Placeholder -->
+                <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" 
+                        CornerRadius="12" Padding="20"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Width="300" Height="300">
+                    <Viewbox>
+                        <TextBlock Text="👆" FontSize="120" 
+                                   HorizontalAlignment="Center" 
+                                   VerticalAlignment="Center"
+                                   Opacity="0.3"/>
+                    </Viewbox>
+                </Border>
+
+                <!-- Buttons -->
+                <StackPanel Grid.Row="3" Margin="0,16,0,0">
+                    <TextBlock Text="Place your finger on the scanner" 
+                               FontSize="13" 
+                               Foreground="{StaticResource MutedBrush}"
+                               TextAlignment="Center"
+                               Margin="0,0,0,12"/>
+                    <Button x:Name="GoEnrollBtn" Content="📝 Go to Enrollment" 
+                            Click="GoEnrollBtn_Click" 
+                            Style="{StaticResource PrimaryButton}" 
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,0,8"/>
+                    <Button x:Name="RefreshBtn" Content="🔄 Refresh List" 
+                            Click="RefreshBtn_Click" 
+                            Style="{StaticResource NeutralButton}"
+                            HorizontalAlignment="Stretch"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- RIGHT PANEL: Attendance Log -->
+        <Border Grid.Column="1" Background="{StaticResource CardBgBrush}" 
+                CornerRadius="12" Padding="20"
+                BorderBrush="#E6E9EE" BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                    <TextBlock Text="📋 Today's Attendance Log" 
+                               FontSize="20" FontWeight="Bold" 
+                               Foreground="{StaticResource PrimaryBrush}"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="Real-time attendance records" 
+                               FontSize="13" 
+                               Foreground="{StaticResource MutedBrush}"/>
+                </StackPanel>
+
+                <!-- Data Grid -->
+                <DataGrid x:Name="SessionsGrid" Grid.Row="1" 
+                          AutoGenerateColumns="False" 
+                          IsReadOnly="True" 
+                          CanUserResizeRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="50"/>
+                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="110"/>
+                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="90"/>
+                        <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="140"/>
+                        <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="140"/>
+                        <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="70"/>
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
 
     </Grid>
 </Page>

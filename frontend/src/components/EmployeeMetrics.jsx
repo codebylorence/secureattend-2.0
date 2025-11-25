@@ -112,7 +112,7 @@ export default function EmployeeMetrics() {
         </div>
 
         {/* Overtime */}
-        <div className="bg-gray-600 text-white rounded-md p-8 text-center shadow">
+        <div className="bg-blue-600 text-white rounded-md p-8 text-center shadow">
           <p className="text-3xl font-semibold">{metrics.overtime.toFixed(1)} hr</p>
           <p className="text-sm mt-1">Overtime</p>
         </div>

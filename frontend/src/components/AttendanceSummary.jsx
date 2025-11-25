@@ -15,59 +15,49 @@ export default function AttendanceSummary() {
 
   const fetchAttendanceSummary = async () => {
     try {
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      const employeeId = user.employee?.employee_id;
-
-      if (!employeeId) return;
-
-      // Get last 30 days of attendance
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      thirtyDaysAgo.setHours(0, 0, 0, 0);
-
-      const allAttendances = await getAttendances({ employee_id: employeeId });
+      // Get all attendances from database (not just for one employee)
+      const allAttendances = await getAttendances();
       
-      // Count completed attendances in last 30 days
-      const recentAttendances = allAttendances.filter(att => {
-        const attDate = new Date(att.date);
-        attDate.setHours(0, 0, 0, 0);
-        return attDate >= thirtyDaysAgo && att.status === "COMPLETED" && att.clock_in && att.clock_out;
-      });
-
-      const present = recentAttendances.length;
-      
-      // Calculate working days (excluding weekends)
-      let workingDays = 0;
+      // Get today's date
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      for (let d = new Date(thirtyDaysAgo); d <= today; d.setDate(d.getDate() + 1)) {
-        const dayOfWeek = d.getDay();
-        // Count Monday to Friday as working days
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-          workingDays++;
-        }
-      }
+      // Filter for today's attendances only
+      const todayAttendances = allAttendances.filter(att => {
+        const attDate = new Date(att.date);
+        attDate.setHours(0, 0, 0, 0);
+        return attDate.getTime() === today.getTime();
+      });
+
+      // Count employees who clocked in today
+      const present = todayAttendances.filter(att => att.clock_in).length;
       
-      const absent = Math.max(0, workingDays - present);
+      // Count late arrivals (after 8:15 AM)
+      const late = todayAttendances.filter(att => {
+        if (!att.clock_in) return false;
+        const clockIn = new Date(att.clock_in);
+        const hours = clockIn.getHours();
+        const minutes = clockIn.getMinutes();
+        return hours > 8 || (hours === 8 && minutes > 15);
+      }).length;
 
       setAttendanceData([
         { name: "Present", value: present },
-        { name: "Absent", value: absent },
+        { name: "Late", value: late },
       ]);
     } catch (error) {
       console.error("Error fetching attendance summary:", error);
     }
   };
 
-  const COLORS = ["#3B82F6", "#EF4444"];
+  const COLORS = ["#10B981", "#F59E0B"]; // Green for Present, Amber for Late
 
   return (
     <div className="bg-white rounded-md shadow">
       <div className="flex items-center justify-between bg-[#1E3A8A] text-white px-4 py-2 rounded-t-md">
         <div className="flex items-center gap-2">
           <FaClock />
-          <h3 className="font-medium">Attendance Summary (Last 30 Days)</h3>
+          <h3 className="font-medium">Today's Attendance Summary</h3>
         </div>
       </div>
 

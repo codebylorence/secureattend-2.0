@@ -245,23 +245,52 @@ namespace BiometricEnrollmentApp.Services
                 }
 
                 var enrolls = ds.GetAllEnrollmentsWithRowId();
+                LogHelper.Write($"📥 Loading {enrolls.Count} enrollments into SDK...");
+                
                 int loaded = 0;
+                int failed = 0;
                 foreach (var e in enrolls)
                 {
-                    if (e.RowId <= 0 || string.IsNullOrEmpty(e.Template)) continue;
+                    if (e.RowId <= 0 || string.IsNullOrEmpty(e.Template))
+                    {
+                        LogHelper.Write($"⚠️ Skipping enrollment {e.EmployeeId}: invalid RowId or Template");
+                        continue;
+                    }
+                    
                     byte[] blob;
-                    try { blob = Convert.FromBase64String(e.Template); } catch { continue; }
+                    try 
+                    { 
+                        blob = Convert.FromBase64String(e.Template);
+                        LogHelper.Write($"📄 Loading template for {e.EmployeeId} (RowId={e.RowId}, size={blob.Length} bytes)");
+                    } 
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"❌ Failed to decode template for {e.EmployeeId}: {ex.Message}");
+                        failed++;
+                        continue;
+                    }
 
                     // Try add; if fails because it already exists, we ignore that error.
                     var ok = AddTemplateToSdk((int)e.RowId, blob);
-                    if (ok) loaded++;
+                    if (ok)
+                    {
+                        loaded++;
+                        LogHelper.Write($"✅ Successfully loaded template for {e.EmployeeId} (RowId={e.RowId})");
+                    }
+                    else
+                    {
+                        failed++;
+                        LogHelper.Write($"❌ Failed to load template for {e.EmployeeId} (RowId={e.RowId})");
+                    }
                 }
 
-                UpdateStatus($"📥 Loaded {loaded} enrollment(s) into SDK DB (no db re-init).");
+                UpdateStatus($"📥 Loaded {loaded}/{enrolls.Count} enrollment(s) into SDK DB ({failed} failed).");
+                LogHelper.Write($"📊 Template loading complete: {loaded} success, {failed} failed out of {enrolls.Count} total");
             }
             catch (Exception ex)
             {
                 UpdateStatus($"💥 LoadEnrollmentsToSdk failed: {ex.Message}");
+                LogHelper.Write($"💥 LoadEnrollmentsToSdk exception: {ex}");
             }
         }
 
