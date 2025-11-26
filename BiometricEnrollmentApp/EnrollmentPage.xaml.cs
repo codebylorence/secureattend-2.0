@@ -89,6 +89,16 @@ namespace BiometricEnrollmentApp
         // Called when the page loads: ensure device initialized and load stored templates into SDK
         private void EnrollmentPage_Loaded(object? sender, RoutedEventArgs e)
         {
+            // Apply blur effect to main content since overlay is visible by default
+            var mainContent = this.FindName("MainContentGrid") as Grid;
+            if (mainContent != null)
+            {
+                mainContent.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 10 };
+            }
+            
+            // Load fingerprint records into the grid
+            RefreshEnrollmentRecords();
+            
             Task.Run(async () =>
             {
                 try
@@ -112,6 +122,8 @@ namespace BiometricEnrollmentApp
                         try
                         {
                             await SyncDeletionsFromServerAsync();
+                            // Refresh records after sync
+                            Dispatcher.Invoke(() => RefreshEnrollmentRecords());
                         }
                         catch (Exception ex)
                         {
@@ -183,6 +195,14 @@ namespace BiometricEnrollmentApp
             if (ok)
             {
                 AdminOverlay.Visibility = Visibility.Collapsed;
+                
+                // Remove blur effect from main content
+                var mainContent = this.FindName("MainContentGrid") as Grid;
+                if (mainContent != null)
+                {
+                    mainContent.Effect = null;
+                }
+                
                 SetControlsEnabled(true);
                 EmployeeIdInput.Focus();
                 StatusText.Text = "🔒 Admin authenticated. You may proceed.";
@@ -310,6 +330,28 @@ namespace BiometricEnrollmentApp
                 string? template = await Task.Run(() => _zkService.EnrollFingerprint(empId));
                 if (!string.IsNullOrEmpty(template))
                 {
+                    // -------- Step 4: Confirmation dialog --------
+                    StatusText.Text = "✅ Fingerprint captured successfully!";
+                    
+                    var confirmResult = MessageBox.Show(
+                        $"Fingerprint captured successfully for Employee {empId} ({name}).\n\n" +
+                        "Do you want to save this enrollment?\n\n" +
+                        "Click 'Yes' to save or 'No' to cancel.",
+                        "Confirm Enrollment",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (confirmResult != MessageBoxResult.Yes)
+                    {
+                        StatusText.Text = "❌ Enrollment cancelled by user.";
+                        LogHelper.Write($"Enrollment cancelled by user for {empId}");
+                        EnrollBtn.IsEnabled = true;
+                        return;
+                    }
+
+                    // -------- Step 5: Save enrollment --------
+                    StatusText.Text = "💾 Saving enrollment...";
+                    
                     // If re-enrolling, delete the old enrollment first
                     if (hasExisting)
                     {
@@ -347,6 +389,9 @@ namespace BiometricEnrollmentApp
                         string action = hasExisting ? "Re-enrolled" : "Enrolled";
                         StatusText.Text = $"✅ {action} successfully for {empId} (row {rowId})";
                         LogHelper.Write($"{action} for {empId} ({name}, {department}) -> row {rowId}");
+                        
+                        // Refresh the enrollment records grid
+                        RefreshEnrollmentRecords();
                     }
                     else
                     {
@@ -529,5 +574,84 @@ namespace BiometricEnrollmentApp
 
         // helper to centralize use of data service (keeps future refactors simple)
         private DataService _data_service_get() => _dataService;
+
+        // Refresh the enrollment records grid
+        private void RefreshEnrollmentRecords()
+        {
+            try
+            {
+                var enrollments = _dataService.GetAllEnrollments();
+                var rows = enrollments.Select(e => new
+                {
+                    EmployeeId = e.EmployeeId,
+                    Name = e.Name ?? "N/A",
+                    Department = e.Department ?? "N/A",
+                    CreatedAt = "Enrolled"
+                }).ToList();
+
+                var grid = this.FindName("EnrollmentsGrid") as DataGrid;
+                if (grid != null)
+                {
+                    grid.ItemsSource = rows;
+                    LogHelper.Write($"📋 Loaded {rows.Count} enrollment records");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"❌ Failed to load enrollment records: {ex.Message}");
+                StatusText.Text = $"Failed to load records: {ex.Message}";
+            }
+        }
+
+        // Refresh button click handler
+        private void RefreshRecordsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            RefreshEnrollmentRecords();
+            StatusText.Text = "✅ Records refreshed";
+        }
+
+        // Delete enrollment button click handler
+        private void DeleteEnrollmentBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is Button btn && btn.Tag is string employeeId)
+                {
+                    // Confirm deletion
+                    var result = MessageBox.Show(
+                        $"Are you sure you want to delete the fingerprint record for Employee ID: {employeeId}?",
+                        "Confirm Deletion",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        _dataService.DeleteEnrollment(employeeId);
+                        LogHelper.Write($"🗑️ Deleted enrollment for {employeeId}");
+                        
+                        // Reload templates into SDK after deletion
+                        try
+                        {
+                            _zkService.LoadEnrollmentsToSdk(_dataService);
+                            LogHelper.Write("🔄 Templates reloaded into SDK after deletion");
+                        }
+                        catch (Exception ex)
+                        {
+                            LogHelper.Write($"⚠️ Failed to reload templates: {ex.Message}");
+                        }
+                        
+                        // Refresh the grid
+                        RefreshEnrollmentRecords();
+                        StatusText.Text = $"✅ Deleted fingerprint for {employeeId}";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"❌ Delete enrollment error: {ex.Message}");
+                StatusText.Text = $"❌ Delete failed: {ex.Message}";
+                MessageBox.Show($"Failed to delete enrollment: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
     }
 }

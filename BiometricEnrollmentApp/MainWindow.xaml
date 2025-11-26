@@ -5,6 +5,7 @@
         Height="720"
         Width="920"
         WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
         Background="#f7f9fc">
     <Grid>
         <Border Background="White" Padding="16" Margin="12" CornerRadius="10" BorderBrush="#e2e8f0" BorderThickness="1">

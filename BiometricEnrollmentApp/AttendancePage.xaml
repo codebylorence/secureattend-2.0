@@ -130,10 +130,26 @@
         <Style TargetType="DataGridCell">
             <Setter Property="Padding" Value="10,4"/>
             <Setter Property="Foreground" Value="#111827"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Style.Triggers>
+                <!-- Remove blue highlight on cell selection -->
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="#111827"/>
+                    <Setter Property="BorderBrush" Value="Transparent"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="DataGridRow">
             <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Style.Triggers>
+                <!-- Remove blue highlight on row selection -->
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="BorderBrush" Value="Transparent"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
     </Page.Resources>
@@ -229,16 +245,80 @@
                 <DataGrid x:Name="SessionsGrid" Grid.Row="1" 
                           AutoGenerateColumns="False" 
                           IsReadOnly="True" 
-                          CanUserResizeRows="False">
+                          CanUserResizeRows="False"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="None"
+                          Background="White"
+                          BorderBrush="#e5e7eb"
+                          BorderThickness="1"
+                          RowHeight="40"
+                          ColumnHeaderHeight="44"
+                          AlternatingRowBackground="#f9fafb"
+                          SelectionMode="Single"
+                          SelectionUnit="FullRow">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="50"/>
-                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="110"/>
-                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="90"/>
-                        <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="140"/>
-                        <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="140"/>
-                        <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="70"/>
-                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
+                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="60"/>
+                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="120"/>
+                        <DataGridTextColumn Header="Employee Name" Binding="{Binding EmployeeName}" Width="1*"/>
+                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="1*"/>
+                        <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="1*"/>
+                        <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="1*"/>
+                        <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="1*"/>
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1*"/>
                     </DataGrid.Columns>
+                    
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#f1f5f9"/>
+                            <Setter Property="Foreground" Value="#1e293b"/>
+                            <Setter Property="FontSize" Value="13"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Padding" Value="12,8"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    
+                    <DataGrid.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="Padding" Value="12,6"/>
+                            <Setter Property="Foreground" Value="#1f2937"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="TextBlock.TextAlignment" Value="Center"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="DataGridCell">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Foreground" Value="#1f2937"/>
+                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.CellStyle>
+                    
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="SnapsToDevicePixels" Value="True"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
                 </DataGrid>
             </Grid>
         </Border>

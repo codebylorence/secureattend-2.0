@@ -330,14 +330,20 @@ namespace BiometricEnrollmentApp
             try
             {
                 var sessions = _dataService.GetTodaySessions();
+                
+                // Get all enrollments to map employee IDs to names
+                var enrollments = _dataService.GetAllEnrollments();
+                var employeeNameMap = enrollments.ToDictionary(e => e.EmployeeId, e => e.Name);
+                
                 var rows = sessions.Select(s => new
                 {
                     Id = s.Id,
                     EmployeeId = s.EmployeeId,
+                    EmployeeName = employeeNameMap.ContainsKey(s.EmployeeId) ? employeeNameMap[s.EmployeeId] : "Unknown",
                     Date = s.Date,
-                    ClockIn = s.ClockIn,
-                    ClockOut = s.ClockOut,
-                    TotalHours = s.TotalHours,
+                    ClockIn = FormatTimeOnly(s.ClockIn),
+                    ClockOut = FormatTimeOnly(s.ClockOut),
+                    TotalHours = FormatHours(s.TotalHours),
                     Status = s.Status
                 }).ToList();
 
@@ -359,6 +365,30 @@ namespace BiometricEnrollmentApp
                 UpdateStatus($"Failed to load sessions: {ex.Message}");
                 LogHelper.Write($"Failed to load sessions (stack): {ex}");
             }
+        }
+
+        private string FormatTimeOnly(string? dateTimeString)
+        {
+            if (string.IsNullOrEmpty(dateTimeString))
+                return "-";
+            
+            try
+            {
+                if (DateTime.TryParse(dateTimeString, out DateTime dt))
+                {
+                    return dt.ToString("HH:mm:ss");
+                }
+                return dateTimeString;
+            }
+            catch
+            {
+                return dateTimeString ?? "-";
+            }
+        }
+
+        private string FormatHours(double hours)
+        {
+            return hours.ToString("0.000");
         }
 
 

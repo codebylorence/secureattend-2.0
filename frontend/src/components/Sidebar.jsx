@@ -37,14 +37,16 @@ function Sidebar({ role }) {
                 {scheduleMenuOpen ? <MdExpandLess size={20} /> : <MdExpandMore size={20} />}
               </div>
               {scheduleMenuOpen && (
-                <ul className="ml-10 mt-2 space-y-2">
-                  <li>
-                    <Link to="/admin/schedule" className="text-sm hover:text-gray-300">
+                <ul className="ml-6 mt-2 space-y-2">
+                  <li className="flex items-center gap-2">
+                    <span className="text-xs">•</span>
+                    <Link to="/admin/schedule" className="text-md hover:text-gray-300">
                       Manage Schedule
                     </Link>
                   </li>
-                  <li>
-                    <Link to="/admin/view-schedules" className="text-sm hover:text-gray-300">
+                  <li className="flex items-center gap-2">
+                    <span className="text-xs">•</span>
+                    <Link to="/admin/view-schedules" className="text-md hover:text-gray-300">
                       View Schedules
                     </Link>
                   </li>

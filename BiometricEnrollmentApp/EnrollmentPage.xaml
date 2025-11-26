@@ -4,15 +4,28 @@
       Title="SecureAttend | Biometric Enrollment"
       Background="#f7f9fc">
 
-    <Grid>
-        <!-- Main card -->
-        <Border CornerRadius="15"
-                Background="White"
-                Padding="30"
-                Margin="20"
-                BorderBrush="#cbd5e1"
-                BorderThickness="2">
+    <Page.Resources>
+        <!-- Blur effect for background when overlay is visible -->
+        <BlurEffect x:Key="BlurEffect" Radius="10"/>
+    </Page.Resources>
 
+    <Grid Margin="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*" MinWidth="400" MaxWidth="550"/>
+            <ColumnDefinition Width="1.5*" MinWidth="600"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Main Content Grid (will be blurred when overlay is visible) -->
+        <Grid x:Name="MainContentGrid" Grid.ColumnSpan="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" MinWidth="400" MaxWidth="550"/>
+                <ColumnDefinition Width="1.5*" MinWidth="600"/>
+            </Grid.ColumnDefinitions>
+
+        <!-- LEFT PANEL: Enrollment Section -->
+        <Border Grid.Column="0" Background="White" 
+                CornerRadius="12" Padding="20" Margin="0,0,6,0"
+                BorderBrush="#cbd5e1" BorderThickness="1">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -25,125 +38,245 @@
 
                 <!-- Header -->
                 <TextBlock Grid.Row="0"
-                           Text="🧬 SecureAttend Enrollment"
-                           FontSize="28"
+                           Text="🧬 Enroll Fingerprint"
+                           FontSize="22"
                            FontWeight="Bold"
                            Foreground="#1e293b"
-                           HorizontalAlignment="Center"
-                           Margin="0,0,0,20"/>
+                           Margin="0,0,0,16"/>
 
                 <!-- Employee Input -->
-                <StackPanel Grid.Row="1"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Center"
-                            Margin="0,0,0,20">
-                    <TextBlock Text="Employee ID:"
-                               VerticalAlignment="Center"
+                <StackPanel Grid.Row="1" Margin="0,0,0,16">
+                    <TextBlock Text="Employee ID"
+                               FontSize="13"
+                               FontWeight="SemiBold"
                                Foreground="#334155"
-                               Margin="0,0,8,0"/>
+                               Margin="0,0,0,6"/>
                     <TextBox x:Name="EmployeeIdInput"
-                             Width="260"
-                             Height="32"
-                             FontSize="16"
-                             Padding="5"
-                             BorderBrush="#94a3b8"
-                             BorderThickness="1.5"
-                             Background="#f1f5f9"/>
+                             Height="36"
+                             FontSize="14"
+                             Padding="6"
+                             BorderBrush="#cbd5e1"
+                             BorderThickness="1"
+                             Background="#f8fafc"/>
                 </StackPanel>
 
                 <!-- Action buttons -->
-                <StackPanel Grid.Row="2"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Center"
-                            Margin="0,10,0,30">
+                <StackPanel Grid.Row="2" Margin="0,0,0,16">
                     <Button x:Name="EnrollBtn"
                             Content="🖐️ Enroll Fingerprint"
-                            Width="200"
-                            Height="45"
-                            FontSize="16"
+                            Height="40"
+                            FontSize="14"
+                            FontWeight="SemiBold"
                             Background="#10b981"
                             Foreground="White"
-                            Margin="5"
+                            BorderThickness="0"
                             Click="EnrollBtn_Click"
-                            IsEnabled="False"/>
+                            IsEnabled="False"
+                            Margin="0,0,0,8"/>
                     <Button x:Name="BackBtn"
-                            Content="← Back"
-                            Width="140"
-                            Height="45"
-                            FontSize="16"
-                            Background="#6b7280"
-                            Foreground="White"
-                            Margin="5"
+                            Content="← Back to Attendance"
+                            Height="36"
+                            FontSize="13"
+                            Background="#e5e7eb"
+                            Foreground="#1f2937"
+                            BorderThickness="0"
                             Click="BackBtn_Click"/>
                 </StackPanel>
 
-                <!-- Fingerprint preview + status -->
-                <Border Grid.Row="4"
-                        CornerRadius="12"
+                <!-- Fingerprint preview -->
+                <Border Grid.Row="3"
                         Background="#f1f5f9"
+                        CornerRadius="10"
                         Padding="20"
-                        Margin="20,20,20,0"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Center">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="30"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                        Margin="0,0,0,16">
+                    <Border Width="200"
+                            Height="200"
+                            Background="White"
+                            CornerRadius="8"
+                            Padding="10"
+                            BorderBrush="#e2e8f0"
+                            BorderThickness="1">
+                        <Image x:Name="FingerprintPreview"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Source="/Assets/fingerprint_placeholder.png"/>
+                    </Border>
+                </Border>
 
-                        <!-- Fingerprint preview -->
-                        <Border Grid.Column="0"
-                                Width="260"
-                                Height="200"
-                                Background="White"
-                                CornerRadius="10"
-                                Padding="10"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Center"
-                                BorderBrush="#e2e8f0"
-                                BorderThickness="1">
-                            <Image x:Name="FingerprintPreview"
-                                   Stretch="Uniform"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Source="/Assets/fingerprint_placeholder.png"/>
-                        </Border>
-
-                        <!-- Status area -->
-                        <Border Grid.Column="2"
-                                CornerRadius="10"
-                                Background="White"
-                                Padding="20"
-                                BorderBrush="#e2e8f0"
-                                BorderThickness="1"
-                                VerticalAlignment="Center"
-                                HorizontalAlignment="Stretch">
-                            <TextBlock x:Name="StatusText"
-                                       Text="Status: Not connected"
-                                       FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Foreground="#1e293b"
-                                       TextWrapping="Wrap"
-                                       TextAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                        </Border>
-                    </Grid>
+                <!-- Status area -->
+                <Border Grid.Row="4"
+                        Background="#f8fafc"
+                        CornerRadius="8"
+                        Padding="12"
+                        Margin="0,0,0,12">
+                    <TextBlock x:Name="StatusText"
+                               Text="Status: Not connected"
+                               FontSize="13"
+                               Foreground="#475569"
+                               TextWrapping="Wrap"/>
                 </Border>
 
                 <!-- Footer -->
                 <TextBlock Grid.Row="5"
                            Text="© 2025 SecureAttend Systems"
-                           FontSize="12"
+                           FontSize="11"
                            Foreground="#94a3b8"
-                           Margin="0,20,0,0"
                            HorizontalAlignment="Center"/>
             </Grid>
         </Border>
 
+        <!-- RIGHT PANEL: Manage Fingerprint Records -->
+        <Border Grid.Column="1" Background="White" 
+                CornerRadius="12" Padding="20" Margin="6,0,0,0"
+                BorderBrush="#cbd5e1" BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-        <!-- Admin login overlay — REPLACE YOUR OLD AdminOverlay BLOCK WITH THIS -->
-        <Border x:Name="AdminOverlay"
+                <!-- Header -->
+                <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                    <TextBlock Text="📋 Manage Fingerprint Records" 
+                               FontSize="22" FontWeight="Bold" 
+                               Foreground="#1e293b"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="View and manage enrolled employees" 
+                               FontSize="13" 
+                               Foreground="#64748b"
+                               Margin="0,0,0,12"/>
+                    <Button x:Name="RefreshRecordsBtn"
+                            Content="🔄 Refresh List"
+                            Width="140"
+                            Height="34"
+                            FontSize="13"
+                            Background="#e5e7eb"
+                            Foreground="#1f2937"
+                            BorderThickness="0"
+                            HorizontalAlignment="Left"
+                            Click="RefreshRecordsBtn_Click"/>
+                </StackPanel>
+
+                <!-- Data Grid -->
+                <DataGrid x:Name="EnrollmentsGrid" Grid.Row="1" 
+                          AutoGenerateColumns="False" 
+                          IsReadOnly="True" 
+                          CanUserResizeRows="False"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="None"
+                          Background="White"
+                          BorderBrush="#e5e7eb"
+                          BorderThickness="1"
+                          RowHeight="40"
+                          ColumnHeaderHeight="44"
+                          AlternatingRowBackground="#f9fafb"
+                          SelectionMode="Single"
+                          SelectionUnit="FullRow">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="1*"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="1*"/>
+                        <DataGridTextColumn Header="Department" Binding="{Binding Department}" Width="1*"/>
+                        <DataGridTextColumn Header="Enrolled" Binding="{Binding CreatedAt}" Width="1*"/>
+                        <DataGridTemplateColumn Header="Actions" Width="80">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="🗑️"
+                                            FontSize="16"
+                                            Width="28"
+                                            Height="28"
+                                            Background="#ef4444"
+                                            Foreground="White"
+                                            BorderThickness="0"
+                                            Click="DeleteEnrollmentBtn_Click"
+                                            Tag="{Binding EmployeeId}"
+                                            HorizontalAlignment="Center"
+                                            Cursor="Hand">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center" 
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#ef4444"/>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#dc2626"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                    
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#f1f5f9"/>
+                            <Setter Property="Foreground" Value="#1e293b"/>
+                            <Setter Property="FontSize" Value="13"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Padding" Value="12,8"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    
+                    <DataGrid.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="Padding" Value="12,6"/>
+                            <Setter Property="Foreground" Value="#1f2937"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="TextBlock.TextAlignment" Value="Center"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="DataGridCell">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Foreground" Value="#1f2937"/>
+                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.CellStyle>
+                    
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="SnapsToDevicePixels" Value="True"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                </DataGrid>
+            </Grid>
+        </Border>
+        </Grid>
+
+        <!-- Admin login overlay -->
+        <Border x:Name="AdminOverlay" Grid.ColumnSpan="2"
                 Background="#80000000"
                 Visibility="Visible"
                 HorizontalAlignment="Stretch"
