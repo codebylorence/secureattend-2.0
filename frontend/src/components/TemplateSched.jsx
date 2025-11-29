@@ -1,7 +1,7 @@
 import { MdAddCircle, MdDelete, MdEdit } from "react-icons/md";
 import { useState, useEffect } from "react";
 import { fetchDepartments } from "../api/DepartmentApi";
-import { createSchedule, getAllTemplates, deleteSchedule } from "../api/ScheduleApi";
+import { createTemplate, getTemplates, deleteTemplate } from "../api/ScheduleApi";
 
 export default function TemplateSched() {
   const [templates, setTemplates] = useState([]);
@@ -40,7 +40,7 @@ export default function TemplateSched() {
 
   const fetchTemplatesData = async () => {
     try {
-      const data = await getAllTemplates();
+      const data = await getTemplates();
       setTemplates(data);
     } catch (error) {
       console.error("Error fetching templates:", error);
@@ -164,22 +164,20 @@ export default function TemplateSched() {
     }
 
     try {
-      await createSchedule({
+      await createTemplate({
         shift_name: newTemplate.name,
         start_time: newTemplate.startTime,
         end_time: newTemplate.endTime,
         department: newTemplate.department,
         days: newTemplate.days,
         day_limits: newTemplate.dayLimits,
-        is_template: true,
         created_by: "admin"
       });
       alert(
         `✅ Template created successfully!\n\n` +
         `📋 ${newTemplate.name} for ${newTemplate.department}\n` +
         `📅 Days: ${newTemplate.days.join(", ")}\n` +
-        `⏰ Time: ${newTemplate.startTime} - ${newTemplate.endTime}\n\n` +
-        `👤 This schedule has been automatically assigned to the team leader of ${newTemplate.department}.`
+        `⏰ Time: ${newTemplate.startTime} - ${newTemplate.endTime}`
       );
       setNewTemplate({ name: "", startTime: "", endTime: "", department: "", days: [], dayLimits: {} });
       fetchTemplatesData();
@@ -195,18 +193,14 @@ export default function TemplateSched() {
       ? `⚠️ Delete Schedule Template?\n\n` +
         `Template: ${template.shift_name}\n` +
         `Department: ${template.department}\n\n` +
-        `This will also delete the team leader's assigned schedule for this shift.\n\n` +
         `Are you sure you want to continue?`
       : "Are you sure you want to delete this template?";
     
     if (!window.confirm(confirmMessage)) return;
     
     try {
-      await deleteSchedule(id);
-      alert(
-        `✅ Template deleted successfully!\n\n` +
-        `The team leader's schedule has also been removed.`
-      );
+      await deleteTemplate(id);
+      alert(`✅ Template deleted successfully!`);
       fetchTemplatesData();
     } catch (error) {
       console.error("Error deleting template:", error);
@@ -459,7 +453,38 @@ export default function TemplateSched() {
           <p className="text-gray-500 text-sm">No templates created yet.</p>
         ) : (
           <div className="space-y-2">
-            {templates.map((template) => (
+            {/* Group templates by shift name, time, and department */}
+            {Object.values(
+              templates.reduce((acc, template) => {
+                const key = `${template.shift_name}-${template.start_time}-${template.end_time}-${template.department}`;
+                if (!acc[key]) {
+                  // First template with this combination
+                  acc[key] = {
+                    ...template,
+                    allDays: [...template.days],
+                    mergedDayLimits: template.day_limits ? {...template.day_limits} : {},
+                    templateIds: [template.id] // Track all template IDs for deletion
+                  };
+                } else {
+                  // Merge days from duplicate templates
+                  acc[key].allDays = [...new Set([...acc[key].allDays, ...template.days])];
+                  // Merge day limits
+                  if (template.day_limits) {
+                    acc[key].mergedDayLimits = {
+                      ...acc[key].mergedDayLimits,
+                      ...template.day_limits
+                    };
+                  }
+                  // Update member_limit if present
+                  if (template.member_limit) {
+                    acc[key].member_limit = template.member_limit;
+                  }
+                  // Track all template IDs
+                  acc[key].templateIds.push(template.id);
+                }
+                return acc;
+              }, {})
+            ).map((template) => (
               <div
                 key={template.id}
                 className="flex justify-between items-center border border-gray-200 rounded-md p-3 hover:bg-gray-50"
@@ -472,17 +497,29 @@ export default function TemplateSched() {
                     Time: {template.start_time} - {template.end_time}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {template.day_limits ? (
+                    {Object.keys(template.mergedDayLimits).length > 0 ? (
                       <>
-                        Days & Limits: {Object.entries(template.day_limits).map(([day, limit]) => `${day}(${limit})`).join(", ")}
+                        Days & Limits: {template.allDays.map(day => {
+                          const limit = template.mergedDayLimits[day];
+                          return limit ? `${day}(${limit})` : day;
+                        }).join(", ")}
                       </>
+                    ) : template.member_limit ? (
+                      <>Days: {template.allDays.join(", ")} | Max Members: {template.member_limit}</>
                     ) : (
-                      <>Days: {template.days.join(", ")} | Max Members: {template.member_limit || "N/A"}</>
+                      <>Days: {template.allDays.join(", ")}</>
                     )}
                   </p>
                 </div>
                 <button
-                  onClick={() => handleDelete(template.id)}
+                  onClick={async () => {
+                    // Delete all templates in this group
+                    if (window.confirm(`Delete this template? This will remove ${template.templateIds.length} template record(s).`)) {
+                      for (const id of template.templateIds) {
+                        await handleDelete(id);
+                      }
+                    }
+                  }}
                   className="text-red-600 hover:text-red-800 p-2"
                   title="Delete Template"
                 >

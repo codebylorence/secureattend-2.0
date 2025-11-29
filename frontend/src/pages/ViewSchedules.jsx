@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { MdSchedule, MdDelete } from "react-icons/md";
-import { getAllSchedules, deleteSchedule } from "../api/ScheduleApi";
+import { getEmployeeSchedules, deleteEmployeeSchedule } from "../api/ScheduleApi";
 import { fetchEmployees } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
 
@@ -10,6 +10,8 @@ export default function ViewSchedules() {
   const [departments, setDepartments] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [entriesPerPage, setEntriesPerPage] = useState(10);
 
   useEffect(() => {
     fetchData();
@@ -18,7 +20,7 @@ export default function ViewSchedules() {
   const fetchData = async () => {
     try {
       const [schedulesData, employeesData, departmentsData] = await Promise.all([
-        getAllSchedules(),
+        getEmployeeSchedules(),
         fetchEmployees(),
         fetchDepartments()
       ]);
@@ -33,10 +35,10 @@ export default function ViewSchedules() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this schedule?")) return;
+    if (!window.confirm("Are you sure you want to delete this schedule assignment?")) return;
     
     try {
-      await deleteSchedule(id);
+      await deleteEmployeeSchedule(id);
       alert("Schedule deleted successfully!");
       fetchData();
     } catch (error) {
@@ -89,6 +91,30 @@ export default function ViewSchedules() {
     return getEmployeeName(a.employee_id).localeCompare(getEmployeeName(b.employee_id));
   });
 
+  // Group schedules by employee
+  const groupedSchedules = Object.entries(
+    filteredSchedules.reduce((acc, schedule) => {
+      const empId = schedule.employee_id;
+      if (!acc[empId]) {
+        acc[empId] = [];
+      }
+      acc[empId].push(schedule);
+      return acc;
+    }, {})
+  );
+
+  // Pagination calculations
+  const totalEmployees = groupedSchedules.length;
+  const totalPages = Math.ceil(totalEmployees / entriesPerPage);
+  const startIndex = (currentPage - 1) * entriesPerPage;
+  const endIndex = startIndex + entriesPerPage;
+  const paginatedSchedules = groupedSchedules.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDepartment, entriesPerPage]);
+
   return (
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">
       {/* Header */}
@@ -128,10 +154,26 @@ export default function ViewSchedules() {
           <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A]">
             <MdSchedule /> Assigned Schedules
           </h2>
-          <span className="text-sm text-gray-600">
-            {/* Count unique employees instead of schedule records */}
-            {new Set(filteredSchedules.map(s => s.employee_id)).size} employee(s) with schedules
-          </span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600">Show:</label>
+              <select
+                value={entriesPerPage}
+                onChange={(e) => setEntriesPerPage(Number(e.target.value))}
+                className="border border-gray-300 rounded px-2 py-1 text-sm"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span className="text-sm text-gray-600">entries</span>
+            </div>
+            <span className="text-sm text-gray-600">
+              {totalEmployees} employee(s) with schedules
+            </span>
+          </div>
         </div>
 
         {loading ? (
@@ -143,51 +185,12 @@ export default function ViewSchedules() {
               : "No schedules assigned yet."}
           </p>
         ) : (
-          <div className="space-y-4">
-            {/* Group schedules by employee */}
-            {Object.entries(
-              filteredSchedules.reduce((acc, schedule) => {
-                const empId = schedule.employee_id;
-                if (!acc[empId]) {
-                  acc[empId] = [];
-                }
-                acc[empId].push(schedule);
-                return acc;
-              }, {})
-            ).map(([employeeId, employeeSchedules]) => {
+          <>
+            <div className="space-y-4 mb-6">
+              {paginatedSchedules.map(([employeeId, employeeSchedules]) => {
               const position = getEmployeePosition(employeeId);
               const isSupervisor = position === "Supervisor";
               const isTeamLeader = position === "Team Leader";
-              
-              // Group shifts by shift name for multi-shift records
-              const shiftGroups = {};
-              employeeSchedules.forEach(schedule => {
-                if (schedule.shifts && Array.isArray(schedule.shifts)) {
-                  schedule.shifts.forEach(shift => {
-                    if (!shiftGroups[shift.shift_name]) {
-                      shiftGroups[shift.shift_name] = {
-                        shift_name: shift.shift_name,
-                        start_time: shift.start_time,
-                        end_time: shift.end_time,
-                        days: shift.days,
-                        created_by: schedule.created_by,
-                        id: schedule.id
-                      };
-                    }
-                  });
-                } else {
-                  if (!shiftGroups[schedule.shift_name]) {
-                    shiftGroups[schedule.shift_name] = {
-                      shift_name: schedule.shift_name,
-                      start_time: schedule.start_time,
-                      end_time: schedule.end_time,
-                      days: schedule.days,
-                      created_by: schedule.created_by,
-                      id: schedule.id
-                    };
-                  }
-                }
-              });
               
               return (
                 <div key={employeeId} className="border border-gray-200 rounded-md p-4 hover:bg-gray-50 transition-colors">
@@ -210,38 +213,108 @@ export default function ViewSchedules() {
                     )}
                   </div>
                   
-                  <div className="space-y-2 ml-4">
-                    {Object.values(shiftGroups).map((shift, idx) => (
-                      <div key={idx} className="flex justify-between items-start">
+                  <div className="flex flex-wrap gap-4 ml-4">
+                    {employeeSchedules.map((schedule) => (
+                      <div key={schedule.id} className="flex-shrink-0 border-l-4 border-blue-500 pl-3 pr-4 py-2 bg-gray-50 rounded relative group">
+                        <button
+                          onClick={() => handleDelete(schedule.id)}
+                          className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                          title="Delete Schedule"
+                        >
+                          <MdDelete size={14} />
+                        </button>
                         <div>
-                          <p className="text-gray-700">
-                            <span className="font-medium">{shift.shift_name}</span>
-                            <span className="text-gray-500"> - </span>
-                            <span className="text-gray-600">{shift.days.join(', ')}</span>
+                          <p className="font-medium text-gray-800">{schedule.template.shift_name}</p>
+                          <p className="text-sm text-gray-600 flex items-center gap-1">
+                            <span>⏰</span> {schedule.template.start_time} - {schedule.template.end_time}
                           </p>
-                          <p className="text-sm text-gray-500 ml-4">
-                            {shift.start_time} - {shift.end_time}
+                          <p className="text-sm text-gray-600 flex items-center gap-1">
+                            <span>📅</span> {schedule.days.join(', ')}
                           </p>
-                          {shift.created_by && (
-                            <p className="text-xs text-purple-600 ml-4">
-                              Assigned by: {getCreatorName(shift.created_by)}
+                          {schedule.assigned_by && (
+                            <p className="text-xs text-purple-600 mt-1">
+                              By: {getCreatorName(schedule.assigned_by)}
                             </p>
                           )}
                         </div>
-                        <button
-                          onClick={() => handleDelete(shift.id)}
-                          className="text-red-600 hover:text-red-800 p-2 transition-colors"
-                          title="Delete Schedule"
-                        >
-                          <MdDelete size={18} />
-                        </button>
                       </div>
                     ))}
                   </div>
                 </div>
               );
             })}
-          </div>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t pt-4">
+                <div className="text-sm text-gray-600">
+                  Showing {startIndex + 1} to {Math.min(endIndex, totalEmployees)} of {totalEmployees} employees
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    First
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Previous
+                  </button>
+                  
+                  {/* Page Numbers */}
+                  <div className="flex gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`px-3 py-1 border rounded text-sm ${
+                            currentPage === pageNum
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Last
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

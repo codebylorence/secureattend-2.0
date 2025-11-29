@@ -9,7 +9,6 @@ export default function DropdownDateFilter() {
       >
         <option>Week</option>
         <option>Month</option>
-        <option>Year</option>
       </select>
 
       {/* Down arrow icon */}

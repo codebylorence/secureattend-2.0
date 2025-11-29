@@ -1,69 +1,58 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
 
-const Schedule = sequelize.define("Schedule", {
+const ScheduleTemplate = sequelize.define("ScheduleTemplate", {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
     primaryKey: true,
   },
-  employee_id: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
   department: {
     type: DataTypes.STRING,
-    allowNull: true,
+    allowNull: false,
   },
   shift_name: {
     type: DataTypes.STRING,
-    allowNull: true, // Made nullable for multi-shift records
+    allowNull: false,
   },
   start_time: {
     type: DataTypes.STRING,
-    allowNull: true, // Made nullable for multi-shift records
+    allowNull: false,
   },
   end_time: {
     type: DataTypes.STRING,
-    allowNull: true, // Made nullable for multi-shift records
+    allowNull: false,
   },
   days: {
     type: DataTypes.JSON,
     allowNull: false,
     defaultValue: [],
-  },
-  shifts: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    comment: "Array of shift objects: [{shift_name, start_time, end_time, days: []}]"
-  },
-  schedule_date: {
-    type: DataTypes.DATEONLY,
-    allowNull: true,
-    comment: "Specific date for this schedule instance (e.g., 2025-11-17)"
+    comment: "Array of day names: ['Monday', 'Tuesday', ...]"
   },
   member_limit: {
     type: DataTypes.INTEGER,
     allowNull: true,
     defaultValue: null,
+    comment: "Default member limit for all days"
   },
   day_limits: {
     type: DataTypes.JSON,
     allowNull: true,
     defaultValue: null,
-  },
-  is_template: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
+    comment: "Per-day limits: {Monday: 5, Tuesday: 3, ...}"
   },
   created_by: {
     type: DataTypes.STRING,
     allowNull: true,
+    comment: "Employee ID of creator (usually admin)"
   },
   status: {
     type: DataTypes.ENUM("Active", "Inactive"),
     defaultValue: "Active",
   },
+}, {
+  tableName: "schedule_templates",
+  timestamps: true,
 });
 
-export default Schedule;
+export default ScheduleTemplate;

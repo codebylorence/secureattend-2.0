@@ -7,13 +7,14 @@ import employeeRoutes from "./routes/employeeRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
-import scheduleRoutes from "./routes/scheduleRoutes.js";
+import scheduleTemplateRoutes from "./routes/scheduleTemplateRoutes.js";
+import employeeScheduleRoutes from "./routes/employeeScheduleRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
 import "./models/employee.js";
 import "./models/user.js";
 import "./models/attendance.js";
 import "./models/department.js";
-import Schedule from "./models/schedule.js";
+import "./models/associations.js";
 
 dotenv.config();
 
@@ -21,12 +22,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- EXISTING ROUTES ---
+// --- API ROUTES ---
 app.use("/api/employees", employeeRoutes);
 app.use("/api/auth", userRoutes);
 app.use("/api/attendances", attendanceRoutes);
 app.use("/api/departments", departmentRoutes);
-app.use("/api/schedules", scheduleRoutes);
+app.use("/api/templates", scheduleTemplateRoutes);
+app.use("/api/employee-schedules", employeeScheduleRoutes);
 app.use("/employees", employeeRoutes);
 
 
