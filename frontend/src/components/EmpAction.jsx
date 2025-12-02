@@ -25,7 +25,12 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
   return (
     <>
       <div className="flex gap-2">
-        <button className="bg-[#51A451] w-[35px] h-[35px] flex items-center justify-center rounded">
+        <button 
+          className={`bg-[#51A451] w-[35px] h-[35px] flex items-center justify-center rounded ${
+            employee.has_fingerprint ? 'opacity-100' : 'opacity-30'
+          }`}
+          title={employee.has_fingerprint ? 'Fingerprint enrolled' : 'No fingerprint enrolled'}
+        >
           <FaFingerprint color="white" size="25" />
         </button>
 

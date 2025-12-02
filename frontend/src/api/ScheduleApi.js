@@ -13,6 +13,11 @@ export const getTemplates = async () => {
   return response.data;
 };
 
+export const getPublishedTemplates = async () => {
+  const response = await axios.get(`${TEMPLATE_API_URL}/published`);
+  return response.data;
+};
+
 export const getTemplatesByDepartment = async (department) => {
   const response = await axios.get(`${TEMPLATE_API_URL}/department/${department}`);
   return response.data;
@@ -35,6 +40,11 @@ export const updateTemplate = async (id, templateData) => {
 
 export const deleteTemplate = async (id) => {
   const response = await axios.delete(`${TEMPLATE_API_URL}/${id}`);
+  return response.data;
+};
+
+export const publishSchedules = async (publishedBy) => {
+  const response = await axios.post(`${TEMPLATE_API_URL}/publish`, { published_by: publishedBy });
   return response.data;
 };
 

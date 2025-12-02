@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using BiometricEnrollmentApp.Services;
 
 namespace BiometricEnrollmentApp
@@ -12,11 +13,55 @@ namespace BiometricEnrollmentApp
         public string? EmployeeName { get; set; }
         public string? StatusMessage { get; set; }
         public string? PhotoBase64 { get; set; }
+        
+        private DispatcherTimer? _clockTimer;
 
         public ScanWindow()
         {
             InitializeComponent();
             WasCancelled = false;
+            
+            // Set initial time immediately
+            Loaded += (s, e) => StartClock();
+        }
+        
+        private void StartClock()
+        {
+            // Update clock immediately when window loads
+            UpdateClock();
+            
+            // Create timer to update every second
+            _clockTimer = new DispatcherTimer();
+            _clockTimer.Interval = TimeSpan.FromSeconds(1);
+            _clockTimer.Tick += (s, e) => UpdateClock();
+            _clockTimer.Start();
+        }
+        
+        private void UpdateClock()
+        {
+            try
+            {
+                var now = DateTime.Now;
+                if (ClockText != null)
+                {
+                    ClockText.Text = now.ToString("hh:mm:ss tt");
+                }
+                if (DateText != null)
+                {
+                    DateText.Text = now.ToString("MMMM dd, yyyy");
+                }
+                LogHelper.Write($"🕐 Clock updated: {now:hh:mm:ss tt}");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"❌ Clock update error: {ex.Message}");
+            }
+        }
+        
+        protected override void OnClosed(EventArgs e)
+        {
+            _clockTimer?.Stop();
+            base.OnClosed(e);
         }
 
         public void UpdateStatus(string status)

@@ -29,3 +29,9 @@ export const uploadEmployeePhoto = async (id, photoBase64) => {
   const response = await api.put(`/employees/${id}/photo`, { photo: photoBase64 });
   return response.data;
 };
+
+// Get fingerprint enrollment status for all employees
+export const getFingerprintStatus = async () => {
+  const response = await api.get("/employees/fingerprint-status");
+  return response.data;
+};

@@ -1,13 +1,14 @@
 import sequelize from "../config/database.js";
 import bcrypt from "bcrypt";
 import User from "./user.js";
+import "./notification.js"; // Import notification model for sync
 
 const syncDatabase = async () => {
   try {
     await sequelize.authenticate();
     console.log(" Database connected...");
 
-    await sequelize.sync();
+    await sequelize.sync({ alter: true }); // Use alter to add new columns
     console.log(" Tables synchronized successfully");
 
     //  Create default admin account if not existing

@@ -1,17 +1,17 @@
 import { useState, useEffect } from "react";
-import { MdSchedule, MdDelete } from "react-icons/md";
-import { getEmployeeSchedules, deleteEmployeeSchedule } from "../api/ScheduleApi";
+import { MdSchedule, MdPeople, MdClose } from "react-icons/md";
+import { getEmployeeSchedules, getPublishedTemplates } from "../api/ScheduleApi";
 import { fetchEmployees } from "../api/EmployeeApi";
-import { fetchDepartments } from "../api/DepartmentApi";
 
 export default function ViewSchedules() {
-  const [schedules, setSchedules] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [employeeSchedules, setEmployeeSchedules] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [selectedDepartment, setSelectedDepartment] = useState("");
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [entriesPerPage, setEntriesPerPage] = useState(10);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   useEffect(() => {
     fetchData();
@@ -19,31 +19,20 @@ export default function ViewSchedules() {
 
   const fetchData = async () => {
     try {
-      const [schedulesData, employeesData, departmentsData] = await Promise.all([
+      const [templatesData, schedulesData, employeesData] = await Promise.all([
+        getPublishedTemplates(), // Use the new endpoint that only returns published templates
         getEmployeeSchedules(),
-        fetchEmployees(),
-        fetchDepartments()
+        fetchEmployees()
       ]);
-      setSchedules(schedulesData);
+      
+      // No need to filter anymore - backend already returns only published templates
+      setTemplates(templatesData);
+      setEmployeeSchedules(schedulesData);
       setEmployees(employeesData);
-      setDepartments(departmentsData);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this schedule assignment?")) return;
-    
-    try {
-      await deleteEmployeeSchedule(id);
-      alert("Schedule deleted successfully!");
-      fetchData();
-    } catch (error) {
-      console.error("Error deleting schedule:", error);
-      alert("Failed to delete schedule");
     }
   };
 
@@ -52,68 +41,100 @@ export default function ViewSchedules() {
     return employee ? employee.fullname : employeeId;
   };
 
-  const getEmployeeDepartment = (employeeId) => {
-    const employee = employees.find((emp) => emp.employee_id === employeeId);
-    return employee ? employee.department : "";
-  };
-
   const getEmployeePosition = (employeeId) => {
     const employee = employees.find((emp) => emp.employee_id === employeeId);
     return employee ? employee.position : "";
   };
 
-  const getCreatorName = (createdBy) => {
-    if (!createdBy) return "Admin";
-    const creator = employees.find((emp) => emp.employee_id === createdBy);
-    return creator ? creator.fullname : createdBy;
+  const getAssignedBy = (assignedById) => {
+    if (!assignedById) return "Admin";
+    const assigner = employees.find((emp) => emp.employee_id === assignedById);
+    return assigner ? assigner.fullname : assignedById;
   };
 
-  // Filter and sort schedules
-  const filteredSchedules = (selectedDepartment
-    ? schedules.filter((schedule) => getEmployeeDepartment(schedule.employee_id) === selectedDepartment)
-    : schedules
-  ).sort((a, b) => {
-    const deptA = getEmployeeDepartment(a.employee_id);
-    const deptB = getEmployeeDepartment(b.employee_id);
-    
-    if (deptA !== deptB) {
-      return deptA.localeCompare(deptB);
+  // Get next 7 days starting from today
+  const getNext7Days = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to start of day
+
+    const next7Days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      next7Days.push(date);
     }
-    
-    const positionOrder = { "Supervisor": 0, "Team Leader": 1 };
-    const aOrder = positionOrder[getEmployeePosition(a.employee_id)] ?? 99;
-    const bOrder = positionOrder[getEmployeePosition(b.employee_id)] ?? 99;
-    
-    if (aOrder !== bOrder) {
-      return aOrder - bOrder;
-    }
-    
-    return getEmployeeName(a.employee_id).localeCompare(getEmployeeName(b.employee_id));
-  });
+    return next7Days;
+  };
 
-  // Group schedules by employee
-  const groupedSchedules = Object.entries(
-    filteredSchedules.reduce((acc, schedule) => {
-      const empId = schedule.employee_id;
-      if (!acc[empId]) {
-        acc[empId] = [];
-      }
-      acc[empId].push(schedule);
-      return acc;
-    }, {})
-  );
+  const next7Days = getNext7Days();
+  
+  // Get day names for the next 7 days
+  const getDayNames = () => {
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return next7Days.map(date => dayNames[date.getDay()]);
+  };
+  
+  const displayDays = getDayNames();
 
-  // Pagination calculations
-  const totalEmployees = groupedSchedules.length;
-  const totalPages = Math.ceil(totalEmployees / entriesPerPage);
-  const startIndex = (currentPage - 1) * entriesPerPage;
-  const endIndex = startIndex + entriesPerPage;
-  const paginatedSchedules = groupedSchedules.slice(startIndex, endIndex);
+  // Organize schedules by day and shift
+  const organizeSchedulesByDay = () => {
+    const organized = {};
 
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedDepartment, entriesPerPage]);
+    displayDays.forEach((day, index) => {
+      organized[day] = {
+        date: next7Days[index],
+        shifts: {}
+      };
+    });
+
+    // Group templates by day and shift
+    templates.forEach(template => {
+      template.days.forEach(day => {
+        if (!organized[day].shifts[template.shift_name]) {
+          organized[day].shifts[template.shift_name] = {
+            shift_name: template.shift_name,
+            start_time: template.start_time,
+            end_time: template.end_time,
+            zones: []
+          };
+        }
+
+        // Get assigned members for this zone on this day
+        const assignedMembers = employeeSchedules.filter(schedule =>
+          schedule.template.department === template.department &&
+          schedule.template.shift_name === template.shift_name &&
+          schedule.days.includes(day)
+        );
+
+        organized[day].shifts[template.shift_name].zones.push({
+          department: template.department,
+          template_id: template.id,
+          member_limit: template.day_limits?.[day] || template.member_limit,
+          assigned_count: assignedMembers.length,
+          members: assignedMembers
+        });
+      });
+    });
+
+    return organized;
+  };
+
+  const schedulesByDay = organizeSchedulesByDay();
+
+  const handleZoneClick = (day, zone, shift) => {
+    setSelectedDay(day);
+    setSelectedZone({ ...zone, shift });
+  };
+
+  if (loading) {
+    return (
+      <div className="pr-10 bg-gray-50 min-h-screen pb-10">
+        <div className="flex items-center justify-center h-64">
+          <p className="text-gray-500">Loading schedules...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">
@@ -121,202 +142,179 @@ export default function ViewSchedules() {
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
         <h1 className="text-[#374151] text-[21px] font-semibold">View Assigned Schedules</h1>
         <p className="text-sm text-gray-600 mt-1">
-          View and manage all assigned employee schedules
+          Weekly overview of all zone assignments and team members
         </p>
       </div>
 
-      {/* Filter Section */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filter by Zone/Department
-            </label>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white"
-            >
-              <option value="">All Departments</option>
-              {departments.map((dept) => (
-                <option key={dept.id} value={dept.name}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Weekly Calendar View */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A] mb-4">
+          <MdSchedule /> Weekly Schedule Overview
+        </h2>
+
+        <div className="grid grid-cols-1 lg:grid-cols-7 gap-3">
+          {displayDays.map((day, index) => {
+            const dayData = schedulesByDay[day];
+            const date = dayData.date;
+            const isToday = index === 0; // First day is always today
+
+            return (
+              <div
+                key={day}
+                className={`border-2 rounded-lg overflow-hidden ${
+                  isToday ? 'border-blue-500' : 'border-gray-300'
+                }`}
+              >
+                {/* Day Header */}
+                <div className={`p-3 text-center ${
+                  isToday ? 'bg-blue-600' : 'bg-[#1E3A8A]'
+                } text-white`}>
+                  <p className="font-semibold">{day}</p>
+                  <p className="text-xs opacity-90">
+                    {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </p>
+                </div>
+
+                {/* Shifts and Zones */}
+                <div className="p-3 space-y-3 min-h-[400px] bg-gray-50">
+                  {Object.keys(dayData.shifts).length === 0 ? (
+                    <p className="text-gray-400 text-xs text-center mt-8">No schedules</p>
+                  ) : (
+                    Object.values(dayData.shifts).map((shift, shiftIdx) => (
+                      <div key={shiftIdx} className="space-y-2">
+                        {/* Shift Header */}
+                        <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-2 py-1 rounded text-xs">
+                          <p className="font-semibold">{shift.shift_name}</p>
+                          <p className="text-xs opacity-90">
+                            {shift.start_time} - {shift.end_time}
+                          </p>
+                        </div>
+
+                        {/* Zones */}
+                        <div className="space-y-1">
+                          {shift.zones.map((zone, zoneIdx) => (
+                            <button
+                              key={zoneIdx}
+                              onClick={() => handleZoneClick(day, zone, shift)}
+                              className="w-full bg-white border border-purple-200 rounded p-2 hover:shadow-md hover:border-purple-400 transition-all text-left"
+                            >
+                              <p className="font-semibold text-xs text-purple-900">
+                                {zone.department}
+                              </p>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-xs text-gray-600 flex items-center gap-1">
+                                  <MdPeople size={12} />
+                                  {zone.assigned_count}/{zone.member_limit || '∞'}
+                                </span>
+                                {zone.assigned_count > 0 && (
+                                  <span className="text-xs text-green-600 font-medium">
+                                    Click to view
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Schedules List */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A]">
-            <MdSchedule /> Assigned Schedules
-          </h2>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600">Show:</label>
-              <select
-                value={entriesPerPage}
-                onChange={(e) => setEntriesPerPage(Number(e.target.value))}
-                className="border border-gray-300 rounded px-2 py-1 text-sm"
+      {/* Members Modal */}
+      {selectedZone && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-[#1E3A8A]">
+                  {selectedZone.department} - {selectedDay}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {selectedZone.shift.shift_name} ({selectedZone.shift.start_time} - {selectedZone.shift.end_time})
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedZone(null);
+                  setSelectedDay(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
               >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span className="text-sm text-gray-600">entries</span>
+                <MdClose size={24} />
+              </button>
             </div>
-            <span className="text-sm text-gray-600">
-              {totalEmployees} employee(s) with schedules
-            </span>
-          </div>
-        </div>
 
-        {loading ? (
-          <p className="text-gray-500 text-center py-8">Loading schedules...</p>
-        ) : filteredSchedules.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">
-            {selectedDepartment
-              ? `No schedules found for ${selectedDepartment}`
-              : "No schedules assigned yet."}
-          </p>
-        ) : (
-          <>
-            <div className="space-y-4 mb-6">
-              {paginatedSchedules.map(([employeeId, employeeSchedules]) => {
-              const position = getEmployeePosition(employeeId);
-              const isSupervisor = position === "Supervisor";
-              const isTeamLeader = position === "Team Leader";
-              
-              return (
-                <div key={employeeId} className="border border-gray-200 rounded-md p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-2 mb-3">
-                    <p className="font-semibold text-gray-800 text-lg">
-                      {getEmployeeName(employeeId)}
-                    </p>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      {getEmployeeDepartment(employeeId)}
-                    </span>
-                    {isSupervisor && (
-                      <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded font-medium">
-                        Supervisor
-                      </span>
-                    )}
-                    {isTeamLeader && (
-                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">
-                        Team Leader
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-4 ml-4">
-                    {employeeSchedules.map((schedule) => (
-                      <div key={schedule.id} className="flex-shrink-0 border-l-4 border-blue-500 pl-3 pr-4 py-2 bg-gray-50 rounded relative group">
-                        <button
-                          onClick={() => handleDelete(schedule.id)}
-                          className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
-                          title="Delete Schedule"
-                        >
-                          <MdDelete size={14} />
-                        </button>
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-sm text-gray-700">
+                <strong>Assigned:</strong> {selectedZone.assigned_count} / {selectedZone.member_limit || '∞'} members
+              </p>
+            </div>
+
+            {selectedZone.members.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">
+                No team members assigned to this zone yet.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <h4 className="font-semibold text-gray-800">Assigned Team Members:</h4>
+                {selectedZone.members.map((schedule, idx) => {
+                  const position = getEmployeePosition(schedule.employee_id);
+                  const isTeamLeader = position === "Team Leader";
+                  const isSupervisor = position === "Supervisor";
+
+                  return (
+                    <div
+                      key={idx}
+                      className="border border-gray-200 rounded-md p-4 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium text-gray-800">{schedule.template.shift_name}</p>
-                          <p className="text-sm text-gray-600 flex items-center gap-1">
-                            <span>⏰</span> {schedule.template.start_time} - {schedule.template.end_time}
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-semibold text-gray-800">
+                              {getEmployeeName(schedule.employee_id)}
+                            </p>
+                            {isSupervisor && (
+                              <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded font-medium">
+                                Supervisor
+                              </span>
+                            )}
+                            {isTeamLeader && (
+                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">
+                                Team Leader
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            ID: {schedule.employee_id}
                           </p>
-                          <p className="text-sm text-gray-600 flex items-center gap-1">
-                            <span>📅</span> {schedule.days.join(', ')}
+                          <p className="text-sm text-gray-600">
+                            Position: {position || 'Employee'}
                           </p>
                           {schedule.assigned_by && (
                             <p className="text-xs text-purple-600 mt-1">
-                              By: {getCreatorName(schedule.assigned_by)}
+                              Assigned by: {getAssignedBy(schedule.assigned_by)}
                             </p>
                           )}
                         </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">
+                            Days: {schedule.days.join(', ')}
+                          </p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-            </div>
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t pt-4">
-                <div className="text-sm text-gray-600">
-                  Showing {startIndex + 1} to {Math.min(endIndex, totalEmployees)} of {totalEmployees} employees
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    First
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    Previous
-                  </button>
-                  
-                  {/* Page Numbers */}
-                  <div className="flex gap-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => setCurrentPage(pageNum)}
-                          className={`px-3 py-1 border rounded text-sm ${
-                            currentPage === pageNum
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    Next
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    Last
-                  </button>
-                </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -50,6 +50,34 @@ const ScheduleTemplate = sequelize.define("ScheduleTemplate", {
     type: DataTypes.ENUM("Active", "Inactive"),
     defaultValue: "Active",
   },
+  publish_status: {
+    type: DataTypes.ENUM("Draft", "Published"),
+    defaultValue: "Draft", // New schedules are drafts until admin publishes them
+    allowNull: true,
+    comment: "Draft templates are not visible to team leaders"
+  },
+  published_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: "Timestamp when schedule was published"
+  },
+  published_by: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: "Employee ID who published the schedule"
+  },
+  pending_deletion: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+    comment: "True when admin marks for deletion but hasn't published the change yet"
+  },
+  deleted_days: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: null,
+    comment: "Days marked for deletion: ['Monday', 'Tuesday', ...]"
+  },
 }, {
   tableName: "schedule_templates",
   timestamps: true,

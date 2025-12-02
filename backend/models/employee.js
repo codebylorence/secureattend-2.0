@@ -21,6 +21,11 @@ const Employee = sequelize.define("Employee", {
     type: DataTypes.TEXT('long'),
     allowNull: true,
   },
+  has_fingerprint: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: "Indicates if employee has enrolled fingerprint in biometric system"
+  },
   status: {
     type: DataTypes.ENUM("Active", "Inactive"),
     defaultValue: "Active",

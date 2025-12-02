@@ -127,3 +127,54 @@ export const uploadPhoto = async (req, res) => {
     res.status(500).json({ message: "Error uploading photo" });
   }
 };
+
+// GET /api/employees/fingerprint-status
+export const getFingerprintStatus = async (req, res) => {
+  try {
+    const sqlite3 = await import('sqlite3');
+    const { open } = await import('sqlite');
+    
+    // Path to biometric app's local database (go up one level from backend folder)
+    const dbPath = process.env.BIOMETRIC_DB_PATH || '../BiometricEnrollmentApp/bin/Debug/net9.0-windows/biometric_local.db';
+    
+    console.log('📂 Attempting to open biometric database at:', dbPath);
+    
+    // Open connection to biometric database
+    const db = await open({
+      filename: dbPath,
+      driver: sqlite3.default.Database
+    });
+    
+    console.log('✅ Database opened successfully');
+    
+    // First, check what tables exist
+    const tables = await db.all(
+      "SELECT name FROM sqlite_master WHERE type='table'"
+    );
+    console.log('📋 Tables in database:', tables);
+    
+    // Query to get all employee IDs that have fingerprints enrolled
+    const enrolledEmployees = await db.all(
+      'SELECT DISTINCT employee_id FROM Enrollments WHERE fingerprint_template IS NOT NULL AND fingerprint_template != ""'
+    );
+    
+    console.log('👆 Enrolled employees found:', enrolledEmployees);
+    
+    await db.close();
+    
+    // Create a map of employee_id -> has_fingerprint
+    const fingerprintStatus = {};
+    enrolledEmployees.forEach(row => {
+      fingerprintStatus[row.employee_id] = true;
+    });
+    
+    console.log('📊 Fingerprint status map:', fingerprintStatus);
+    
+    res.status(200).json(fingerprintStatus);
+  } catch (error) {
+    console.error("❌ Error checking fingerprint status:", error);
+    console.error("Error details:", error.message);
+    // Return empty object if database is not accessible
+    res.status(200).json({});
+  }
+};

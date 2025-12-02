@@ -19,7 +19,7 @@ export default function TemplateSched() {
 
   const [newTemplate, setNewTemplate] = useState({ 
     name: "", 
-    department: "",
+    departments: [], // Changed to array for multiple zones
     days: [],
     dayLimits: {} // Store member limits per day: { "Monday": 5, "Tuesday": 3, ... }
   });
@@ -82,19 +82,21 @@ export default function TemplateSched() {
   };
 
   const checkShiftConflict = () => {
-    // Check if there's already ANY shift for the same department on any of the selected days
+    // Check if there's already ANY shift for the selected departments on any of the selected days
     const conflicts = [];
     
-    newTemplate.days.forEach((day) => {
-      const existingShift = templates.find(
-        (template) =>
-          template.department === newTemplate.department &&
-          template.days.includes(day)
-      );
-      
-      if (existingShift) {
-        conflicts.push({ day, existingShift: existingShift.shift_name });
-      }
+    newTemplate.departments.forEach((department) => {
+      newTemplate.days.forEach((day) => {
+        const existingShift = templates.find(
+          (template) =>
+            template.department === department &&
+            template.days.includes(day)
+        );
+        
+        if (existingShift) {
+          conflicts.push({ day, department, existingShift: existingShift.shift_name });
+        }
+      });
     });
     
     return conflicts;
@@ -143,8 +145,8 @@ export default function TemplateSched() {
 
   const handleAddTemplate = async (e) => {
     e.preventDefault();
-    if (!newTemplate.name || !newTemplate.startTime || !newTemplate.endTime || !newTemplate.department || newTemplate.days.length === 0) {
-      return alert("Fill all fields and select at least one day!");
+    if (!newTemplate.name || !newTemplate.startTime || !newTemplate.endTime || newTemplate.departments.length === 0 || newTemplate.days.length === 0) {
+      return alert("Fill all fields, select at least one zone and one day!");
     }
 
     // Validate all day limits are set and >= 1
@@ -157,29 +159,36 @@ export default function TemplateSched() {
     // Check for conflicts
     const conflicts = checkShiftConflict();
     if (conflicts.length > 0) {
-      const conflictMessages = conflicts.map(c => `${c.day} (${c.existingShift})`).join(", ");
+      const conflictMessages = conflicts.map(c => `${c.department} on ${c.day} (${c.existingShift})`).join(", ");
       return alert(
-        `Cannot create template: ${newTemplate.department} already has a shift on ${conflictMessages}.\n\nOnly 1 shift per day per zone is allowed.`
+        `Cannot create template: Conflicts found:\n${conflictMessages}\n\nOnly 1 shift per day per zone is allowed.`
       );
     }
 
     try {
-      await createTemplate({
-        shift_name: newTemplate.name,
-        start_time: newTemplate.startTime,
-        end_time: newTemplate.endTime,
-        department: newTemplate.department,
-        days: newTemplate.days,
-        day_limits: newTemplate.dayLimits,
-        created_by: "admin"
-      });
+      // Create a template for each selected department
+      const createdTemplates = [];
+      for (const department of newTemplate.departments) {
+        const template = await createTemplate({
+          shift_name: newTemplate.name,
+          start_time: newTemplate.startTime,
+          end_time: newTemplate.endTime,
+          department: department,
+          days: newTemplate.days,
+          day_limits: newTemplate.dayLimits,
+          created_by: "admin"
+        });
+        createdTemplates.push(template);
+      }
+      
       alert(
         `✅ Template created successfully!\n\n` +
-        `📋 ${newTemplate.name} for ${newTemplate.department}\n` +
+        `📋 ${newTemplate.name} for ${newTemplate.departments.length} zone(s)\n` +
+        `🏢 Zones: ${newTemplate.departments.join(", ")}\n` +
         `📅 Days: ${newTemplate.days.join(", ")}\n` +
         `⏰ Time: ${newTemplate.startTime} - ${newTemplate.endTime}`
       );
-      setNewTemplate({ name: "", startTime: "", endTime: "", department: "", days: [], dayLimits: {} });
+      setNewTemplate({ name: "", startTime: "", endTime: "", departments: [], days: [], dayLimits: {} });
       fetchTemplatesData();
     } catch (error) {
       console.error("Error creating template:", error);
@@ -330,20 +339,44 @@ export default function TemplateSched() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <label className="block text-base font-medium text-gray-700 mb-2">
-                Department/Zone
+                Department/Zone (Multiple Selection)
               </label>
-              <select
-                value={newTemplate.department}
-                onChange={(e) => setNewTemplate({ ...newTemplate, department: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-4 py-3 bg-white text-base"
-              >
-                <option value="">Select Department</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.name}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
+              <div className="border border-gray-300 rounded-md p-3 bg-white max-h-48 overflow-y-auto">
+                {departments.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No departments available</p>
+                ) : (
+                  <div className="space-y-2">
+                    {departments.map((dept) => (
+                      <label key={dept.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                        <input
+                          type="checkbox"
+                          checked={newTemplate.departments.includes(dept.name)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewTemplate({
+                                ...newTemplate,
+                                departments: [...newTemplate.departments, dept.name]
+                              });
+                            } else {
+                              setNewTemplate({
+                                ...newTemplate,
+                                departments: newTemplate.departments.filter(d => d !== dept.name)
+                              });
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="text-sm">{dept.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {newTemplate.departments.length > 0 && (
+                <p className="text-sm text-blue-600 mt-2">
+                  Selected: {newTemplate.departments.join(", ")}
+                </p>
+              )}
             </div>
 
             <div>
@@ -370,24 +403,25 @@ export default function TemplateSched() {
             Working Days & Member Limits
           </label>
           
-          {!newTemplate.department ? (
+          {newTemplate.departments.length === 0 ? (
             <div className="p-6 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg text-center">
               <p className="text-gray-500 text-base">
-                ⚠️ Please select a Department/Zone first to enable day selection
+                ⚠️ Please select at least one Department/Zone first to enable day selection
               </p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {daysOfWeek.map((day) => {
-                  // Check if ANY shift exists for this department on this day
-                  const existingShift = newTemplate.department && templates.find(
-                    (template) =>
-                      template.department === newTemplate.department &&
+                  // Check if ANY shift exists for any selected department on this day
+                  const conflictingDepts = newTemplate.departments.filter(dept => 
+                    templates.find(template =>
+                      template.department === dept &&
                       template.days.includes(day)
+                    )
                   );
                   
-                  const hasConflict = !!existingShift;
+                  const hasConflict = conflictingDepts.length > 0;
                   const isSelected = newTemplate.days.includes(day);
                   
                   return (
@@ -403,7 +437,7 @@ export default function TemplateSched() {
                             ? "bg-[#1E3A8A] text-white"
                             : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                         }`}
-                        title={hasConflict ? `${existingShift.shift_name} already exists for ${newTemplate.department} on ${day}` : ""}
+                        title={hasConflict ? `Conflict: ${conflictingDepts.join(", ")} already have shifts on ${day}` : ""}
                       >
                         {day}
                         {hasConflict && " ⚠️"}
@@ -428,10 +462,10 @@ export default function TemplateSched() {
                 })}
               </div>
               <p className="text-sm text-gray-500 mt-3">
-                ⚠️ Days marked with warning already have a shift for the selected department
+                ⚠️ Days marked with warning already have shifts for one or more selected zones
               </p>
               <p className="text-sm text-gray-500 mt-2">
-                💡 Select days and set individual member limits for each day
+                💡 Select days and set individual member limits for each day (applies to all selected zones)
               </p>
             </>
           )}

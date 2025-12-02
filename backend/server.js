@@ -9,6 +9,7 @@ import attendanceRoutes from "./routes/attendanceRoutes.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
 import scheduleTemplateRoutes from "./routes/scheduleTemplateRoutes.js";
 import employeeScheduleRoutes from "./routes/employeeScheduleRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
 import "./models/employee.js";
 import "./models/user.js";
@@ -29,6 +30,7 @@ app.use("/api/attendances", attendanceRoutes);
 app.use("/api/departments", departmentRoutes);
 app.use("/api/templates", scheduleTemplateRoutes);
 app.use("/api/employee-schedules", employeeScheduleRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/employees", employeeRoutes);
 
 

@@ -19,6 +19,21 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                <!-- Clock and Date at top -->
+                <StackPanel HorizontalAlignment="Right" Margin="0,0,0,10">
+                    <TextBlock x:Name="ClockText" 
+                               FontSize="24" 
+                               FontWeight="Bold"
+                               Foreground="white"
+                               HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="DateText" 
+                               FontSize="13" 
+                               Foreground="#666"
+                               HorizontalAlignment="Right"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+                
+                <!-- Title -->
                 <TextBlock Text="Fingerprint Attendance" 
                            FontSize="32" 
                            FontWeight="Bold" 

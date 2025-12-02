@@ -6,18 +6,25 @@ import React, {
 } from "react";
 import EmpAction from "./EmpAction";
 import { MdManageAccounts } from "react-icons/md";
-import { fetchEmployees } from "../api/EmployeeApi";
+import { fetchEmployees, getFingerprintStatus } from "../api/EmployeeApi";
 
 const EmployeeList = forwardRef((props, ref) => {
   const [employees, setEmployees] = useState([]);
+  const [fingerprintStatus, setFingerprintStatus] = useState({});
   const [loading, setLoading] = useState(true);
 
-  //  Fetch employees from API
+  //  Fetch employees and fingerprint status from API
   const loadEmployees = async () => {
     try {
       setLoading(true);
-      const data = await fetchEmployees();
-      setEmployees(data);
+      const [employeesData, fingerprintData] = await Promise.all([
+        fetchEmployees(),
+        getFingerprintStatus()
+      ]);
+      console.log('👥 Employees loaded:', employeesData.length);
+      console.log('👆 Fingerprint status received:', fingerprintData);
+      setEmployees(employeesData);
+      setFingerprintStatus(fingerprintData);
     } catch (error) {
       console.error("Error fetching employees:", error);
     } finally {
@@ -75,11 +82,14 @@ const EmployeeList = forwardRef((props, ref) => {
                     <td className="py-3 px-4">{emp.position}</td>
                     <td className="py-3 px-4">{emp.status}</td>
 
-                    {/* ✅ Pass employee ID and refresh function */}
+                    {/* ✅ Pass employee ID, fingerprint status, and refresh function */}
                     <td className="py-3 px-4">
                       <EmpAction
                         id={emp.id}
-                        employee={emp}
+                        employee={{
+                          ...emp,
+                          has_fingerprint: fingerprintStatus[emp.employee_id] || false
+                        }}
                         onDeleted={loadEmployees}
                         onUpdated={loadEmployees}
                       />
