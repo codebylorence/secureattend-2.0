@@ -8,7 +8,7 @@ const syncDatabase = async () => {
     await sequelize.authenticate();
     console.log(" Database connected...");
 
-    await sequelize.sync({ alter: true }); // Use alter to add new columns
+    await sequelize.sync({ alter: false }); // Disable alter to prevent key conflicts
     console.log(" Tables synchronized successfully");
 
     //  Create default admin account if not existing

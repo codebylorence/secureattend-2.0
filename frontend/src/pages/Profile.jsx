@@ -1,17 +1,51 @@
 import { useState, useEffect } from "react";
 import { FaCamera, FaUser, FaEnvelope, FaPhone, FaIdCard, FaBriefcase, FaBuilding, FaUserTag } from "react-icons/fa";
-import { uploadEmployeePhoto } from "../api/EmployeeApi";
+import { uploadEmployeePhoto, getEmployeeById } from "../api/EmployeeApi";
+import { toast } from 'react-toastify';
 
 export default function Profile() {
   const [user, setUser] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const userData = JSON.parse(localStorage.getItem("user") || "{}");
-    setUser(userData);
-    setPhoto(userData.employee?.photo);
+    fetchUserData();
   }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const userData = JSON.parse(localStorage.getItem("user") || "{}");
+      
+      // Fetch fresh employee data from server
+      if (userData.employee?.employee_id) {
+        const freshEmployeeData = await getEmployeeById(userData.employee.employee_id);
+        
+        // Update user object with fresh employee data
+        const updatedUser = {
+          ...userData,
+          employee: freshEmployeeData
+        };
+        
+        setUser(updatedUser);
+        setPhoto(freshEmployeeData.photo);
+        
+        // Update localStorage with fresh data
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+      } else {
+        setUser(userData);
+        setPhoto(userData.employee?.photo);
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      // Fallback to localStorage data
+      const userData = JSON.parse(localStorage.getItem("user") || "{}");
+      setUser(userData);
+      setPhoto(userData.employee?.photo);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePhotoChange = async (e) => {
     const file = e.target.files[0];
@@ -19,7 +53,7 @@ export default function Profile() {
 
     // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert("File size must be less than 5MB");
+      toast.error("File size must be less than 5MB");
       return;
     }
 
@@ -33,17 +67,20 @@ export default function Profile() {
       if (user?.employee?.id) {
         setUploading(true);
         try {
-          await uploadEmployeePhoto(user.employee.id, base64String);
+          console.log("Uploading photo for employee ID:", user.employee.id);
+          const response = await uploadEmployeePhoto(user.employee.id, base64String);
+          console.log("Upload response:", response);
           
-          // Update localStorage
-          const updatedUser = { ...user };
-          updatedUser.employee.photo = base64String;
-          localStorage.setItem("user", JSON.stringify(updatedUser));
+          // Fetch fresh data from server to ensure it's saved
+          await fetchUserData();
           
-          alert("Photo uploaded successfully!");
+          toast.success("Photo uploaded successfully!");
         } catch (error) {
           console.error("Error uploading photo:", error);
-          alert("Failed to upload photo");
+          console.error("Error details:", error.response?.data || error.message);
+          toast.error(`Failed to upload photo: ${error.response?.data?.message || error.message}`);
+          // Revert photo on error
+          setPhoto(user.employee?.photo);
         } finally {
           setUploading(false);
         }
@@ -51,6 +88,22 @@ export default function Profile() {
     };
     reader.readAsDataURL(file);
   };
+
+  if (loading) {
+    return (
+      <div className="pr-10 bg-gray-50 min-h-screen pb-10">
+        <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
+          <h1 className="text-[#374151] text-[21px] font-semibold">My Profile</h1>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3A8A] mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading profile...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">

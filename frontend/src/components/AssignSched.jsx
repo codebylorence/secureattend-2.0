@@ -1,4 +1,4 @@
-import { MdEditCalendar, MdDelete, MdVisibility } from "react-icons/md";
+import { MdEditCalendar, MdDelete, MdVisibility, MdAccessTime, MdCalendarToday } from "react-icons/md";
 import { useState, useEffect } from "react";
 import { fetchEmployees } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
@@ -423,11 +423,11 @@ export default function AssignSched() {
                                   <p className="text-sm font-medium text-gray-700">
                                     {shift.shift_name}
                                   </p>
-                                  <p className="text-sm text-gray-600">
-                                    ⏰ {shift.start_time} - {shift.end_time}
+                                  <p className="text-sm text-gray-600 flex items-center gap-1">
+                                    <MdAccessTime size={16} /> {shift.start_time} - {shift.end_time}
                                   </p>
-                                  <p className="text-xs text-gray-500">
-                                    📅 {shift.days.join(", ")}
+                                  <p className="text-xs text-gray-500 flex items-center gap-1">
+                                    <MdCalendarToday size={14} /> {shift.days.join(", ")}
                                   </p>
                                   {shift.created_by && (
                                     <p className="text-xs text-purple-600 mt-1">

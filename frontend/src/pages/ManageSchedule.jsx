@@ -1,9 +1,58 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { MdCalendarToday, MdPeople } from "react-icons/md";
 import AssignSched from "../components/AssignSched";
+import AssignSchedWithDrafts from "../components/AssignSchedWithDrafts";
 import WeeklyTemplateView from "../components/WeeklyTemplateView";
+import { useSocket } from "../context/SocketContext";
 
 export default function ManageSchedule() {
   const [selectedView, setSelectedView] = useState("weekly");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { socket } = useSocket();
+
+  useEffect(() => {
+    if (!socket) return;
+
+    // Listen for real-time updates
+    socket.on('template:created', () => {
+      console.log('📡 Template created - refreshing...');
+      setRefreshKey(prev => prev + 1);
+    });
+
+    socket.on('template:updated', () => {
+      console.log('📡 Template updated - refreshing...');
+      setRefreshKey(prev => prev + 1);
+    });
+
+    socket.on('template:deleted', () => {
+      console.log('📡 Template deleted - refreshing...');
+      setRefreshKey(prev => prev + 1);
+    });
+
+    socket.on('schedules:published', () => {
+      console.log('📡 Schedules published - refreshing...');
+      setRefreshKey(prev => prev + 1);
+    });
+
+    socket.on('draft:created', () => {
+      console.log('📡 Draft created - refreshing...');
+      setRefreshKey(prev => prev + 1);
+    });
+
+    socket.on('drafts:published', () => {
+      console.log('📡 Drafts published - refreshing...');
+      setRefreshKey(prev => prev + 1);
+    });
+
+    return () => {
+      socket.off('template:created');
+      socket.off('template:updated');
+      socket.off('template:deleted');
+      socket.off('schedules:published');
+      socket.off('draft:created');
+      socket.off('drafts:published');
+    };
+  }, [socket]);
 
   return (
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">
@@ -28,7 +77,7 @@ export default function ManageSchedule() {
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            📅 Weekly Schedule
+            <MdCalendarToday className="inline mr-2" /> Weekly Schedule
           </button>
           <button
             onClick={() => setSelectedView("assign")}
@@ -38,14 +87,14 @@ export default function ManageSchedule() {
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
-            👥 Assign to Employees
+            <MdPeople className="inline mr-2" /> Assign to Employees
           </button>
         </div>
       </div>
 
       {/* Conditional Rendering */}
-      {selectedView === "weekly" && <WeeklyTemplateView />}
-      {selectedView === "assign" && <AssignSched />}
+      {selectedView === "weekly" && <WeeklyTemplateView key={`weekly-${refreshKey}`} />}
+      {selectedView === "assign" && <AssignSchedWithDrafts key={`assign-${refreshKey}`} />}
     </div>
   );
 }

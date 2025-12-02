@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { MdSchedule, MdPeople, MdClose } from "react-icons/md";
 import { getEmployeeSchedules, getPublishedTemplates } from "../api/ScheduleApi";
 import { fetchEmployees } from "../api/EmployeeApi";
+import { useSocket } from "../context/SocketContext";
 
 export default function ViewSchedules() {
   const [templates, setTemplates] = useState([]);
@@ -10,12 +11,33 @@ export default function ViewSchedules() {
   const [loading, setLoading] = useState(true);
   const [selectedZone, setSelectedZone] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
+  const { socket } = useSocket();
 
   const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    // Listen for real-time updates
+    socket.on('schedules:published', () => {
+      console.log('📡 Schedules published - refreshing...');
+      fetchData();
+    });
+
+    socket.on('drafts:published', () => {
+      console.log('📡 Drafts published - refreshing...');
+      fetchData();
+    });
+
+    return () => {
+      socket.off('schedules:published');
+      socket.off('drafts:published');
+    };
+  }, [socket]);
 
   const fetchData = async () => {
     try {

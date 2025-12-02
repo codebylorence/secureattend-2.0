@@ -108,23 +108,33 @@ export const uploadPhoto = async (req, res) => {
     const { id } = req.params;
     const { photo } = req.body;
 
+    console.log(`📸 Upload photo request for employee ID: ${id}`);
+    console.log(`📸 Photo data length: ${photo?.length || 0} characters`);
+
     if (!photo) {
+      console.log("❌ No photo data provided");
       return res.status(400).json({ error: "Photo data is required" });
     }
 
     const updatedEmployee = await updateEmployee(id, { photo });
 
     if (!updatedEmployee) {
+      console.log(`❌ Employee not found with ID: ${id}`);
       return res.status(404).json({ message: "Employee not found" });
     }
 
+    console.log(`✅ Photo uploaded successfully for employee: ${updatedEmployee.fullname}`);
     res.status(200).json({
       message: "Photo uploaded successfully",
       employee: updatedEmployee,
     });
   } catch (error) {
-    console.error("Error uploading photo:", error);
-    res.status(500).json({ message: "Error uploading photo" });
+    console.error("❌ Error uploading photo:", error);
+    console.error("Error stack:", error.stack);
+    res.status(500).json({ 
+      message: "Error uploading photo",
+      error: error.message 
+    });
   }
 };
 

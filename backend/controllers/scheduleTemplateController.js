@@ -65,40 +65,10 @@ export const addTemplate = async (req, res) => {
   try {
     const template = await createTemplate(req.body);
     
-    // Auto-assign template to team leader of the department
-    if (template.department) {
-      try {
-        const { default: User } = await import("../models/user.js");
-        const { default: Employee } = await import("../models/employee.js");
-        const { assignScheduleToEmployee } = await import("../services/employeeScheduleService.js");
-        
-        // Find team leader for this department
-        const teamLeaderUser = await User.findOne({
-          where: { role: "teamleader" },
-          include: [{
-            model: Employee,
-            as: "employee",
-            where: { department: template.department }
-          }]
-        });
-        
-        if (teamLeaderUser && teamLeaderUser.employee) {
-          // Assign the template to the team leader
-          await assignScheduleToEmployee({
-            employee_id: teamLeaderUser.employee.employee_id,
-            template_id: template.id,
-            days: template.days,
-            assigned_by: req.body.created_by || "admin"
-          });
-          
-          console.log(`✅ Auto-assigned template to team leader: ${teamLeaderUser.employee.employee_id} (${teamLeaderUser.employee.fullname})`);
-        } else {
-          console.log(`⚠️ No team leader found for department: ${template.department}`);
-        }
-      } catch (autoAssignError) {
-        console.error("Error auto-assigning to team leader:", autoAssignError);
-        // Don't fail template creation if auto-assign fails
-      }
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('template:created', template);
     }
     
     res.status(201).json(template);
@@ -116,6 +86,12 @@ export const editTemplate = async (req, res) => {
     
     if (!template) {
       return res.status(404).json({ message: "Template not found" });
+    }
+    
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('template:updated', template);
     }
     
     res.status(200).json({ message: "Template updated successfully", template });
@@ -148,6 +124,12 @@ export const removeTemplate = async (req, res) => {
       return res.status(404).json({ message: "Template not found" });
     }
     
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('template:deleted', { id });
+    }
+    
     res.status(200).json({ message: "Template marked for deletion. Click 'Publish Schedule' to apply changes." });
   } catch (error) {
     console.error("Error deleting template:", error);
@@ -159,11 +141,15 @@ export const removeTemplate = async (req, res) => {
 // POST /api/templates/publish
 export const publishSchedules = async (req, res) => {
   try {
+    console.log("📤 Starting publishSchedules...");
     const { published_by } = req.body;
+    console.log("Published by:", published_by);
+    
     const { default: ScheduleTemplate } = await import("../models/scheduleTemplate.js");
     const { permanentlyDeleteTemplate } = await import("../services/scheduleTemplateService.js");
     const { notifyTeamLeaders } = await import("../services/notificationService.js");
     const { Op } = await import("sequelize");
+    const io = req.app.get('io');
     
     console.log("📤 Publishing schedule changes...");
     
@@ -219,6 +205,91 @@ export const publishSchedules = async (req, res) => {
     );
     
     console.log(`📊 Published ${updatedCount} new/updated schedule(s)`);
+    
+    // Step 2.5: Auto-assign team leaders to newly published schedules
+    console.log(`\n🔍 Checking if team leader auto-assignment is needed (updatedCount: ${updatedCount})...`);
+    
+    if (updatedCount > 0) {
+      try {
+        const { default: User } = await import("../models/user.js");
+        const { default: Employee } = await import("../models/employee.js");
+        const { default: EmployeeSchedule } = await import("../models/employeeSchedule.js");
+        
+        console.log(`📦 Models imported successfully`);
+        
+        // Get newly published templates
+        const newlyPublishedTemplates = await ScheduleTemplate.findAll({
+          where: {
+            published_at: {
+              [Op.gte]: new Date(Date.now() - 5000) // Last 5 seconds
+            },
+            pending_deletion: false
+          }
+        });
+        
+        console.log(`👥 Found ${newlyPublishedTemplates.length} newly published template(s) to auto-assign team leaders...`);
+        
+        if (newlyPublishedTemplates.length === 0) {
+          console.log(`⚠️  No newly published templates found in the last 5 seconds`);
+        }
+        
+        for (const template of newlyPublishedTemplates) {
+          console.log(`\n   Processing: ${template.department} - ${template.shift_name} (ID: ${template.id})`);
+          
+          try {
+            // Find team leader for this department
+            const teamLeaderUser = await User.findOne({
+              where: { role: "teamleader" },
+              include: [{
+                model: Employee,
+                as: "employee",
+                where: { department: template.department }
+              }]
+            });
+            
+            if (teamLeaderUser && teamLeaderUser.employee) {
+              console.log(`   Found team leader: ${teamLeaderUser.employee.fullname} (${teamLeaderUser.employee.employee_id})`);
+              
+              // Check if team leader is already assigned to this template
+              const existingAssignment = await EmployeeSchedule.findOne({
+                where: {
+                  employee_id: teamLeaderUser.employee.employee_id,
+                  template_id: template.id
+                }
+              });
+              
+              if (!existingAssignment) {
+                console.log(`   Creating assignment...`);
+                
+                // Create assignment for team leader
+                const newAssignment = await EmployeeSchedule.create({
+                  employee_id: teamLeaderUser.employee.employee_id,
+                  template_id: template.id,
+                  days: template.days,
+                  assigned_by: published_by || "admin"
+                });
+                
+                console.log(`   ✅ Assigned team leader: ${teamLeaderUser.employee.fullname} to ${template.department} - ${template.shift_name} (Assignment ID: ${newAssignment.id})`);
+              } else {
+                console.log(`   ℹ️  Team leader already assigned: ${teamLeaderUser.employee.fullname} (Assignment ID: ${existingAssignment.id})`);
+              }
+            } else {
+              console.log(`   ⚠️  No team leader found for department: ${template.department}`);
+            }
+          } catch (assignError) {
+            console.error(`   ❌ Error assigning team leader for ${template.department}:`, assignError);
+            console.error(`   Error details:`, assignError.message);
+            console.error(`   Stack:`, assignError.stack);
+          }
+        }
+        
+        console.log(`\n✅ Team leader auto-assignment process completed\n`);
+      } catch (importError) {
+        console.error(`❌ Error importing models for team leader assignment:`, importError);
+      }
+    } else {
+      console.log(`ℹ️  No new schedules published, skipping team leader auto-assignment\n`);
+    }
     
     // Step 3: Get all recently published templates
     const publishedTemplates = await ScheduleTemplate.findAll({
@@ -276,6 +347,18 @@ export const publishSchedules = async (req, res) => {
       });
     }
     
+    // Emit real-time update
+    if (io) {
+      io.emit('schedules:published', {
+        count: totalChanges,
+        published: updatedCount,
+        deleted: pendingDeletions.length,
+        departments: allAffectedDepartments,
+        templates: publishedTemplates
+      });
+      console.log('🔌 Real-time update sent to all clients');
+    }
+    
     res.status(200).json({ 
       message: `Successfully published ${totalChanges} change(s)`,
       count: totalChanges,
@@ -285,7 +368,12 @@ export const publishSchedules = async (req, res) => {
       templates: publishedTemplates
     });
   } catch (error) {
-    console.error("Error publishing schedules:", error);
-    res.status(500).json({ message: "Error publishing schedules" });
+    console.error("❌ Error publishing schedules:", error);
+    console.error("❌ Error message:", error.message);
+    console.error("❌ Error stack:", error.stack);
+    res.status(500).json({ 
+      message: "Error publishing schedules",
+      error: error.message 
+    });
   }
 };

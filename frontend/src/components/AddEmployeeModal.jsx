@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { MdWarning, MdInfo } from "react-icons/md";
 import { addEmployee, fetchEmployees } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
 
@@ -166,13 +167,13 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               ))}
             </select>
             {formData.position === "Team Leader" && getAvailableDepartments().length === 0 && (
-              <p className="text-xs text-amber-600 mt-1">
-                ⚠️ All departments already have team leaders assigned
+              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                <MdWarning size={14} /> All departments already have team leaders assigned
               </p>
             )}
             {formData.position === "Team Leader" && getAvailableDepartments().length > 0 && (
-              <p className="text-xs text-blue-600 mt-1">
-                ℹ️ Only showing departments without team leaders
+              <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                <MdInfo size={14} /> Only showing departments without team leaders
               </p>
             )}
           </div>

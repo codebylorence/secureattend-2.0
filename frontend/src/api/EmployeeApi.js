@@ -6,6 +6,12 @@ export const fetchEmployees = async () => {
   return response.data;
 };
 
+// Get employee by ID
+export const getEmployeeById = async (employeeId) => {
+  const response = await api.get(`/employees/${employeeId}`);
+  return response.data;
+};
+
 // Add a new employee
 export const addEmployee = async (employeeData) => {
   const response = await api.post("/employees", employeeData);

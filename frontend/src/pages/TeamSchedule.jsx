@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MdSchedule, MdPeople, MdDelete } from "react-icons/md";
+import { MdSchedule, MdPeople, MdDelete, MdAccessTime, MdCalendarToday, MdEventNote, MdClose, MdCheckCircle, MdWarning } from "react-icons/md";
 import { 
   getTemplatesByDepartment, 
   assignSchedule, 
@@ -7,6 +7,9 @@ import {
   deleteEmployeeSchedule 
 } from "../api/ScheduleApi";
 import { fetchEmployees } from "../api/EmployeeApi";
+import { useSocket } from "../context/SocketContext";
+import { toast } from 'react-toastify';
+import { confirmAction } from "../utils/confirmToast.jsx";
 
 export default function TeamSchedule() {
   const [templates, setTemplates] = useState([]);
@@ -15,6 +18,7 @@ export default function TeamSchedule() {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null); // NEW: Selected day for assignment
   const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const { socket } = useSocket();
   
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userDepartment = user.employee?.department || "";
@@ -26,6 +30,27 @@ export default function TeamSchedule() {
       fetchAssignedSchedules();
     }
   }, [userDepartment]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    // Listen for real-time updates
+    socket.on('schedules:published', () => {
+      console.log('📡 Schedules published - refreshing...');
+      fetchTemplates();
+      fetchAssignedSchedules();
+    });
+
+    socket.on('drafts:published', () => {
+      console.log('📡 Drafts published - refreshing...');
+      fetchAssignedSchedules();
+    });
+
+    return () => {
+      socket.off('schedules:published');
+      socket.off('drafts:published');
+    };
+  }, [socket]);
 
   const fetchTemplates = async () => {
     try {
@@ -55,13 +80,8 @@ export default function TeamSchedule() {
       const allEmployees = await fetchEmployees();
       
       // Filter schedules for employees in the same department
-      // Exclude the team leader's own schedule from the display
+      // INCLUDE the team leader's schedule for counting purposes
       const teamSchedules = allSchedules.filter((schedule) => {
-        // Skip if this is the team leader's own schedule
-        if (schedule.employee_id === user.employee?.employee_id) {
-          return false;
-        }
-        
         const employee = allEmployees.find(emp => emp.employee_id === schedule.employee_id);
         return employee && employee.department === userDepartment;
       });
@@ -208,14 +228,10 @@ export default function TeamSchedule() {
     
     if (!dayLimit) return { current: 0, limit: null, isFull: false };
     
-    // Count current assignments for this day (excluding team leaders)
+    // Count current assignments for this day (including team leaders)
     let currentCount = 0;
     
     assignedSchedules.forEach(schedule => {
-      // Find the employee to check if they're a team leader
-      const employee = teamMembers.find(emp => emp.employee_id === schedule.employee_id);
-      if (employee && employee.position === "Team Leader") return; // Skip team leaders
-      
       // Check if this is a multi-shift record
       if (schedule.shifts && Array.isArray(schedule.shifts)) {
         // Check each shift in the array
@@ -252,10 +268,6 @@ export default function TeamSchedule() {
   const isLimitReached = (employeeId) => {
     if (!selectedTemplate) return false;
     
-    // Check if this employee is a team leader (they don't count towards limit)
-    const employee = teamMembers.find(emp => emp.employee_id === employeeId);
-    if (employee && employee.position === "Team Leader") return false;
-    
     // Check if ALL days in the template are full
     // Only block if every single day has reached its limit
     const allDaysFull = selectedTemplate.days.every(day => {
@@ -268,9 +280,6 @@ export default function TeamSchedule() {
 
   const getLimitReachedDays = (employeeId) => {
     if (!selectedTemplate) return [];
-    
-    const employee = teamMembers.find(emp => emp.employee_id === employeeId);
-    if (employee && employee.position === "Team Leader") return [];
     
     const fullDays = [];
     for (const day of selectedTemplate.days) {
@@ -286,13 +295,7 @@ export default function TeamSchedule() {
   const getAvailableDays = (employeeId) => {
     if (!selectedTemplate) return [];
     
-    const employee = teamMembers.find(emp => emp.employee_id === employeeId);
     const conflictDays = getConflictDays(employeeId);
-    
-    if (employee && employee.position === "Team Leader") {
-      // Team leaders can select any day except conflicting ones
-      return selectedTemplate.days.filter(day => !conflictDays.includes(day));
-    }
     
     const availableDays = [];
     for (const day of selectedTemplate.days) {
@@ -325,25 +328,16 @@ export default function TeamSchedule() {
     });
 
     if (hasConflictOnDay) {
-      alert(`${getEmployeeName(employeeId)} already has this shift on ${selectedDay}`);
+      toast.warning(`${getEmployeeName(employeeId)} already has this shift on ${selectedDay}`);
       return;
     }
 
-    // Check if this employee is a team leader (they don't count towards limit)
-    const employee = teamMembers.find(emp => emp.employee_id === employeeId);
-    const isTeamLeader = employee && employee.position === "Team Leader";
-    
     // Check member limit for the selected day
-    if (!isTeamLeader && selectedDay) {
+    if (selectedDay) {
       const status = getMemberLimitStatus(selectedDay);
       if (status.limit) {
-        const currentlySelectedNonLeaders = selectedEmployees.filter(empId => {
-          const emp = teamMembers.find(e => e.employee_id === empId);
-          return emp && emp.position !== "Team Leader";
-        });
-
-        if (status.current + currentlySelectedNonLeaders.length >= status.limit) {
-          alert(`Cannot select more employees: Member limit (${status.limit}) reached for ${selectedDay}`);
+        if (status.current + selectedEmployees.length >= status.limit) {
+          toast.error(`Cannot select more employees: Member limit (${status.limit}) reached for ${selectedDay}`);
           return;
         }
       }
@@ -464,11 +458,8 @@ export default function TeamSchedule() {
     const errors = [];
     const warnings = [];
     
-    // Count non-team-leader employees being assigned
-    const nonTeamLeaderCount = selectedEmployees.filter(empId => {
-      const employee = teamMembers.find(emp => emp.employee_id === empId);
-      return employee && employee.position !== "Team Leader";
-    }).length;
+    // Count all employees being assigned (including team leaders)
+    const employeeCount = selectedEmployees.length;
     
     // Check each day's limit
     for (const day of selectedTemplate.days) {
@@ -477,14 +468,14 @@ export default function TeamSchedule() {
       if (status.limit) {
         const availableSlots = status.limit - status.current;
         
-        if (nonTeamLeaderCount > availableSlots) {
+        if (employeeCount > availableSlots) {
           if (availableSlots === 0) {
             warnings.push(
               `${day}: Limit reached (${status.current}/${status.limit}). Members will be assigned to other days only.`
             );
           } else {
             warnings.push(
-              `${day}: Only ${availableSlots} slot(s) available. ${nonTeamLeaderCount - availableSlots} member(s) will skip this day.`
+              `${day}: Only ${availableSlots} slot(s) available. ${employeeCount - availableSlots} member(s) will skip this day.`
             );
           }
         }
@@ -510,10 +501,10 @@ export default function TeamSchedule() {
 
   const handleAssignSchedule = async () => {
     if (!selectedTemplate || !selectedDay) {
-      return alert("Please select a template and day!");
+      return toast.warning("Please select a template and day!");
     }
     if (selectedEmployees.length === 0) {
-      return alert("Please select at least one team member!");
+      return toast.warning("Please select at least one team member!");
     }
 
     const results = {
@@ -544,16 +535,24 @@ export default function TeamSchedule() {
     // Show summary
     let message = "";
     if (results.success.length > 0) {
-      message += `✅ Successfully assigned ${selectedTemplate.shift_name} on ${selectedDay} to:\n${results.success.map(s => `  • ${s}`).join("\n")}\n`;
+      message += `Successfully assigned ${selectedTemplate.shift_name} on ${selectedDay} to:\n${results.success.map(s => `  • ${s}`).join("\n")}\n`;
     }
     if (results.failed.length > 0) {
-      message += `\n❌ Failed:\n`;
+      message += `\nFailed:\n`;
       results.failed.forEach(f => {
         message += `  • ${f.name}: ${f.error}\n`;
       });
     }
     
-    alert(message || "No schedules were assigned.");
+    if (results.success.length > 0 && results.failed.length === 0) {
+      toast.success(`Successfully assigned ${results.success.length} member(s) to ${selectedTemplate.shift_name} on ${selectedDay}`);
+    } else if (results.success.length > 0 && results.failed.length > 0) {
+      toast.warning(`Assigned ${results.success.length} member(s), but ${results.failed.length} failed`);
+    } else if (results.failed.length > 0) {
+      toast.error("Failed to assign schedules");
+    } else {
+      toast.info("No schedules were assigned");
+    }
     
     if (results.success.length > 0) {
       setSelectedDay(null);
@@ -563,19 +562,23 @@ export default function TeamSchedule() {
   };
 
   const handleDeleteSchedule = async (id) => {
-    if (!window.confirm("Are you sure you want to remove this schedule assignment?")) return;
-    
-    try {
-      await deleteEmployeeSchedule(id);
-      alert("Schedule removed successfully!");
-      fetchAssignedSchedules();
-    } catch (error) {
-      console.error("Error deleting schedule:", error);
-      alert("Failed to remove schedule");
-    }
+    confirmAction("Remove this schedule?", async () => {
+      try {
+        await deleteEmployeeSchedule(id);
+        toast.success("Schedule removed!");
+        fetchAssignedSchedules();
+      } catch (error) {
+        console.error("Error deleting schedule:", error);
+        toast.error("Failed to remove");
+      }
+    });
   };
 
   const getEmployeeName = (employeeId) => {
+    // If this is the team leader viewing their own schedule, show "Me"
+    if (employeeId === user.employee?.employee_id) {
+      return "Me";
+    }
     const employee = teamMembers.find((emp) => emp.employee_id === employeeId);
     return employee ? employee.fullname : employeeId;
   };
@@ -645,19 +648,19 @@ export default function TeamSchedule() {
                 }`}
               >
                 <h3 className="font-semibold text-gray-800 mb-2">{template.shift_name}</h3>
-                <p className="text-sm text-gray-600 mb-1">
-                  ⏰ {template.start_time} - {template.end_time}
+                <p className="text-sm text-gray-600 mb-1 flex items-center gap-1">
+                  <MdAccessTime size={16} /> {template.start_time} - {template.end_time}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 flex items-center gap-1">
                   {Object.keys(template.mergedDayLimits).length > 0 ? (
-                    <>📅 {template.allDays.map(day => {
+                    <><MdCalendarToday size={14} /> {template.allDays.map(day => {
                       const limit = template.mergedDayLimits[day];
                       return limit ? `${day}(${limit})` : day;
                     }).join(", ")}</>
                   ) : template.member_limit ? (
-                    <>📅 {template.allDays.join(", ")} (Limit: {template.member_limit} per day)</>
+                    <><MdCalendarToday size={14} /> {template.allDays.join(", ")} (Limit: {template.member_limit} per day)</>
                   ) : (
-                    <>📅 {template.allDays.join(", ")}</>
+                    <><MdCalendarToday size={14} /> {template.allDays.join(", ")}</>
                   )}
                 </p>
               </div>
@@ -767,8 +770,8 @@ export default function TeamSchedule() {
                       <p className="text-sm text-gray-600">{member.employee_id}</p>
                       <p className="text-xs text-gray-500">{member.position}</p>
                       {existingSchedule && conflictDays.length > 0 && (
-                        <p className="text-xs text-purple-600 mt-1 font-medium">
-                          📅 Current: {conflictDays.join(", ")}
+                        <p className="text-xs text-purple-600 mt-1 font-medium flex items-center gap-1">
+                          <MdEventNote size={14} /> Current: {conflictDays.join(", ")}
                         </p>
                       )}
                       {limitReached && (
@@ -812,8 +815,8 @@ export default function TeamSchedule() {
                 
                 return wouldExceed && (
                   <div className="mb-3 p-3 bg-red-50 border border-red-300 rounded-md">
-                    <p className="text-sm text-red-800 font-medium">
-                      ❌ Cannot assign: Would exceed limit ({status.current + nonLeaderCount}/{status.limit}) for {selectedDay}
+                    <p className="text-sm text-red-800 font-medium flex items-center gap-2">
+                      <MdClose size={18} /> Cannot assign: Would exceed limit ({status.current + nonLeaderCount}/{status.limit}) for {selectedDay}
                     </p>
                   </div>
                 );
@@ -880,7 +883,9 @@ export default function TeamSchedule() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      ⏰ {schedule.start_time} - {schedule.end_time}
+                      <div className="flex items-center gap-1">
+                        <MdAccessTime size={16} /> {schedule.start_time} - {schedule.end_time}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       <div className="flex flex-wrap gap-1">

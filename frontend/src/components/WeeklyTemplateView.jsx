@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { MdEdit, MdDelete, MdSave, MdContentCopy, MdClose, MdCheck, MdPlayArrow, MdAdd } from "react-icons/md";
+import { MdEdit, MdDelete, MdSave, MdContentCopy, MdClose, MdCheck, MdPlayArrow, MdAdd, MdLightbulb, MdLock, MdLockOpen } from "react-icons/md";
 import { getTemplates, deleteTemplate, updateTemplate, createTemplate } from "../api/ScheduleApi";
+import { toast } from 'react-toastify';
+import { confirmAction } from "../utils/confirmToast.jsx";
 
 // Day Schedule Modal Component
 function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose, onAddDepartment, onEdit, onDelete, onDeleteFromDay }) {
@@ -43,7 +45,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.departments.length === 0 || !formData.shift_name || !formData.start_time || !formData.end_time) {
-      alert("Please select at least one department and fill all fields!");
+      toast.warning("Please select at least one department and fill all fields!");
       return;
     }
     
@@ -76,17 +78,13 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
     const successful = results.filter(r => r.success);
     const failed = results.filter(r => !r.success);
     
-    let message = "";
-    if (successful.length > 0) {
-      message += `✅ Successfully added ${successful.length} zone(s):\n`;
-      message += successful.map(r => `  • ${r.department}`).join("\n");
+    if (successful.length > 0 && failed.length === 0) {
+      toast.success(`Successfully added ${successful.length} zone(s)`);
+    } else if (successful.length > 0 && failed.length > 0) {
+      toast.warning(`Added ${successful.length} zone(s), but ${failed.length} failed`);
+    } else if (failed.length > 0) {
+      toast.error(`Failed to add ${failed.length} zone(s)`);
     }
-    if (failed.length > 0) {
-      message += `\n\n⚠️ Failed to add ${failed.length} zone(s):\n`;
-      message += failed.map(r => `  • ${r.department} (${r.error})`).join("\n");
-    }
-    
-    alert(message);
     
     setFormData({
       departments: [],
@@ -373,7 +371,6 @@ export default function WeeklyTemplateView() {
   const fetchTemplatesData = async () => {
     try {
       const data = await getTemplates();
-      console.log("📥 Fetched templates:", data.length, "templates");
       setTemplates(data);
     } catch (error) {
       console.error("Error fetching templates:", error);
@@ -426,37 +423,30 @@ export default function WeeklyTemplateView() {
       });
     });
 
-    console.log("📊 Organized weekly view:", {
-      totalTemplates: templates.length,
-      skippedPendingDeletion: skippedCount,
-      daysWithSchedules: Object.entries(organized).filter(([_, schedules]) => schedules.length > 0).length
-    });
-
     setWeeklyView(organized);
   };
 
   const handleDeleteTemplate = async (id) => {
     const template = templates.find(t => t.id === id);
-    if (!window.confirm(`Delete template for ${template?.department}?`)) return;
-    
-    try {
-      await deleteTemplate(id);
-      alert("Template deleted successfully!");
-      fetchTemplatesData();
-    } catch (error) {
-      console.error("Error deleting template:", error);
-      alert("Failed to delete template");
-    }
+    confirmAction(`Delete ${template?.department}?`, async () => {
+      try {
+        await deleteTemplate(id);
+        toast.success("Deleted!");
+        fetchTemplatesData();
+      } catch (error) {
+        console.error("Error deleting template:", error);
+        toast.error("Delete failed");
+      }
+    });
   };
 
   const handleDeleteFromDay = async (scheduleId, day, department) => {
-    if (!window.confirm(`Remove ${department} from ${day}?\n\nThis will mark it for deletion. Click "Publish Schedule" to apply changes.`)) return;
-    
-    try {
+    confirmAction(`Remove ${department} from ${day}?`, async () => {
+      try {
       const template = templates.find(t => t.id === scheduleId);
       
       if (!template) {
-        alert("Template not found");
+        toast.error("Template not found");
         return;
       }
 
@@ -472,28 +462,28 @@ export default function WeeklyTemplateView() {
           day_limits: updatedDayLimits
         });
 
-        alert(`✅ ${department} removed from ${day}\n\nClick "Publish Schedule" to apply changes.`);
+        toast.success(`${department} removed from ${day}. Click "Publish Schedule" to apply changes.`);
       } else {
         // This is the only day, mark entire template for deletion
         await deleteTemplate(scheduleId);
-        alert(`✅ ${department} marked for deletion\n\nClick "Publish Schedule" to permanently delete.`);
+        toast.success(`${department} marked for deletion. Click "Publish Schedule" to permanently delete.`);
       }
       
       await fetchTemplatesData();
     } catch (error) {
-      console.error("Error removing schedule from day:", error);
-      alert(`Failed to remove schedule: ${error.message}`);
-    }
+        console.error("Error removing schedule from day:", error);
+        toast.error("Remove failed");
+      }
+    });
   };
 
   const handleDeleteFromDayInModal = async (scheduleId, day, department) => {
-    if (!window.confirm(`Remove ${department} from ${day}?`)) return;
-    
-    try {
+    confirmAction(`Remove ${department}?`, async () => {
+      try {
       const template = templates.find(t => t.id === scheduleId);
       
       if (!template) {
-        alert("Template not found");
+        toast.error("Template not found");
         return;
       }
 
@@ -512,26 +502,25 @@ export default function WeeklyTemplateView() {
           day_limits: updatedDayLimits
         });
 
-        alert(`✅ ${department} removed from ${day}`);
+        toast.success(`${department} removed from ${day}`);
       } else {
         // This is the only day, delete the entire template
         await deleteTemplate(scheduleId);
-        alert(`✅ ${department} schedule deleted`);
+        toast.success(`${department} schedule deleted`);
       }
       
       fetchTemplatesData();
     } catch (error) {
-      console.error("Error removing schedule from day:", error);
-      alert("Failed to remove schedule");
-      // Revert local state on error
-      setLocalSchedules(schedules);
-    }
+        console.error("Error removing schedule from day:", error);
+        toast.error("Remove failed");
+        // Revert local state on error
+        setLocalSchedules(schedules);
+      }
+    });
   };
 
   const handlePublishSchedules = async () => {
-    if (!window.confirm("Publish all draft schedules?\n\nThis will make them visible to team leaders and they will be notified.")) {
-      return;
-    }
+    confirmAction("Publish all schedules? Team leaders will be notified.", async () => {
 
     try {
       const { publishSchedules } = await import("../api/ScheduleApi");
@@ -541,9 +530,9 @@ export default function WeeklyTemplateView() {
       const result = await publishSchedules(publishedBy);
 
       if (result.count === 0) {
-        alert("ℹ️ No changes to publish.\n\nAll schedules are up to date.");
+        toast.info("No changes to publish. All schedules are up to date.");
       } else {
-        let message = `✅ Schedule Changes Published Successfully!\n\n`;
+        toast.success(`Schedule Changes Published! ${result.published} published, ${result.deleted} deleted`);
         
         if (result.published > 0) {
           message += `Published: ${result.published} schedule(s)\n`;
@@ -552,16 +541,16 @@ export default function WeeklyTemplateView() {
           message += `Deleted: ${result.deleted} schedule(s)\n`;
         }
         message += `Departments: ${result.departments.join(", ")}\n\n`;
-        message += `Team leaders have been notified.`;
-        
-        alert(message);
+        // Already shown toast above
+        // Team leaders have been notified
       }
 
       fetchTemplatesData(); // Refresh to show published status
     } catch (error) {
-      console.error("Error publishing schedules:", error);
-      alert("❌ Failed to publish schedules. Please try again.");
-    }
+        console.error("Error publishing schedules:", error);
+        toast.error("Publish failed");
+      }
+    });
   };
 
   const handleSaveAsReusable = () => {
@@ -578,7 +567,7 @@ export default function WeeklyTemplateView() {
     const updated = [...savedTemplates, newTemplate];
     setSavedTemplates(updated);
     localStorage.setItem("savedScheduleTemplates", JSON.stringify(updated));
-    alert(`Template "${templateName}" saved successfully!`);
+    toast.success(`Template "${templateName}" saved successfully!`);
   };
 
   const handleLoadTemplate = (savedTemplate) => {
@@ -586,9 +575,7 @@ export default function WeeklyTemplateView() {
   };
 
   const handleApplyTemplate = async (savedTemplate) => {
-    if (!window.confirm(`Apply template "${savedTemplate.name}"?\n\nThis will create new schedule templates based on this saved configuration.`)) {
-      return;
-    }
+    confirmAction(`Apply "${savedTemplate.name}"?`, async () => {
 
     try {
       let createdCount = 0;
@@ -635,22 +622,20 @@ export default function WeeklyTemplateView() {
       }
 
       // Show results
-      let message = `✅ Template Applied!\n\n`;
-      message += `Created: ${createdCount} schedule(s)\n`;
-      if (skippedCount > 0) {
-        message += `Skipped: ${skippedCount} (already exist)\n`;
+      if (createdCount > 0 && errors.length === 0) {
+        toast.success(`Template Applied! Created ${createdCount} schedule(s)${skippedCount > 0 ? `, skipped ${skippedCount}` : ''}`);
+      } else if (createdCount > 0 && errors.length > 0) {
+        toast.warning(`Created ${createdCount} schedule(s), but ${errors.length} failed`);
+      } else if (errors.length > 0) {
+        toast.error(`Failed to create schedules: ${errors.join(", ")}`);
       }
-      if (errors.length > 0) {
-        message += `\n⚠️ Failed to create:\n${errors.join(", ")}`;
-      }
-
-      alert(message);
       fetchTemplatesData();
       setViewingSavedTemplate(null);
     } catch (error) {
-      console.error("Error applying template:", error);
-      alert("Failed to apply template");
-    }
+        console.error("Error applying template:", error);
+        toast.error("Apply failed");
+      }
+    });
   };
 
   const handleEditSchedule = (schedule, day) => {
@@ -675,23 +660,23 @@ export default function WeeklyTemplateView() {
         }
       });
       
-      alert("Schedule updated successfully!");
+      toast.success("Schedule updated successfully!");
       setEditingSchedule(null);
       fetchTemplatesData();
     } catch (error) {
       console.error("Error updating schedule:", error);
-      alert("Failed to update schedule");
+      toast.error("Failed to update schedule");
     }
   };
 
   const handleDeleteSavedTemplate = (id) => {
     const template = savedTemplates.find(t => t.id === id);
-    if (!window.confirm(`Delete saved template "${template?.name}"?`)) return;
-    
-    const updated = savedTemplates.filter(t => t.id !== id);
-    setSavedTemplates(updated);
-    localStorage.setItem("savedScheduleTemplates", JSON.stringify(updated));
-    alert("Saved template deleted!");
+    confirmAction(`Delete "${template?.name}"?`, () => {
+      const updated = savedTemplates.filter(t => t.id !== id);
+      setSavedTemplates(updated);
+      localStorage.setItem("savedScheduleTemplates", JSON.stringify(updated));
+      toast.success("Deleted!");
+    });
   };
 
   const handleDayClick = (day) => {
@@ -916,7 +901,9 @@ export default function WeeklyTemplateView() {
 
       {/* Instructions Banner */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold text-blue-900 mb-2">💡 How to Create Schedules</h3>
+        <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+          <MdLightbulb size={20} /> How to Create Schedules
+        </h3>
         <ul className="text-sm text-blue-800 space-y-1">
           <li>• <strong>Click on any day</strong> (Monday-Sunday) to open the schedule manager</li>
           <li>• <strong>Add departments/zones</strong> to that specific day with shift details</li>
@@ -950,11 +937,10 @@ export default function WeeklyTemplateView() {
             <div key={day} className="border-2 border-gray-300 rounded-lg overflow-hidden hover:border-blue-500 transition-all">
               <button
                 onClick={() => handleDayClick(day)}
-                className="w-full bg-[#1E3A8A] text-white p-3 text-center font-semibold hover:bg-blue-900 transition-colors cursor-pointer flex items-center justify-center gap-2"
+                className="w-full bg-[#1E3A8A] text-white p-3 text-center font-semibold hover:bg-blue-900 transition-colors cursor-pointer"
                 title={`Click to manage ${day} schedule`}
               >
                 {day}
-                <span className="text-xs opacity-75">📝</span>
               </button>
               <div className="p-3 space-y-2 min-h-[200px] bg-gray-50">
                 {weeklyView[day]?.length > 0 ? (
