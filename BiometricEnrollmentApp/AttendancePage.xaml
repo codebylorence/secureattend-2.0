@@ -172,11 +172,6 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Title -->
-                <TextBlock Grid.Row="0" Text="🖐️ Fingerprint Scanner" 
-                           FontSize="20" FontWeight="Bold" 
-                           Foreground="{StaticResource PrimaryBrush}"
-                           Margin="0,0,0,16"/>
 
                 <!-- Status -->
                 <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" 
@@ -186,6 +181,25 @@
                                FontSize="14" 
                                Foreground="{StaticResource MutedBrush}"/>
                 </Border>
+
+                 <!-- Title and Clock -->
+                <Grid Grid.Row="0" Margin="0,0,0,16">
+                    <TextBlock Text=" Fingerprint Scanner" 
+                               FontSize="20" FontWeight="Bold" 
+                               Foreground="{StaticResource PrimaryBrush}"
+                               VerticalAlignment="Center"/>
+                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock x:Name="ClockTextBlock" Text="00:00:00" 
+                                   FontSize="24" FontWeight="Bold" 
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   HorizontalAlignment="Right"/>
+                        <TextBlock x:Name="DateTextBlock" Text="January 1, 2024" 
+                                   FontSize="12" 
+                                   Foreground="{StaticResource MutedBrush}"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
 
                 <!-- Fingerprint Image Placeholder -->
                 <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" 
@@ -216,6 +230,11 @@
                             Click="RefreshBtn_Click" 
                             Style="{StaticResource NeutralButton}"
                             HorizontalAlignment="Stretch"/>
+                    <Button x:Name="UpdateScheduleBtn" Content="📅 Update Attendance Schedule" 
+                            Click="UpdateScheduleBtn_Click" 
+                            Style="{StaticResource PrimaryButton}"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,8,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>

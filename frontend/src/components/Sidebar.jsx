@@ -18,8 +18,8 @@ function Sidebar({ role }) {
   const [scheduleMenuOpen, setScheduleMenuOpen] = useState(false);
 
   return (
-    <div className="w-60 bg-[#1E3A8A] text-white min-h-screen p-4 mt-25 flex inset-x-0 top-0 bottom-0 fixed">
-      <ul className="space-y-8">
+    <div className="w-60 bg-[#1E3A8A] text-white h-screen p-4 pt-24 fixed left-0 top-0 overflow-y-auto">
+      <ul className="space-y-6">
 
         {/* ================= ADMIN ================= */}
         {role === "admin" && (

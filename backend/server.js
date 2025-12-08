@@ -12,12 +12,17 @@ import departmentRoutes from "./routes/departmentRoutes.js";
 import scheduleTemplateRoutes from "./routes/scheduleTemplateRoutes.js";
 import employeeScheduleRoutes from "./routes/employeeScheduleRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
-import scheduleDraftRoutes from "./routes/scheduleDraftRoutes.js";
+import cleanupRoutes from "./routes/cleanupRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
+// Import models first
 import "./models/employee.js";
 import "./models/user.js";
 import "./models/attendance.js";
 import "./models/department.js";
+import "./models/scheduleTemplate.js";
+import "./models/employeeSchedule.js";
+import "./models/notification.js";
+// Import associations last
 import "./models/associations.js";
 
 dotenv.config();
@@ -55,7 +60,7 @@ app.use("/api/departments", departmentRoutes);
 app.use("/api/templates", scheduleTemplateRoutes);
 app.use("/api/employee-schedules", employeeScheduleRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/schedule-drafts", scheduleDraftRoutes);
+app.use("/api/cleanup", cleanupRoutes);
 app.use("/employees", employeeRoutes);
 
 
@@ -75,6 +80,8 @@ httpServer.listen(PORT, async () => {
   
   // Start the schedule cleanup job
   startScheduleCleanupJob();
+  
+
 });
 
 export { io };

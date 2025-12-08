@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { IoNotifications } from "react-icons/io5";
 import { FaUserCircle, FaSignOutAlt, FaUser, FaTimes } from "react-icons/fa";
+import { MdCheckCircle, MdDelete, MdEdit } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
 import { getUserNotifications, getUnreadCount, markAsRead, markAllAsRead, clearAllNotifications } from "../api/NotificationApi";
 
@@ -120,9 +121,9 @@ export default function Navbar() {
   };
 
   return (
-    <div className="bg-[#1E3A8A] py-8 px-5 flex justify-between items-center fixed top-0 inset-x-0 z-50">
+    <div className="bg-[#1E3A8A] h-16 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-50">
       {/* Title */}
-      <h1 className="text-2xl text-white font-bold">SecureAttend</h1>
+      <h1 className="text-xl text-white font-bold">SecureAttend</h1>
 
       {/* Right Side */}
       <div className="flex items-center gap-6 relative">
@@ -213,32 +214,84 @@ export default function Navbar() {
                   <p>No notifications yet</p>
                 </div>
               ) : (
-                notifications.map((notif) => (
-                  <div
-                    key={notif.id}
-                    onClick={() => handleNotificationClick(notif)}
-                    className={`p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors ${
-                      !notif.is_read ? "bg-blue-50" : ""
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className={`text-sm font-semibold ${!notif.is_read ? "text-blue-900" : "text-gray-800"}`}>
-                          {notif.title}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {notif.message}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-2">
-                          {formatTimeAgo(notif.createdAt)}
-                        </p>
+                notifications.map((notif) => {
+                  // Parse message to add icons
+                  const renderMessage = (message, title) => {
+                    const lines = message.split('\n');
+                    
+                    // For "Schedule Modified" notifications, show edit icon
+                    if (title === "Schedule Modified") {
+                      return (
+                        <div className="mt-1">
+                          <div className="flex items-center gap-1 font-medium text-blue-700 mb-1">
+                            <MdEdit size={16} />
+                            <span>Changes:</span>
+                          </div>
+                          {lines.map((line, idx) => (
+                            line.trim() && (
+                              <div key={idx} className="text-sm text-gray-700 ml-5">
+                                • {line}
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      );
+                    }
+                    
+                    // For other notifications (ADDED/REMOVED)
+                    return lines.map((line, idx) => {
+                      if (line.startsWith('ADDED:')) {
+                        return (
+                          <div key={idx} className="flex items-center gap-1 font-medium text-green-700 mt-2">
+                            <MdCheckCircle size={16} />
+                            <span>Added</span>
+                          </div>
+                        );
+                      } else if (line.startsWith('REMOVED:')) {
+                        return (
+                          <div key={idx} className="flex items-center gap-1 font-medium text-red-700 mt-2">
+                            <MdDelete size={16} />
+                            <span>Removed</span>
+                          </div>
+                        );
+                      } else if (line.trim()) {
+                        return (
+                          <div key={idx} className="text-sm text-gray-700 ml-5">
+                            {line}
+                          </div>
+                        );
+                      }
+                      return null;
+                    });
+                  };
+
+                  return (
+                    <div
+                      key={notif.id}
+                      onClick={() => handleNotificationClick(notif)}
+                      className={`p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors ${
+                        !notif.is_read ? "bg-blue-50" : ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <p className={`text-sm font-semibold ${!notif.is_read ? "text-blue-900" : "text-gray-800"}`}>
+                            {notif.title}
+                          </p>
+                          <div className="mt-1">
+                            {renderMessage(notif.message, notif.title)}
+                          </div>
+                          <p className="text-xs text-gray-400 mt-2">
+                            {formatTimeAgo(notif.createdAt)}
+                          </p>
+                        </div>
+                        {!notif.is_read && (
+                          <div className="w-2 h-2 bg-blue-600 rounded-full mt-1 flex-shrink-0"></div>
+                        )}
                       </div>
-                      {!notif.is_read && (
-                        <div className="w-2 h-2 bg-blue-600 rounded-full mt-1 flex-shrink-0"></div>
-                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

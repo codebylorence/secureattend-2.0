@@ -21,6 +21,29 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
     setLocalSchedules(schedules);
   }, [schedules]);
 
+  // Helper function to parse time string to minutes since midnight
+  const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // Helper function to get day of week name
+  const getDayOfWeek = (date) => {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return days[date.getDay()];
+  };
+
+  // Check if the shift has started or ended for today
+  const isShiftTimePassedForToday = (startTime, endTime) => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const shiftStartMinutes = parseTimeToMinutes(startTime);
+    
+    // Return true if shift has started (ongoing or ended)
+    return currentMinutes >= shiftStartMinutes;
+  };
+
   const handleShiftTemplateChange = (shiftName) => {
     const selectedShift = shiftTemplates.find(s => s.name === shiftName);
     if (selectedShift) {
@@ -46,6 +69,18 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
     e.preventDefault();
     if (formData.departments.length === 0 || !formData.shift_name || !formData.start_time || !formData.end_time) {
       toast.warning("Please select at least one department and fill all fields!");
+      return;
+    }
+
+    // Check if trying to schedule for today and shift time has already started
+    const today = new Date();
+    const todayDayName = getDayOfWeek(today);
+    
+    if (day === todayDayName && isShiftTimePassedForToday(formData.start_time, formData.end_time)) {
+      toast.error(
+        `Cannot schedule ${formData.shift_name} (${formData.start_time} - ${formData.end_time}) for today. ` +
+        `The shift has already started or is ongoing. Please schedule for another day.`
+      );
       return;
     }
     
@@ -107,7 +142,18 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-semibold text-[#1E3A8A]">{day} Schedule</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-semibold text-[#1E3A8A]">{day} Schedule</h2>
+            {(() => {
+              const today = new Date();
+              const todayDayName = getDayOfWeek(today);
+              return day === todayDayName && (
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
+                  Today
+                </span>
+              );
+            })()}
+          </div>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 text-2xl"
@@ -150,7 +196,13 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                   {/* Zones in this shift */}
                   <div className="bg-blue-50 p-3 space-y-2">
                     {shiftSchedules.map((schedule, idx) => {
-                      const limit = schedule.day_limits?.[day] || schedule.member_limit || "N/A";
+                      // Get limit with proper fallback (default to 1 if not set)
+                      const dayLimit = schedule.day_limits?.[day];
+                      const limit = dayLimit !== undefined && dayLimit !== null 
+                        ? dayLimit 
+                        : (schedule.member_limit !== undefined && schedule.member_limit !== null 
+                            ? schedule.member_limit 
+                            : 1); // Default to 1 if no limit is set
                       return (
                         <div
                           key={idx}
@@ -309,6 +361,22 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                 />
               </div>
 
+              {/* Warning if shift time has started for today */}
+              {(() => {
+                const today = new Date();
+                const todayDayName = getDayOfWeek(today);
+                const isToday = day === todayDayName;
+                const shiftPassed = formData.start_time && formData.end_time && isShiftTimePassedForToday(formData.start_time, formData.end_time);
+                
+                return isToday && shiftPassed && (
+                  <div className="p-3 bg-red-50 border border-red-300 rounded-md">
+                    <p className="text-sm text-red-800 font-medium">
+                      ⚠️ Cannot schedule for today: The shift ({formData.start_time} - {formData.end_time}) has already started or is ongoing.
+                    </p>
+                  </div>
+                );
+              })()}
+
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -355,8 +423,34 @@ export default function WeeklyTemplateView() {
     { name: "Closing Shift", start: "16:00", end: "00:00" },
     { name: "Graveyard Shift", start: "00:00", end: "08:00" },
   ]);
+  const [showShiftTemplateModal, setShowShiftTemplateModal] = useState(false);
+  const [shiftTemplateForm, setShiftTemplateForm] = useState({ name: "", start: "", end: "" });
+  const [editingShiftIndex, setEditingShiftIndex] = useState(null);
 
   const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+  // Helper function to parse time string to minutes since midnight
+  const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // Helper function to get day of week name
+  const getDayOfWeek = (date) => {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return days[date.getDay()];
+  };
+
+  // Check if the shift has started or ended for today
+  const isShiftTimePassedForToday = (startTime, endTime) => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const shiftStartMinutes = parseTimeToMinutes(startTime);
+    
+    // Return true if shift has started (ongoing or ended)
+    return currentMinutes >= shiftStartMinutes;
+  };
 
   useEffect(() => {
     fetchTemplatesData();
@@ -370,10 +464,16 @@ export default function WeeklyTemplateView() {
 
   const fetchTemplatesData = async () => {
     try {
+      console.log("📥 Fetching templates from API...");
       const data = await getTemplates();
+      console.log(`📊 Received ${data.length} template(s) from API:`);
+      data.forEach(t => {
+        console.log(`  - ${t.department} | ${t.shift_name} | ${t.publish_status} | Days: ${t.days?.join(',') || 'none'}`);
+      });
       setTemplates(data);
+      console.log("✅ Templates state updated");
     } catch (error) {
-      console.error("Error fetching templates:", error);
+      console.error("❌ Error fetching templates:", error);
     }
   };
 
@@ -403,13 +503,30 @@ export default function WeeklyTemplateView() {
 
     let skippedCount = 0;
     templates.forEach(template => {
-      // Skip ONLY templates explicitly marked for deletion (pending_deletion === true)
+      // Skip templates marked for deletion
       if (template.pending_deletion === true) {
         skippedCount++;
         return;
       }
       
+      // For each day, check if there's a draft version for this department
+      // If there's both a published and draft version, only show the draft (hide the old published)
       template.days.forEach(day => {
+        // Check if there's a draft version of this department on this day
+        const hasDraftVersion = templates.some(t => 
+          t.department === template.department &&
+          t.days.includes(day) &&
+          t.publish_status === "Draft" &&
+          t.pending_deletion !== true &&
+          t.id !== template.id
+        );
+        
+        // If this is published and there's a draft version, hide it (show only the draft)
+        if (template.publish_status === "Published" && hasDraftVersion) {
+          console.log(`Hiding published ${template.id} for ${template.department} on ${day} (draft version exists)`);
+          return;
+        }
+        
         organized[day].push({
           id: template.id,
           department: template.department,
@@ -418,7 +535,8 @@ export default function WeeklyTemplateView() {
           end_time: template.end_time,
           day_limits: template.day_limits,
           member_limit: template.member_limit,
-          pending_deletion: template.pending_deletion
+          pending_deletion: template.pending_deletion,
+          publish_status: template.publish_status
         });
       });
     });
@@ -533,15 +651,6 @@ export default function WeeklyTemplateView() {
         toast.info("No changes to publish. All schedules are up to date.");
       } else {
         toast.success(`Schedule Changes Published! ${result.published} published, ${result.deleted} deleted`);
-        
-        if (result.published > 0) {
-          message += `Published: ${result.published} schedule(s)\n`;
-        }
-        if (result.deleted > 0) {
-          message += `Deleted: ${result.deleted} schedule(s)\n`;
-        }
-        message += `Departments: ${result.departments.join(", ")}\n\n`;
-        // Already shown toast above
         // Team leaders have been notified
       }
 
@@ -639,32 +748,80 @@ export default function WeeklyTemplateView() {
   };
 
   const handleEditSchedule = (schedule, day) => {
+    // Get the current member limit for this specific day
+    const dayLimit = schedule.day_limits?.[day];
+    const currentLimit = dayLimit !== undefined && dayLimit !== null 
+      ? dayLimit 
+      : (schedule.member_limit !== undefined && schedule.member_limit !== null 
+          ? schedule.member_limit 
+          : 1);
+    
     setEditingSchedule({
       ...schedule,
       day: day,
-      originalId: schedule.id
+      originalId: schedule.id,
+      member_limit: currentLimit // Set the current limit for this day
     });
   };
 
   const handleSaveEdit = async () => {
     if (!editingSchedule) return;
 
+    console.log("💾 Saving edit for schedule:", editingSchedule);
+
+    // Check if trying to edit today's schedule and shift time has already started
+    const today = new Date();
+    const todayDayName = getDayOfWeek(today);
+    
+    if (editingSchedule.day === todayDayName && isShiftTimePassedForToday(editingSchedule.start_time, editingSchedule.end_time)) {
+      toast.error(
+        `Cannot edit ${editingSchedule.shift_name} (${editingSchedule.start_time} - ${editingSchedule.end_time}) for today. ` +
+        `The shift has already started or is ongoing. Changes can only be made to future shifts.`
+      );
+      return;
+    }
+
+    const updatePayload = {
+      shift_name: editingSchedule.shift_name,
+      start_time: editingSchedule.start_time,
+      end_time: editingSchedule.end_time,
+      day_limits: {
+        ...editingSchedule.day_limits,
+        [editingSchedule.day]: editingSchedule.member_limit
+      }
+      // Note: We're NOT updating the 'days' array here, only the day_limits
+      // The 'days' array should remain unchanged
+    };
+
+    console.log("📤 Sending update payload to API:", updatePayload);
+
     try {
-      await updateTemplate(editingSchedule.originalId, {
-        shift_name: editingSchedule.shift_name,
-        start_time: editingSchedule.start_time,
-        end_time: editingSchedule.end_time,
-        day_limits: {
-          ...editingSchedule.day_limits,
-          [editingSchedule.day]: editingSchedule.member_limit
-        }
-      });
+      const result = await updateTemplate(editingSchedule.originalId, updatePayload);
       
-      toast.success("Schedule updated successfully!");
+      console.log("✅ Update result:", result);
+      console.log("   Template ID:", result.template?.id);
+      console.log("   Publish Status:", result.template?.publish_status);
+      
+      // Show appropriate message based on publish status
+      if (result.template && result.template.publish_status === "Draft") {
+        toast.info("📝 Draft created! The original schedule stays visible to team leaders. Click 'Publish Schedule' to apply changes.", {
+          autoClose: 5000
+        });
+      } else if (result.template && result.template.publish_status === "Published") {
+        toast.success("Schedule updated! Team leaders can see the changes immediately.");
+      } else {
+        toast.success("Schedule updated successfully!");
+      }
+      
       setEditingSchedule(null);
-      fetchTemplatesData();
+      
+      // Refresh the templates data
+      console.log("🔄 Refreshing templates data...");
+      await fetchTemplatesData();
+      console.log("✅ Templates refreshed");
     } catch (error) {
-      console.error("Error updating schedule:", error);
+      console.error("❌ Error updating schedule:", error);
+      console.error("Error details:", error.response?.data || error.message);
       toast.error("Failed to update schedule");
     }
   };
@@ -754,8 +911,185 @@ export default function WeeklyTemplateView() {
     }
   };
 
+  const handleAddShiftTemplate = () => {
+    if (!shiftTemplateForm.name || !shiftTemplateForm.start || !shiftTemplateForm.end) {
+      toast.warning("Please fill all fields!");
+      return;
+    }
+
+    if (editingShiftIndex !== null) {
+      // Edit existing
+      const updated = [...shiftTemplates];
+      updated[editingShiftIndex] = shiftTemplateForm;
+      setShiftTemplates(updated);
+      toast.success("Shift template updated!");
+    } else {
+      // Add new
+      setShiftTemplates([...shiftTemplates, shiftTemplateForm]);
+      toast.success("Shift template created!");
+    }
+
+    setShiftTemplateForm({ name: "", start: "", end: "" });
+    setEditingShiftIndex(null);
+    setShowShiftTemplateModal(false);
+  };
+
+  const handleEditShiftTemplate = (index) => {
+    setShiftTemplateForm(shiftTemplates[index]);
+    setEditingShiftIndex(index);
+    setShowShiftTemplateModal(true);
+  };
+
+  const handleDeleteShiftTemplate = async (index) => {
+    const confirmed = await confirmAction(
+      `Delete "${shiftTemplates[index].name}"?`,
+      "This shift template will be removed from the list."
+    );
+    
+    if (confirmed) {
+      const updated = shiftTemplates.filter((_, i) => i !== index);
+      setShiftTemplates(updated);
+      toast.success("Shift template deleted!");
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Shift Template Management Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => {
+            setShiftTemplateForm({ name: "", start: "", end: "" });
+            setEditingShiftIndex(null);
+            setShowShiftTemplateModal(true);
+          }}
+          className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition"
+        >
+          <MdAdd size={20} />
+          Manage Shift Templates
+        </button>
+      </div>
+
+      {/* Shift Template Modal */}
+      {showShiftTemplateModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">
+                {editingShiftIndex !== null ? "Edit" : "Manage"} Shift Templates
+              </h3>
+              <button
+                onClick={() => {
+                  setShowShiftTemplateModal(false);
+                  setShiftTemplateForm({ name: "", start: "", end: "" });
+                  setEditingShiftIndex(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <MdClose size={24} />
+              </button>
+            </div>
+
+            {/* Add/Edit Form */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-md">
+              <h4 className="font-medium text-gray-700 mb-3">
+                {editingShiftIndex !== null ? "Edit Shift Template" : "Add New Shift Template"}
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Shift Name
+                  </label>
+                  <input
+                    type="text"
+                    value={shiftTemplateForm.name}
+                    onChange={(e) => setShiftTemplateForm({ ...shiftTemplateForm, name: e.target.value })}
+                    placeholder="e.g., Morning Shift"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={shiftTemplateForm.start}
+                    onChange={(e) => setShiftTemplateForm({ ...shiftTemplateForm, start: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    value={shiftTemplateForm.end}
+                    onChange={(e) => setShiftTemplateForm({ ...shiftTemplateForm, end: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={handleAddShiftTemplate}
+                  className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                >
+                  <MdCheck size={18} />
+                  {editingShiftIndex !== null ? "Update" : "Add"} Template
+                </button>
+                {editingShiftIndex !== null && (
+                  <button
+                    onClick={() => {
+                      setShiftTemplateForm({ name: "", start: "", end: "" });
+                      setEditingShiftIndex(null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Existing Templates List */}
+            <div>
+              <h4 className="font-medium text-gray-700 mb-3">Existing Shift Templates</h4>
+              <div className="space-y-2">
+                {shiftTemplates.map((shift, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-md hover:border-purple-300"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800">{shift.name}</p>
+                      <p className="text-sm text-gray-600">{shift.start} - {shift.end}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditShiftTemplate(index)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                        title="Edit"
+                      >
+                        <MdEdit size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteShiftTemplate(index)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-md"
+                        title="Delete"
+                      >
+                        <MdDelete size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Day Schedule Modal */}
       {selectedDay && (
         <DayScheduleModal
@@ -781,6 +1115,23 @@ export default function WeeklyTemplateView() {
             <h3 className="text-lg font-semibold text-gray-800 mb-4">
               Edit Schedule - {editingSchedule.department} ({editingSchedule.day})
             </h3>
+            
+            {/* Warning if shift time has started for today */}
+            {(() => {
+              const today = new Date();
+              const todayDayName = getDayOfWeek(today);
+              const isToday = editingSchedule.day === todayDayName;
+              const shiftPassed = isToday && isShiftTimePassedForToday(editingSchedule.start_time, editingSchedule.end_time);
+              
+              return shiftPassed && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded-md">
+                  <p className="text-sm text-red-800 font-medium">
+                    ⚠️ Cannot edit today's schedule: The shift ({editingSchedule.start_time} - {editingSchedule.end_time}) has already started or is ongoing.
+                  </p>
+                </div>
+              );
+            })()}
+            
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Change Shift</label>
@@ -822,7 +1173,23 @@ export default function WeeklyTemplateView() {
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveEdit}
-                  className="flex-1 bg-[#1E3A8A] text-white rounded-md px-4 py-2 hover:bg-blue-900 flex items-center justify-center gap-2"
+                  disabled={(() => {
+                    const today = new Date();
+                    const todayDayName = getDayOfWeek(today);
+                    const isToday = editingSchedule.day === todayDayName;
+                    return isToday && isShiftTimePassedForToday(editingSchedule.start_time, editingSchedule.end_time);
+                  })()}
+                  className={`flex-1 rounded-md px-4 py-2 flex items-center justify-center gap-2 ${
+                    (() => {
+                      const today = new Date();
+                      const todayDayName = getDayOfWeek(today);
+                      const isToday = editingSchedule.day === todayDayName;
+                      const shiftPassed = isToday && isShiftTimePassedForToday(editingSchedule.start_time, editingSchedule.end_time);
+                      return shiftPassed 
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
+                        : "bg-[#1E3A8A] text-white hover:bg-blue-900";
+                    })()
+                  }`}
                 >
                   <MdCheck /> Save Changes
                 </button>
@@ -876,7 +1243,13 @@ export default function WeeklyTemplateView() {
                   <div className="p-2 space-y-2 min-h-[150px] bg-gray-50">
                     {viewingSavedTemplate.weeklySchedule[day]?.length > 0 ? (
                       viewingSavedTemplate.weeklySchedule[day].map((schedule, idx) => {
-                        const limit = schedule.day_limits?.[day] || schedule.member_limit || "N/A";
+                        // Get limit with proper fallback (default to 1 if not set)
+                        const dayLimit = schedule.day_limits?.[day];
+                        const limit = dayLimit !== undefined && dayLimit !== null 
+                          ? dayLimit 
+                          : (schedule.member_limit !== undefined && schedule.member_limit !== null 
+                              ? schedule.member_limit 
+                              : 1); // Default to 1 if no limit is set
                         return (
                           <div key={idx} className="bg-white border border-purple-200 rounded-md p-2">
                             <p className="font-semibold text-xs text-purple-800">{schedule.department}</p>
@@ -945,16 +1318,32 @@ export default function WeeklyTemplateView() {
               <div className="p-3 space-y-2 min-h-[200px] bg-gray-50">
                 {weeklyView[day]?.length > 0 ? (
                   weeklyView[day].map((schedule, idx) => {
-                    const limit = schedule.day_limits?.[day] || schedule.member_limit || "N/A";
+                    // Get limit with proper fallback (default to 1 if not set)
+                    const dayLimit = schedule.day_limits?.[day];
+                    const limit = dayLimit !== undefined && dayLimit !== null 
+                      ? dayLimit 
+                      : (schedule.member_limit !== undefined && schedule.member_limit !== null 
+                          ? schedule.member_limit 
+                          : 1); // Default to 1 if no limit is set
+                    const isDraft = schedule.publish_status === "Draft";
                     return (
                       <div
                         key={idx}
-                        className="bg-white border border-blue-200 rounded-md p-2 hover:shadow-md transition-shadow"
+                        className={`bg-white rounded-md p-2 hover:shadow-md transition-shadow ${
+                          isDraft ? 'border-2 border-orange-300 bg-orange-50' : 'border border-blue-200'
+                        }`}
                       >
                         <div className="flex justify-between items-start mb-1">
-                          <p className="font-semibold text-sm text-blue-800">
-                            {schedule.department}
-                          </p>
+                          <div className="flex items-center gap-1">
+                            <p className={`font-semibold text-sm ${isDraft ? 'text-orange-800' : 'text-blue-800'}`}>
+                              {schedule.department}
+                            </p>
+                            {isDraft && (
+                              <span className="text-[10px] bg-orange-200 text-orange-800 px-1 py-0.5 rounded font-medium">
+                                DRAFT
+                              </span>
+                            )}
+                          </div>
                           <div className="flex gap-1">
                             <button
                               onClick={() => handleEditSchedule(schedule, day)}

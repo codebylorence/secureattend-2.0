@@ -2,16 +2,19 @@ using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace BiometricEnrollmentApp.Services
 {
     public class DataService
     {
         private readonly string _dbPath;
+        private readonly string _connString;
 
         public DataService()
         {
             _dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "biometric_local.db");
+            _connString = $"Data Source={_dbPath}";
             InitializeDatabase();
         }
 
@@ -67,6 +70,30 @@ namespace BiometricEnrollmentApp.Services
 
             cmd.CommandText = @"
                 CREATE INDEX IF NOT EXISTS idx_sessions_emp_date ON AttendanceSessions(employee_id, date);
+            ";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = @"
+                CREATE TABLE IF NOT EXISTS EmployeeSchedules (
+                    id INTEGER PRIMARY KEY,
+                    employee_id TEXT NOT NULL,
+                    template_id INTEGER NOT NULL,
+                    shift_name TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL,
+                    days TEXT NOT NULL,
+                    schedule_dates TEXT,
+                    department TEXT,
+                    assigned_by TEXT,
+                    created_at TEXT,
+                    updated_at TEXT,
+                    synced_at TEXT DEFAULT (datetime('now'))
+                );
+            ";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = @"
+                CREATE INDEX IF NOT EXISTS idx_schedules_employee ON EmployeeSchedules(employee_id);
             ";
             cmd.ExecuteNonQuery();
 
@@ -377,15 +404,20 @@ namespace BiometricEnrollmentApp.Services
                 var total = (clockOutLocal - clockInLocal).TotalHours;
                 if (total < 0) total = 0;
 
+                // Get current status to preserve it (Present or Late)
+                cmd.CommandText = "SELECT status FROM AttendanceSessions WHERE id = $id";
+                cmd.Parameters.Clear();
+                cmd.Parameters.AddWithValue("$id", sessionId);
+                var currentStatus = cmd.ExecuteScalar()?.ToString() ?? "Present";
+
                 cmd.CommandText = @"
                     UPDATE AttendanceSessions
-                    SET clock_out = $clock_out, total_hours = $total_hours, status = $status
+                    SET clock_out = $clock_out, total_hours = $total_hours
                     WHERE id = $id;
                 ";
                 cmd.Parameters.Clear();
                 cmd.Parameters.AddWithValue("$clock_out", tsOut);
                 cmd.Parameters.AddWithValue("$total_hours", total);
-                cmd.Parameters.AddWithValue("$status", "COMPLETED");
                 cmd.Parameters.AddWithValue("$id", sessionId);
 
                 int rows = cmd.ExecuteNonQuery();
@@ -510,6 +542,397 @@ namespace BiometricEnrollmentApp.Services
             {
                 LogHelper.Write($"💥 Error deleting old attendances: {ex.Message}");
                 return 0;
+            }
+        }
+
+        // -----------------------
+        // Employee Schedules
+        // -----------------------
+
+        public int UpdateSchedules(List<BiometricEnrollmentApp.Services.EmployeeSchedule> schedules)
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var transaction = conn.BeginTransaction();
+                
+                // Clear existing schedules
+                using (var clearCmd = conn.CreateCommand())
+                {
+                    clearCmd.CommandText = "DELETE FROM EmployeeSchedules";
+                    clearCmd.ExecuteNonQuery();
+                }
+
+                int count = 0;
+                foreach (var schedule in schedules)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = @"
+                        INSERT INTO EmployeeSchedules 
+                        (id, employee_id, template_id, shift_name, start_time, end_time, days, schedule_dates, department, assigned_by, created_at, updated_at)
+                        VALUES ($id, $emp_id, $tmpl_id, $shift, $start, $end, $days, $dates, $dept, $assigned, $created, $updated)
+                    ";
+                    
+                    cmd.Parameters.AddWithValue("$id", schedule.Id);
+                    cmd.Parameters.AddWithValue("$emp_id", schedule.Employee_Id ?? "");
+                    cmd.Parameters.AddWithValue("$tmpl_id", schedule.Template_Id);
+                    cmd.Parameters.AddWithValue("$shift", schedule.Shift_Name ?? "");
+                    cmd.Parameters.AddWithValue("$start", schedule.Start_Time ?? "");
+                    cmd.Parameters.AddWithValue("$end", schedule.End_Time ?? "");
+                    cmd.Parameters.AddWithValue("$days", schedule.Days != null ? string.Join(",", schedule.Days) : "");
+                    cmd.Parameters.AddWithValue("$dates", schedule.Schedule_Dates != null ? System.Text.Json.JsonSerializer.Serialize(schedule.Schedule_Dates) : "");
+                    cmd.Parameters.AddWithValue("$dept", schedule.Department ?? "");
+                    cmd.Parameters.AddWithValue("$assigned", schedule.Assigned_By ?? "");
+                    cmd.Parameters.AddWithValue("$created", schedule.Created_At?.ToString("yyyy-MM-dd HH:mm:ss") ?? "");
+                    cmd.Parameters.AddWithValue("$updated", schedule.Updated_At?.ToString("yyyy-MM-dd HH:mm:ss") ?? "");
+                    
+                    cmd.ExecuteNonQuery();
+                    count++;
+                }
+
+                transaction.Commit();
+                LogHelper.Write($"✅ Updated {count} employee schedule(s) in local database");
+                return count;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error updating schedules: {ex.Message}");
+                return 0;
+            }
+        }
+
+        public List<(string EmployeeId, string ShiftName, string StartTime, string EndTime, string Days)> GetTodaysSchedules()
+        {
+            var result = new List<(string, string, string, string, string)>();
+            try
+            {
+                var today = DateTime.Now.DayOfWeek.ToString();
+                LogHelper.Write($"📅 Getting schedules for {today}");
+                
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                // First, log all schedules in database
+                using (var allCmd = conn.CreateCommand())
+                {
+                    allCmd.CommandText = "SELECT COUNT(*) FROM EmployeeSchedules";
+                    var totalCount = Convert.ToInt32(allCmd.ExecuteScalar());
+                    LogHelper.Write($"📊 Total schedules in database: {totalCount}");
+                }
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT employee_id, shift_name, start_time, end_time, days
+                    FROM EmployeeSchedules
+                    WHERE days LIKE '%' || $today || '%'
+                ";
+                cmd.Parameters.AddWithValue("$today", today);
+
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var empId = reader.GetString(0);
+                    var shift = reader.GetString(1);
+                    var start = reader.GetString(2);
+                    var end = reader.GetString(3);
+                    var days = reader.GetString(4);
+                    
+                    LogHelper.Write($"  ✓ Found schedule: {empId} - {shift} ({start} - {end}) on {days}");
+                    result.Add((empId, shift, start, end, days));
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting today's schedules: {ex.Message}");
+            }
+            return result;
+        }
+
+        public (bool IsScheduled, string ShiftName, string StartTime, string EndTime) IsEmployeeScheduledToday(string employeeId)
+        {
+            try
+            {
+                var today = DateTime.Now.DayOfWeek.ToString();
+                
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT shift_name, start_time, end_time
+                    FROM EmployeeSchedules
+                    WHERE employee_id = $emp_id AND days LIKE '%' || $today || '%'
+                    LIMIT 1
+                ";
+                cmd.Parameters.AddWithValue("$emp_id", employeeId);
+                cmd.Parameters.AddWithValue("$today", today);
+
+                using var reader = cmd.ExecuteReader();
+                if (reader.Read())
+                {
+                    return (true, reader.GetString(0), reader.GetString(1), reader.GetString(2));
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error checking schedule for {employeeId}: {ex.Message}");
+            }
+            return (false, "", "", "");
+        }
+
+        public (bool IsWithinShiftTime, string Message) IsWithinShiftTimeWindow(string shiftStartTime, string shiftEndTime)
+        {
+            try
+            {
+                var now = DateTime.Now;
+                
+                // Parse shift start time
+                var startParts = shiftStartTime.Split(':');
+                if (startParts.Length < 2) return (true, ""); // If can't parse, allow
+                
+                int startHour = int.Parse(startParts[0]);
+                int startMinute = int.Parse(startParts[1]);
+                
+                // Parse shift end time
+                var endParts = shiftEndTime.Split(':');
+                if (endParts.Length < 2) return (true, "");
+                
+                int endHour = int.Parse(endParts[0]);
+                int endMinute = int.Parse(endParts[1]);
+                
+                // Create shift start and end times for today
+                var shiftStart = new DateTime(now.Year, now.Month, now.Day, startHour, startMinute, 0);
+                var shiftEnd = new DateTime(now.Year, now.Month, now.Day, endHour, endMinute, 0);
+                
+                // Handle overnight shifts (end time is next day)
+                if (shiftEnd <= shiftStart)
+                {
+                    shiftEnd = shiftEnd.AddDays(1);
+                }
+                
+                // Check if current time is before shift start (NO GRACE PERIOD)
+                if (now < shiftStart)
+                {
+                    var minutesUntilStart = (shiftStart - now).TotalMinutes;
+                    return (false, $"Shift hasn't started yet. Shift starts at {shiftStartTime}. Please wait {minutesUntilStart:F0} more minutes.");
+                }
+                
+                // Check if current time is after shift end
+                if (now > shiftEnd)
+                {
+                    return (false, $"Shift has ended. Shift time was {shiftStartTime} - {shiftEndTime}.");
+                }
+                
+                return (true, "");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error checking shift time window: {ex.Message}");
+                return (true, ""); // If error, allow attendance
+            }
+        }
+
+        public string DetermineAttendanceStatus(DateTime clockInTime, string shiftStartTime)
+        {
+            try
+            {
+                // Parse shift start time (format: "08:00" or "08:00:00")
+                var timeParts = shiftStartTime.Split(':');
+                if (timeParts.Length < 2) return "Present";
+                
+                int shiftHour = int.Parse(timeParts[0]);
+                int shiftMinute = int.Parse(timeParts[1]);
+                
+                var shiftStart = new DateTime(clockInTime.Year, clockInTime.Month, clockInTime.Day, shiftHour, shiftMinute, 0);
+                
+                // Calculate minutes late
+                var minutesLate = (clockInTime - shiftStart).TotalMinutes;
+                
+                // Get late threshold from settings
+                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
+                int lateThreshold = settingsService.GetLateThresholdMinutes();
+                
+                // If more than threshold minutes late, mark as Late
+                if (minutesLate > lateThreshold)
+                {
+                    LogHelper.Write($"⏰ Employee is {minutesLate:F0} minutes late (threshold: {lateThreshold} min)");
+                    return "Late";
+                }
+                
+                return "Present";
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error determining status: {ex.Message}");
+                return "Present";
+            }
+        }
+
+        /// <summary>
+        /// Mark employees as absent if their shift has ended and they didn't clock in
+        /// This should be called periodically (e.g., every hour or at end of day)
+        /// </summary>
+        public int MarkAbsentEmployees()
+        {
+            try
+            {
+                var now = DateTime.Now;
+                var today = now.ToString("yyyy-MM-dd");
+                var dayOfWeek = now.DayOfWeek.ToString();
+                
+                LogHelper.Write($"🔍 Checking for absent employees on {dayOfWeek}, {today}");
+                
+                // Get all schedules for today
+                var schedulesToday = GetTodaysSchedules();
+                
+                LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for today");
+                
+                if (schedulesToday.Count == 0)
+                {
+                    LogHelper.Write("ℹ️ No employees scheduled for today. Make sure schedules are synced from server.");
+                    return 0;
+                }
+                
+                int markedAbsent = 0;
+                
+                foreach (var schedule in schedulesToday)
+                {
+                    LogHelper.Write($"  📋 Checking {schedule.EmployeeId}: Shift {schedule.ShiftName} ({schedule.StartTime} - {schedule.EndTime})");
+                    
+                    // Check if shift has ended
+                    if (!HasShiftEnded(schedule.EndTime))
+                    {
+                        LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet ({schedule.EndTime})");
+                        continue;
+                    }
+                    
+                    // Check if employee has clocked in today
+                    var sessions = GetTodaySessions();
+                    bool hasAttendance = false;
+                    foreach (var s in sessions)
+                    {
+                        if (s.EmployeeId == schedule.EmployeeId && 
+                            (s.Status == "Present" || s.Status == "Late" || s.Status == "IN"))
+                        {
+                            hasAttendance = true;
+                            break;
+                        }
+                    }
+                    
+                    if (hasAttendance)
+                    {
+                        LogHelper.Write($"  ✓ {schedule.EmployeeId} - Has attendance");
+                        continue;
+                    }
+                    
+                    // Employee is absent - create absent record locally
+                    using var conn = new SqliteConnection(_connString);
+                    conn.Open();
+                    
+                    // Check if absent record already exists
+                    using var checkCmd = conn.CreateCommand();
+                    checkCmd.CommandText = @"
+                        SELECT COUNT(1) FROM AttendanceSessions 
+                        WHERE employee_id = $id AND date = $date AND status = 'Absent'
+                    ";
+                    checkCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
+                    checkCmd.Parameters.AddWithValue("$date", today);
+                    
+                    var exists = Convert.ToInt32(checkCmd.ExecuteScalar()) > 0;
+                    
+                    if (!exists)
+                    {
+                        // Create absent record with empty string instead of NULL for clock_in
+                        using var insertCmd = conn.CreateCommand();
+                        insertCmd.CommandText = @"
+                            INSERT INTO AttendanceSessions (employee_id, date, clock_in, clock_out, total_hours, status)
+                            VALUES ($id, $date, '', '', 0, 'Absent')
+                        ";
+                        insertCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
+                        insertCmd.Parameters.AddWithValue("$date", today);
+                        insertCmd.ExecuteNonQuery();
+                        
+                        markedAbsent++;
+                        LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent");
+                    }
+                }
+                
+                LogHelper.Write($"✅ Absent marking complete: {markedAbsent} employees marked absent");
+                return markedAbsent;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error marking absent employees: {ex.Message}");
+                return 0;
+            }
+        }
+        
+        /// <summary>
+        /// Check if shift end time has passed
+        /// Supports both 24-hour format (HH:MM) and 12-hour format (HH:MM AM/PM)
+        /// </summary>
+        private bool HasShiftEnded(string endTime)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(endTime))
+                {
+                    LogHelper.Write($"⚠️ HasShiftEnded: endTime is null or empty");
+                    return false;
+                }
+
+                int hours, minutes;
+                
+                // Check if it's 12-hour format with AM/PM
+                var parts = endTime.Split(' ');
+                if (parts.Length == 2)
+                {
+                    // 12-hour format: "05:00 PM"
+                    var timeParts = parts[0].Split(':');
+                    if (timeParts.Length != 2) 
+                    {
+                        LogHelper.Write($"⚠️ HasShiftEnded: Invalid time format: {endTime}");
+                        return false;
+                    }
+                    
+                    hours = int.Parse(timeParts[0]);
+                    minutes = int.Parse(timeParts[1]);
+                    var period = parts[1].ToUpper();
+                    
+                    // Convert to 24-hour format
+                    if (period == "PM" && hours != 12)
+                        hours += 12;
+                    else if (period == "AM" && hours == 12)
+                        hours = 0;
+                }
+                else
+                {
+                    // 24-hour format: "17:00"
+                    var timeParts = endTime.Split(':');
+                    if (timeParts.Length < 2)
+                    {
+                        LogHelper.Write($"⚠️ HasShiftEnded: Invalid time format: {endTime}");
+                        return false;
+                    }
+                    
+                    hours = int.Parse(timeParts[0]);
+                    minutes = int.Parse(timeParts[1]);
+                }
+                
+                var shiftEndMinutes = hours * 60 + minutes;
+                var currentMinutes = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
+                
+                bool ended = currentMinutes >= shiftEndMinutes;
+                LogHelper.Write($"  🕐 Shift end: {endTime} ({hours:D2}:{minutes:D2}) = {shiftEndMinutes} min, Current: {DateTime.Now:HH:mm} = {currentMinutes} min, Ended: {ended}");
+                
+                return ended;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 HasShiftEnded error for '{endTime}': {ex.Message}");
+                return false;
             }
         }
     }

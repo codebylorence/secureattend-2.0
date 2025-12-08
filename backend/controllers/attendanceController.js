@@ -20,12 +20,15 @@ export const recordAttendance = async (req, res) => {
     const date = clockInDate.toISOString().split('T')[0];
 
     // Check if there's an open session for this employee today
+    // Look for sessions with Present, Late, or legacy IN status that don't have clock_out
     const openSession = await Attendance.findOne({
       where: {
         employee_id,
         date,
         clock_out: null,
-        status: "IN"
+        status: {
+          [Op.in]: ["Present", "Late", "IN"] // Support new and legacy statuses
+        }
       }
     });
 
@@ -36,7 +39,8 @@ export const recordAttendance = async (req, res) => {
       
       openSession.clock_out = clockOutDate;
       openSession.total_hours = totalHours;
-      openSession.status = "COMPLETED";
+      // Keep the original status (Present or Late) - don't change to COMPLETED
+      // The status field now represents punctuality, not completion state
       await openSession.save();
 
       return res.status(200).json({
@@ -49,7 +53,7 @@ export const recordAttendance = async (req, res) => {
         employee_id,
         date,
         clock_in: clockInDate,
-        status: status || "IN"
+        status: status || "Present" // Default to Present instead of IN
       });
 
       return res.status(201).json({

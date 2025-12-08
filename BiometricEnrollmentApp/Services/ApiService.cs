@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -82,6 +83,37 @@ namespace BiometricEnrollmentApp.Services
                 return false;
             }
         }
+
+        public async Task<List<EmployeeSchedule>?> GetPublishedSchedulesAsync()
+        {
+            try
+            {
+                LogHelper.Write("📥 Fetching published schedules from server...");
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/employee-schedules/published");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    var schedules = JsonSerializer.Deserialize<List<EmployeeSchedule>>(json, new JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    
+                    LogHelper.Write($"✅ Retrieved {schedules?.Count ?? 0} published schedule(s)");
+                    return schedules;
+                }
+                else
+                {
+                    LogHelper.Write($"⚠️ Failed to get schedules: {response.StatusCode}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting schedules: {ex.Message}");
+                return null;
+            }
+        }
     }
 
     public class EmployeeDetails
@@ -95,5 +127,21 @@ namespace BiometricEnrollmentApp.Services
         public string? Email { get; set; }
         public string? Photo { get; set; }
         public string? Status { get; set; }
+    }
+
+    public class EmployeeSchedule
+    {
+        public int Id { get; set; }
+        public string? Employee_Id { get; set; }
+        public int Template_Id { get; set; }
+        public string? Shift_Name { get; set; }
+        public string? Start_Time { get; set; }
+        public string? End_Time { get; set; }
+        public List<string>? Days { get; set; }
+        public Dictionary<string, List<string>>? Schedule_Dates { get; set; }
+        public string? Department { get; set; }
+        public string? Assigned_By { get; set; }
+        public DateTime? Created_At { get; set; }
+        public DateTime? Updated_At { get; set; }
     }
 }

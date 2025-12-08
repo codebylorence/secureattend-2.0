@@ -151,6 +151,34 @@ export const getTodaysEmployeeSchedule = async (req, res) => {
   }
 };
 
+// GET /api/employee-schedules/published - Get all published schedules for biometric app
+export const getPublishedSchedules = async (req, res) => {
+  try {
+    const schedules = await getAllEmployeeSchedules();
+    
+    // Transform to format suitable for biometric app
+    const publishedSchedules = schedules.map(schedule => ({
+      id: schedule.id,
+      employee_id: schedule.employee_id,
+      template_id: schedule.template_id,
+      shift_name: schedule.template.shift_name,
+      start_time: schedule.template.start_time,
+      end_time: schedule.template.end_time,
+      days: schedule.days,
+      schedule_dates: schedule.schedule_dates,
+      department: schedule.template.department,
+      assigned_by: schedule.assigned_by,
+      created_at: schedule.createdAt,
+      updated_at: schedule.updatedAt
+    }));
+    
+    res.status(200).json(publishedSchedules);
+  } catch (error) {
+    console.error("Error fetching published schedules:", error);
+    res.status(500).json({ message: "Error fetching published schedules" });
+  }
+};
+
 // POST /api/employee-schedules/regenerate-weekly
 export const regenerateWeekly = async (req, res) => {
   try {

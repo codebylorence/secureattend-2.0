@@ -2,74 +2,55 @@ import Employee from "../models/employee.js";
 import User from "../models/user.js";
 import bcrypt from "bcryptjs";
 
-//  Get all employees
 export const getAllEmployees = async () => {
-  return await Employee.findAll();
+  return await Employee.findAll({
+    order: [["createdAt", "DESC"]],
+  });
 };
 
-//  Add new employee
 export const createEmployee = async (employeeData) => {
-  const {
-    employee_id,
-    fullname,
-    department,
-    position,
-    contact_number,
-    email,
-    status,
-  } = employeeData;
-
-  // Create employee
-  const employee = await Employee.create({
-    employee_id,
-    fullname,
-    department,
-    position,
-    contact_number,
-    email,
-    status,
-  });
-
-  // Default password for new users
-  const defaultPassword = "123456";
-  const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-
-  // Determine role based on position
-  const normalizedPosition = position ? position.toLowerCase() : "";
-  const role = normalizedPosition.includes("team") ? "teamleader" : "employee";
-
-  // Create linked user account
-  await User.create({
-    username: employee_id,
-    password: hashedPassword,
-    role,
-    employeeId: employee.id,
-  });
-
-  return {
-    message: "Employee and user account created successfully",
-    employee,
-    defaultCredentials: { username: employee_id, password: defaultPassword, role },
-  };
+  const employee = await Employee.create(employeeData);
+  
+  // Auto-create user account for Team Leaders
+  if (employeeData.position === "Team Leader") {
+    try {
+      const defaultPassword = await bcrypt.hash("teamleader123", 10);
+      await User.create({
+        username: employeeData.employee_id,
+        password: defaultPassword,
+        role: "teamleader",
+        employeeId: employee.id,
+      });
+      console.log(`✅ User account created for Team Leader: ${employeeData.employee_id}`);
+    } catch (error) {
+      console.error(`❌ Failed to create user account for ${employeeData.employee_id}:`, error);
+    }
+  }
+  
+  return employee;
 };
 
-
-//  Delete employee by ID
 export const removeEmployee = async (id) => {
-  const deleted = await Employee.destroy({ where: { id } });
-  return deleted;
-};
-
-//  Update employee by ID
-export const updateEmployee = async (id, updatedData) => {
   const employee = await Employee.findByPk(id);
   if (!employee) return null;
 
-  await employee.update(updatedData);
+  // Delete associated user account if exists
+  await User.destroy({ where: { employeeId: id } });
+
+  await employee.destroy();
+  return true;
+};
+
+export const updateEmployee = async (id, updates) => {
+  const employee = await Employee.findByPk(id);
+  if (!employee) return null;
+
+  await employee.update(updates);
   return employee;
 };
 
 export const getEmployeeByEmployeeId = async (employee_id) => {
-  return await Employee.findOne({ where: { employee_id } });
+  return await Employee.findOne({
+    where: { employee_id },
+  });
 };
-

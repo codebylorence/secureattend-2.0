@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,9 @@ namespace BiometricEnrollmentApp
         private CancellationTokenSource? _overlayCts;
         private CancellationTokenSource? _continuousScanCts;
         private static bool _isAttendancePageActive = false;
+        private System.Timers.Timer? _clockTimer;
+        private System.Timers.Timer? _absentMarkingTimer;
+        private System.Timers.Timer? _gridRefreshTimer;
 
         public AttendancePage() : this(new ZKTecoService()) { }
 
@@ -36,6 +40,39 @@ namespace BiometricEnrollmentApp
             var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
             syncTimer.Elapsed += async (_, _) => await SyncDeletedEmployeesAsync();
             syncTimer.Start();
+
+            // Start clock timer
+            _clockTimer = new System.Timers.Timer(1000); // Update every second
+            _clockTimer.Elapsed += (_, _) => Dispatcher.Invoke(UpdateClock);
+            _clockTimer.Start();
+            UpdateClock(); // Initial update
+            
+            // Start attendance grid auto-refresh timer (every 5 seconds for real-time updates)
+            _gridRefreshTimer = new System.Timers.Timer(5000); // every 5 seconds
+            _gridRefreshTimer.Elapsed += (_, _) => Dispatcher.Invoke(() => RefreshAttendances());
+            _gridRefreshTimer.Start();
+            
+            // Start absent marking timer (runs every hour)
+            _absentMarkingTimer = new System.Timers.Timer(60 * 60 * 1000); // every hour
+            _absentMarkingTimer.Elapsed += async (_, _) => await MarkAndSyncAbsentEmployeesAsync();
+            _absentMarkingTimer.Start();
+            
+            // Load schedules on startup (one-time)
+            Task.Run(async () => 
+            {
+                await SyncSchedulesFromServerAsync();
+            });
+        }
+
+        private void UpdateClock()
+        {
+            try
+            {
+                var now = DateTime.Now;
+                ClockTextBlock.Text = now.ToString("HH:mm:ss");
+                DateTextBlock.Text = now.ToString("MMMM dd, yyyy");
+            }
+            catch { }
         }
 
         private void AttendancePage_Unloaded(object? sender, RoutedEventArgs e)
@@ -43,7 +80,96 @@ namespace BiometricEnrollmentApp
             // Stop continuous scanning when leaving attendance page
             _isAttendancePageActive = false;
             _continuousScanCts?.Cancel();
+            _clockTimer?.Stop();
+            _clockTimer?.Dispose();
+            _gridRefreshTimer?.Stop();
+            _gridRefreshTimer?.Dispose();
+            _absentMarkingTimer?.Stop();
+            _absentMarkingTimer?.Dispose();
             LogHelper.Write("📴 Attendance page unloaded - continuous scanning stopped");
+        }
+        
+        private async Task MarkAndSyncAbsentEmployeesAsync()
+        {
+            try
+            {
+                LogHelper.Write("⏰ Running absent marking check...");
+                
+                // Mark absent employees locally (using current schedules in database)
+                int markedAbsent = _dataService.MarkAbsentEmployees();
+                
+                LogHelper.Write($"📊 Absent marking result: {markedAbsent} new absent record(s)");
+                
+                // Always sync all absent records to server (not just new ones)
+                var sessions = _dataService.GetTodaySessions();
+                var absentSessions = sessions.Where(s => s.Status == "Absent").ToList();
+                
+                if (absentSessions.Count > 0)
+                {
+                    LogHelper.Write($"📤 Syncing {absentSessions.Count} absent record(s) to server...");
+                    
+                    int synced = 0;
+                    foreach (var session in absentSessions)
+                    {
+                        try
+                        {
+                            await _apiService.SendAttendanceAsync(
+                                session.EmployeeId,
+                                DateTime.Now,
+                                null,
+                                "Absent"
+                            );
+                            synced++;
+                            LogHelper.Write($"  ✅ Synced absent record for {session.EmployeeId}");
+                        }
+                        catch (Exception ex)
+                        {
+                            LogHelper.Write($"  ❌ Failed to sync absent record for {session.EmployeeId}: {ex.Message}");
+                        }
+                    }
+                    
+                    LogHelper.Write($"✅ Sync complete: {synced}/{absentSessions.Count} absent records synced to server");
+                    
+                    // Refresh the attendance grid immediately
+                    Dispatcher.Invoke(() => 
+                    {
+                        RefreshAttendances();
+                        UpdateStatus($"✅ {markedAbsent} new absent, {synced} synced to server");
+                    });
+                }
+                else if (markedAbsent == 0)
+                {
+                    LogHelper.Write("ℹ️ No employees marked absent (all scheduled employees have attendance records)");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in absent marking: {ex.Message}");
+            }
+        }
+
+        private async Task SyncSchedulesFromServerAsync()
+        {
+            try
+            {
+                LogHelper.Write("📥 Syncing schedules from server...");
+                
+                var schedules = await _apiService.GetPublishedSchedulesAsync();
+                
+                if (schedules != null && schedules.Count > 0)
+                {
+                    int updated = _dataService.UpdateSchedules(schedules);
+                    LogHelper.Write($"✅ Synced {updated} schedule(s) from server");
+                }
+                else
+                {
+                    LogHelper.Write("ℹ️ No published schedules found on server");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error syncing schedules: {ex.Message}");
+            }
         }
 
         private void AttendancePage_Loaded(object? sender, RoutedEventArgs e)
@@ -241,39 +367,67 @@ namespace BiometricEnrollmentApp
                             if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                             {
                                 DateTime clockInTime = DateTime.Parse(session.ClockIn);
-                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, "COMPLETED"));
+                                // Keep the original status (Present or Late) when clocking out
+                                string finalStatus = session.Status; // Will be "Present" or "Late"
+                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, finalStatus));
                             }
                             
                             Dispatcher.Invoke(() => UpdateStatus(hours >= 0 ? $"✅ Clock-out recorded. Hours: {hours:F2}" : "⚠️ Clock-out failed."));
                         }
                         else
                         {
-                            // No open session. Check if already completed today
-                            bool hasCompleted = false;
-                            try
+                            // No open session. Check if employee is scheduled today
+                            var scheduleCheck = _data_service_get().IsEmployeeScheduledToday(matchedEmployeeId);
+                            
+                            if (!scheduleCheck.IsScheduled)
                             {
-                                var todaySessions = _data_service_get().GetTodaySessions();
-                                hasCompleted = todaySessions.Any(s => s.EmployeeId == matchedEmployeeId && string.Equals(s.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase));
-                            }
-                            catch (Exception ex)
-                            {
-                                LogHelper.Write($"Completed-session check failed: {ex}");
-                                hasCompleted = false;
-                            }
-
-                            if (hasCompleted)
-                            {
-                                Dispatcher.Invoke(() => UpdateStatus($"⚠️ Already completed attendance for today."));
+                                Dispatcher.Invoke(() => UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today."));
+                                LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {DateTime.Now.DayOfWeek}");
                             }
                             else
                             {
-                                // create new clock-in
-                                long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, "IN");
+                                // Check if current time is within shift time window
+                                var timeWindowCheck = _data_service_get().IsWithinShiftTimeWindow(scheduleCheck.StartTime, scheduleCheck.EndTime);
                                 
-                                // Send clock-in to server
-                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, "IN"));
-                                
-                                Dispatcher.Invoke(() => UpdateStatus(sid > 0 ? $"✅ Clock-in recorded at {now:HH:mm:ss}" : "⚠️ Clock-in failed."));
+                                if (!timeWindowCheck.IsWithinShiftTime)
+                                {
+                                    Dispatcher.Invoke(() => UpdateStatus($"⚠️ {timeWindowCheck.Message}"));
+                                    LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} - {timeWindowCheck.Message}");
+                                }
+                                else
+                                {
+                                    // Check if already completed today
+                                    bool hasCompleted = false;
+                                    try
+                                    {
+                                        var todaySessions = _data_service_get().GetTodaySessions();
+                                        hasCompleted = todaySessions.Any(s => s.EmployeeId == matchedEmployeeId && (s.Status == "Present" || s.Status == "Late"));
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        LogHelper.Write($"Completed-session check failed: {ex}");
+                                        hasCompleted = false;
+                                    }
+
+                                    if (hasCompleted)
+                                    {
+                                        Dispatcher.Invoke(() => UpdateStatus($"⚠️ Already clocked in for today."));
+                                    }
+                                    else
+                                    {
+                                        // Determine status based on shift start time
+                                        string status = _data_service_get().DetermineAttendanceStatus(now, scheduleCheck.StartTime);
+                                        
+                                        // create new clock-in
+                                        long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, status);
+                                        
+                                        // Send clock-in to server
+                                        Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, status));
+                                        
+                                        string statusEmoji = status == "Late" ? "⏰" : "✅";
+                                        Dispatcher.Invoke(() => UpdateStatus(sid > 0 ? $"{statusEmoji} Clock-in recorded at {now:HH:mm:ss} - {status}" : "⚠️ Clock-in failed."));
+                                    }
+                                }
                             }
                         }
                     }
@@ -323,7 +477,20 @@ namespace BiometricEnrollmentApp
             catch (Exception ex) { UpdateStatus($"❌ Navigation error: {ex.Message}"); }
         }
 
-        private void RefreshBtn_Click(object sender, RoutedEventArgs e) => RefreshAttendances();
+        private void RefreshBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                UpdateStatus("🔄 Refreshing attendance list...");
+                RefreshAttendances();
+                UpdateStatus("✅ Refreshed!");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Refresh error: {ex.Message}");
+                RefreshAttendances();
+            }
+        }
 
         private void RefreshAttendances()
         {
@@ -692,7 +859,9 @@ namespace BiometricEnrollmentApp
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                     {
                         DateTime clockInTime = DateTime.Parse(session.ClockIn);
-                        Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, "COMPLETED"));
+                        // Keep the original status (Present or Late) when clocking out
+                        string finalStatus = session.Status;
+                        Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, finalStatus));
                     }
                     
                     window.UpdateStatus(hours >= 0 ? $"✅ Clock-out recorded. Hours: {hours:F2}" : "⚠️ Clock-out failed.");
@@ -700,34 +869,62 @@ namespace BiometricEnrollmentApp
                 }
                 else
                 {
-                    // No open session. If user already has a completed session today, do not create another clock-in.
-                    bool hasCompleted = false;
-                    try
+                    // No open session. Check if employee is scheduled today
+                    var scheduleCheck = _data_service_get().IsEmployeeScheduledToday(matchedEmployeeId);
+                    
+                    if (!scheduleCheck.IsScheduled)
                     {
-                        var todaySessions = _data_service_get().GetTodaySessions();
-                        hasCompleted = todaySessions.Any(s => s.EmployeeId == matchedEmployeeId && string.Equals(s.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase));
-                    }
-                    catch (Exception ex)
-                    {
-                        LogHelper.Write($"Completed-session check failed: {ex}");
-                        hasCompleted = false;
-                    }
-
-                    if (hasCompleted)
-                    {
-                        window.UpdateStatus($"⚠️ Already completed attendance for today.");
-                        Thread.Sleep(2000);
+                        window.UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today.");
+                        LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {DateTime.Now.DayOfWeek}");
+                        Thread.Sleep(2500);
                     }
                     else
                     {
-                        // create new clock-in
-                        long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, "IN");
+                        // Check if current time is within shift time window
+                        var timeWindowCheck = _data_service_get().IsWithinShiftTimeWindow(scheduleCheck.StartTime, scheduleCheck.EndTime);
                         
-                        // Send clock-in to server
-                        Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, "IN"));
-                        
-                        window.UpdateStatus(sid > 0 ? $"✅ Clock-in recorded at {now:HH:mm:ss}" : "⚠️ Clock-in failed.");
-                        Thread.Sleep(2000);
+                        if (!timeWindowCheck.IsWithinShiftTime)
+                        {
+                            window.UpdateStatus($"⚠️ {timeWindowCheck.Message}");
+                            LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} - {timeWindowCheck.Message}");
+                            Thread.Sleep(2500);
+                        }
+                        else
+                        {
+                            // Check if already clocked in today
+                            bool hasCompleted = false;
+                            try
+                            {
+                                var todaySessions = _data_service_get().GetTodaySessions();
+                                hasCompleted = todaySessions.Any(s => s.EmployeeId == matchedEmployeeId && (s.Status == "Present" || s.Status == "Late"));
+                            }
+                            catch (Exception ex)
+                            {
+                                LogHelper.Write($"Completed-session check failed: {ex}");
+                                hasCompleted = false;
+                            }
+
+                            if (hasCompleted)
+                            {
+                                window.UpdateStatus($"⚠️ Already clocked in for today.");
+                                Thread.Sleep(2000);
+                            }
+                            else
+                            {
+                                // Determine status based on shift start time
+                                string status = _data_service_get().DetermineAttendanceStatus(now, scheduleCheck.StartTime);
+                                
+                                // create new clock-in
+                                long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, status);
+                                
+                                // Send clock-in to server
+                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, status));
+                                
+                                string statusEmoji = status == "Late" ? "⏰" : "✅";
+                                window.UpdateStatus(sid > 0 ? $"{statusEmoji} Clock-in recorded at {now:HH:mm:ss} - {status}" : "⚠️ Clock-in failed.");
+                                Thread.Sleep(2000);
+                            }
+                        }
                     }
                 }
             }
@@ -855,6 +1052,48 @@ namespace BiometricEnrollmentApp
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Sync error: {ex.Message}");
+            }
+        }
+
+        private async void UpdateScheduleBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                UpdateStatus("📥 Fetching schedules from server...");
+                UpdateScheduleBtn.IsEnabled = false;
+
+                var schedules = await _apiService.GetPublishedSchedulesAsync();
+
+                if (schedules == null || schedules.Count == 0)
+                {
+                    UpdateStatus("⚠️ No schedules found on server");
+                    MessageBox.Show("No published schedules found on the server.", "No Schedules", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // Store schedules in local database
+                int updatedCount = _dataService.UpdateSchedules(schedules);
+
+                UpdateStatus($"✅ Successfully updated {updatedCount} schedule(s)");
+                MessageBox.Show($"Successfully updated {updatedCount} employee schedule(s) from the server.", "Update Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                
+                LogHelper.Write($"✅ Updated {updatedCount} schedules from server");
+            }
+            catch (HttpRequestException ex)
+            {
+                UpdateStatus("❌ Network error - Check WiFi connection");
+                MessageBox.Show($"Network error: {ex.Message}\n\nPlease check your WiFi connection and try again.", "Connection Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogHelper.Write($"💥 Network error updating schedules: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("❌ Failed to update schedules");
+                MessageBox.Show($"Error updating schedules: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogHelper.Write($"💥 Error updating schedules: {ex.Message}");
+            }
+            finally
+            {
+                UpdateScheduleBtn.IsEnabled = true;
             }
         }
     }

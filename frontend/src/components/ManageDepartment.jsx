@@ -280,11 +280,17 @@ export default function ManageDepartment() {
                           className="border rounded px-2 py-1 w-full"
                         >
                           <option value="">No Manager</option>
-                          {teamLeaders.map((leader) => (
-                            <option key={leader.id} value={leader.employee?.fullname || leader.username}>
-                              {leader.employee?.fullname || leader.username}
-                            </option>
-                          ))}
+                          {teamLeaders.length === 0 ? (
+                            <option disabled>No team leaders available</option>
+                          ) : (
+                            teamLeaders.map((leader) => (
+                              <option key={leader.id} value={leader.employee?.fullname || leader.username}>
+                                {leader.employee?.fullname || leader.username} 
+                                {leader.employee?.employee_id && ` (${leader.employee.employee_id})`}
+                                {leader.employee?.department && leader.employee.department !== dept.name && ` - ${leader.employee.department}`}
+                              </option>
+                            ))
+                          )}
                         </select>
                       ) : (
                         dept.manager || "-"

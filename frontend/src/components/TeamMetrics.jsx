@@ -28,10 +28,14 @@ export default function TeamMetrics({ department }) {
       );
       const departmentEmployeeIds = new Set(departmentEmployees.map(emp => emp.employee_id));
 
-      // Get today's day name and date
+      // Get today's day name and date in local timezone
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const today = dayNames[new Date().getDay()];
-      const todayDate = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = dayNames[now.getDay()];
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const todayDate = `${year}-${month}-${day}`;
 
       // Find department employees scheduled for today
       const scheduledEmployeeIds = new Set();
@@ -40,12 +44,15 @@ export default function TeamMetrics({ department }) {
         if (!departmentEmployeeIds.has(schedule.employee_id)) return;
         
         // Check if employee is scheduled today
-        if (schedule.schedule_dates) {
-          const todaySchedule = schedule.schedule_dates[today];
-          if (todaySchedule && todaySchedule.includes(todayDate)) {
+        // First check schedule_dates object for today's date
+        if (schedule.schedule_dates && schedule.schedule_dates[today]) {
+          const todayScheduleDates = schedule.schedule_dates[today];
+          if (Array.isArray(todayScheduleDates) && todayScheduleDates.includes(todayDate)) {
             scheduledEmployeeIds.add(schedule.employee_id);
           }
-        } else if (schedule.days && schedule.days.includes(today)) {
+        }
+        // Fallback: check if today is in the days array (for schedules without specific dates)
+        else if (schedule.days && Array.isArray(schedule.days) && schedule.days.includes(today)) {
           scheduledEmployeeIds.add(schedule.employee_id);
         }
       });
@@ -57,20 +64,23 @@ export default function TeamMetrics({ department }) {
         departmentEmployeeIds.has(att.employee_id)
       );
 
-      const present = departmentAttendances.filter(att => att.clock_in).length;
+      // Count by status using the new status system
+      const present = departmentAttendances.filter(att => 
+        att.status === "Present" || att.status === "COMPLETED" // Include legacy
+      ).length;
+
+      const late = departmentAttendances.filter(att => 
+        att.status === "Late"
+      ).length;
       
-      // Count absent (scheduled employees who haven't clocked in)
-      const presentEmployeeIds = new Set(departmentAttendances.filter(att => att.clock_in).map(att => att.employee_id));
-      const absent = Array.from(scheduledEmployeeIds).filter(empId => !presentEmployeeIds.has(empId)).length;
-      
-      // Count late (clock in after 8:15 AM - 15 min grace period)
-      const late = departmentAttendances.filter(att => {
-        if (!att.clock_in) return false;
-        const clockIn = new Date(att.clock_in);
-        const hours = clockIn.getHours();
-        const minutes = clockIn.getMinutes();
-        return hours > 8 || (hours === 8 && minutes > 15);
-      }).length;
+      // Count absent - only count actual "Absent" status records
+      const absentRecords = departmentAttendances.filter(att => att.status === "Absent");
+      console.log('🔍 Team Metrics Debug:');
+      console.log('  Department:', department);
+      console.log('  Total department attendances:', departmentAttendances.length);
+      console.log('  Absent records:', absentRecords);
+      console.log('  Absent count:', absentRecords.length);
+      const absent = absentRecords.length;
 
       setMetrics({ present, absent, late, scheduled });
     } catch (error) {

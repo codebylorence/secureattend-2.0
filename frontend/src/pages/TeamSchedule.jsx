@@ -118,6 +118,39 @@ export default function TeamSchedule() {
     return hours * 60 + minutes;
   };
 
+  // Check if a shift has started or ended for today
+  // This prevents scheduling employees to shifts that are ongoing or have already ended
+  const isShiftTimePassedForToday = (startTime, endTime) => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const shiftStartMinutes = parseTime(startTime);
+    const shiftEndMinutes = parseTime(endTime);
+    
+    // Return true if shift has started (ongoing or ended)
+    return currentMinutes >= shiftStartMinutes;
+  };
+
+  const getDayOfWeek = (date) => {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return days[date.getDay()];
+  };
+
+  // Check if a specific day is today and the shift time has started or passed
+  // Used to disable day selection for shifts that are ongoing or have already ended today
+  const isTodayAndShiftPassed = (day) => {
+    if (!selectedTemplate) return false;
+    
+    const today = new Date();
+    const todayDayName = getDayOfWeek(today);
+    
+    // Check if the selected day is today
+    if (day === todayDayName) {
+      return isShiftTimePassedForToday(selectedTemplate.start_time, selectedTemplate.end_time);
+    }
+    
+    return false;
+  };
+
   const hasTimeOverlap = (start1, end1, start2, end2) => {
     // Convert times to minutes
     const s1 = parseTime(start1);
@@ -633,38 +666,50 @@ export default function TeamSchedule() {
                 }
                 return acc;
               }, {})
-            ).map((template) => (
-              <div
-                key={template.id}
-                onClick={() => setSelectedTemplate({
-                  ...template, 
-                  days: template.allDays,
-                  day_limits: template.mergedDayLimits
-                })}
-                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                  selectedTemplate?.id === template.id
-                    ? "border-[#1E3A8A] bg-blue-50"
-                    : "border-gray-200 hover:border-blue-300"
-                }`}
-              >
-                <h3 className="font-semibold text-gray-800 mb-2">{template.shift_name}</h3>
-                <p className="text-sm text-gray-600 mb-1 flex items-center gap-1">
-                  <MdAccessTime size={16} /> {template.start_time} - {template.end_time}
-                </p>
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  {Object.keys(template.mergedDayLimits).length > 0 ? (
-                    <><MdCalendarToday size={14} /> {template.allDays.map(day => {
-                      const limit = template.mergedDayLimits[day];
-                      return limit ? `${day}(${limit})` : day;
-                    }).join(", ")}</>
-                  ) : template.member_limit ? (
-                    <><MdCalendarToday size={14} /> {template.allDays.join(", ")} (Limit: {template.member_limit} per day)</>
-                  ) : (
-                    <><MdCalendarToday size={14} /> {template.allDays.join(", ")}</>
+            ).map((template) => {
+              const today = new Date();
+              const todayDayName = getDayOfWeek(today);
+              const isTodayIncluded = template.allDays.includes(todayDayName);
+              const shiftPassedToday = isTodayIncluded && isShiftTimePassedForToday(template.start_time, template.end_time);
+              
+              return (
+                <div
+                  key={template.id}
+                  onClick={() => setSelectedTemplate({
+                    ...template, 
+                    days: template.allDays,
+                    day_limits: template.mergedDayLimits
+                  })}
+                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    selectedTemplate?.id === template.id
+                      ? "border-[#1E3A8A] bg-blue-50"
+                      : "border-gray-200 hover:border-blue-300"
+                  }`}
+                >
+                  <h3 className="font-semibold text-gray-800 mb-2">{template.shift_name}</h3>
+                  <p className="text-sm text-gray-600 mb-1 flex items-center gap-1">
+                    <MdAccessTime size={16} /> {template.start_time} - {template.end_time}
+                  </p>
+                  {shiftPassedToday && (
+                    <p className="text-xs text-orange-600 font-medium mb-1 flex items-center gap-1">
+                      <MdWarning size={14} /> Today's shift has started
+                    </p>
                   )}
-                </p>
-              </div>
-            ))}
+                  <p className="text-xs text-gray-500 flex items-center gap-1">
+                    {Object.keys(template.mergedDayLimits).length > 0 ? (
+                      <><MdCalendarToday size={14} /> {template.allDays.map(day => {
+                        const limit = template.mergedDayLimits[day];
+                        return limit ? `${day}(${limit})` : day;
+                      }).join(", ")}</>
+                    ) : template.member_limit ? (
+                      <><MdCalendarToday size={14} /> {template.allDays.join(", ")} (Limit: {template.member_limit} per day)</>
+                    ) : (
+                      <><MdCalendarToday size={14} /> {template.allDays.join(", ")}</>
+                    )}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -687,15 +732,25 @@ export default function TeamSchedule() {
             {selectedTemplate.allDays.map((day) => {
               const status = getMemberLimitStatus(day);
               const limit = selectedTemplate.day_limits?.[day] || selectedTemplate.member_limit;
+              const shiftPassed = isTodayAndShiftPassed(day);
               
               return (
                 <button
                   key={day}
                   onClick={() => {
+                    if (shiftPassed) {
+                      toast.warning(`Cannot schedule ${selectedTemplate.shift_name} for today. The shift (${selectedTemplate.start_time} - ${selectedTemplate.end_time}) has already started or is ongoing.`);
+                      return;
+                    }
                     setSelectedDay(day);
                     setSelectedEmployees([]);
                   }}
-                  className="border-2 border-gray-300 rounded-lg p-4 hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
+                  disabled={shiftPassed}
+                  className={`border-2 rounded-lg p-4 transition-all text-center ${
+                    shiftPassed
+                      ? "border-gray-200 bg-gray-100 cursor-not-allowed opacity-50"
+                      : "border-gray-300 hover:border-blue-500 hover:bg-blue-50"
+                  }`}
                 >
                   <p className="font-semibold text-gray-800 mb-1">{day}</p>
                   {limit && (
@@ -703,9 +758,11 @@ export default function TeamSchedule() {
                       {status.current}/{limit} assigned
                     </p>
                   )}
-                  {status.isFull && (
+                  {shiftPassed ? (
+                    <p className="text-xs text-red-600 font-medium mt-1">⏰ Shift Started</p>
+                  ) : status.isFull ? (
                     <p className="text-xs text-red-600 font-medium mt-1">Full</p>
-                  )}
+                  ) : null}
                 </button>
               );
             })}

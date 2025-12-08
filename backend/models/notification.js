@@ -18,7 +18,7 @@ const Notification = sequelize.define("Notification", {
     comment: "Employee ID who receives the notification"
   },
   type: {
-    type: DataTypes.ENUM("schedule_update", "schedule_published", "general"),
+    type: DataTypes.ENUM("schedule_update", "schedule_published", "sched_delete", "general"),
     allowNull: false,
     defaultValue: "general"
   },

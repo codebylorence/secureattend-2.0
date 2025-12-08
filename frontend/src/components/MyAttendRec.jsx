@@ -115,9 +115,21 @@ export default function MyAttendRec() {
                       {attendance.total_hours ? `${attendance.total_hours.toFixed(2)} hrs` : "-"}
                     </td>
                     <td className="py-3 px-4 font-medium">
-                      <span className={attendance.status === "COMPLETED" ? "text-green-600" : "text-blue-600"}>
-                        {attendance.status === "COMPLETED" ? "Completed" : "Clocked In"}
-                      </span>
+                      {(() => {
+                        const statusDisplay = {
+                          'Present': { label: 'Present', color: 'text-green-600' },
+                          'Late': { label: 'Late', color: 'text-orange-600' },
+                          'Absent': { label: 'Absent', color: 'text-red-600' },
+                          'IN': { label: 'Clocked In', color: 'text-blue-600' },
+                          'COMPLETED': { label: 'Completed', color: 'text-green-600' },
+                        };
+                        const display = statusDisplay[attendance.status] || { label: attendance.status, color: 'text-gray-600' };
+                        return (
+                          <span className={display.color}>
+                            {display.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))

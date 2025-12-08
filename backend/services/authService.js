@@ -1,28 +1,27 @@
-import User from "../models/user.js";
-import Employee from "../models/employee.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import User from "../models/user.js";
+import Employee from "../models/employee.js";
 
-// 🔒 Use the secret from .env for both signing & verification
-const JWT_SECRET = process.env.JWT_SECRET || "secureattend_secret_key";
-
-// 🔑 LOGIN SERVICE
 export const verifyLogin = async (username, password) => {
   const user = await User.findOne({
     where: { username },
     include: [{ model: Employee, as: "employee" }],
   });
 
-  if (!user) throw new Error("User not found");
+  if (!user) {
+    throw new Error("Invalid username or password");
+  }
 
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) throw new Error("Invalid password");
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    throw new Error("Invalid username or password");
+  }
 
-  // Generate JWT
   const token = jwt.sign(
-    { id: user.id, role: user.role, username: user.username },
-    JWT_SECRET,
-    { expiresIn: "2h" }
+    { id: user.id, role: user.role },
+    process.env.JWT_SECRET || "your-secret-key",
+    { expiresIn: "24h" }
   );
 
   return {
@@ -32,26 +31,20 @@ export const verifyLogin = async (username, password) => {
       id: user.id,
       username: user.username,
       role: user.role,
+      employeeId: user.employeeId,
       employee: user.employee,
     },
   };
 };
 
-// 🔐 CHANGE USERNAME / PASSWORD
-export const changeUserCredentials = async (userId, username, password) => {
-  const user = await User.findByPk(userId);
-  if (!user) throw new Error("User not found");
-
-  if (username) user.username = username;
-  if (password) {
-    const hashed = await bcrypt.hash(password, 10);
-    user.password = hashed;
+export const changeUserCredentials = async (id, username, password) => {
+  const user = await User.findByPk(id);
+  if (!user) {
+    throw new Error("User not found");
   }
 
-  await user.save();
+  const hashedPassword = await bcrypt.hash(password, 10);
+  await user.update({ username, password: hashedPassword });
 
-  return {
-    message: "User credentials updated successfully",
-    user: { id: user.id, username: user.username },
-  };
+  return { message: "Credentials updated successfully" };
 };

@@ -1,52 +1,36 @@
 import cron from "node-cron";
-import EmployeeSchedule from "../models/employeeSchedule.js";
-import { Op } from "sequelize";
-import { regenerateWeeklySchedules } from "./employeeScheduleService.js";
+import Attendance from "../models/attendance.js";
 
 /**
- * Clean up expired employee schedules
- * Deletes schedules where end_date has passed
- */
-export const cleanupExpiredSchedules = async () => {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Format as YYYY-MM-DD
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
-    
-    // Delete schedules where end_date is in the past
-    const deletedCount = await EmployeeSchedule.destroy({
-      where: {
-        end_date: {
-          [Op.lt]: todayStr
-        },
-        status: "Active"
-      }
-    });
-    
-    if (deletedCount > 0) {
-      console.log(`🗑️  Cleaned up ${deletedCount} expired schedule(s) at ${new Date().toLocaleString()}`);
-    }
-  } catch (error) {
-    console.error("Error cleaning up expired schedules:", error);
-  }
-};
-
-/**
- * Start the schedule cleanup and regeneration cron job
- * Runs daily at midnight to check for expired schedules and regenerate weekly schedules
+ * Scheduled job to clean up invalid "Absent" records
+ * Runs every hour to remove premature absent records
  */
 export const startScheduleCleanupJob = () => {
-  // Run daily at midnight
-  cron.schedule("0 0 * * *", async () => {
-    console.log("🔄 Running schedule maintenance job...");
-    await cleanupExpiredSchedules();
-    await regenerateWeeklySchedules();
+  // Run every hour
+  cron.schedule("0 * * * *", async () => {
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      const todayDate = `${year}-${month}-${day}`;
+
+      // Delete all absent records for today
+      // They will be recreated correctly if still valid
+      const deleted = await Attendance.destroy({
+        where: {
+          date: todayDate,
+          status: "Absent",
+        },
+      });
+
+      if (deleted > 0) {
+        console.log(`🧹 Cleanup job: Removed ${deleted} invalid absent records`);
+      }
+    } catch (error) {
+      console.error("❌ Cleanup job error:", error);
+    }
   });
-  
-  console.log("✅ Schedule maintenance job started (runs daily at midnight)");
+
+  console.log("⏰ Schedule cleanup job started (runs every hour)");
 };

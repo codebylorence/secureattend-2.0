@@ -1,12 +1,8 @@
 import { useState, useEffect } from "react";
-import { MdCalendarToday, MdPeople } from "react-icons/md";
-import AssignSched from "../components/AssignSched";
-import AssignSchedWithDrafts from "../components/AssignSchedWithDrafts";
 import WeeklyTemplateView from "../components/WeeklyTemplateView";
 import { useSocket } from "../context/SocketContext";
 
 export default function ManageSchedule() {
-  const [selectedView, setSelectedView] = useState("weekly");
   const [refreshKey, setRefreshKey] = useState(0);
   const { socket } = useSocket();
 
@@ -66,35 +62,8 @@ export default function ManageSchedule() {
         </p>
       </div>
 
-      {/* View Selector Tabs */}
-      <div className="bg-white rounded-lg shadow-md p-2 mb-6">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setSelectedView("weekly")}
-            className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors ${
-              selectedView === "weekly"
-                ? "bg-[#1E3A8A] text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <MdCalendarToday className="inline mr-2" /> Weekly Schedule
-          </button>
-          <button
-            onClick={() => setSelectedView("assign")}
-            className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors ${
-              selectedView === "assign"
-                ? "bg-[#1E3A8A] text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <MdPeople className="inline mr-2" /> Assign to Employees
-          </button>
-        </div>
-      </div>
-
-      {/* Conditional Rendering */}
-      {selectedView === "weekly" && <WeeklyTemplateView key={`weekly-${refreshKey}`} />}
-      {selectedView === "assign" && <AssignSchedWithDrafts key={`assign-${refreshKey}`} />}
+      {/* Weekly Schedule View */}
+      <WeeklyTemplateView key={`weekly-${refreshKey}`} />
     </div>
   );
 }

@@ -27,46 +27,46 @@ export default function AdminMetrics() {
       // Count total active employees
       const totalEmployees = employees.filter(emp => emp.status === "Active").length;
 
-      // Get today's day name
+      // Get today's day name and date in local timezone
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const today = dayNames[new Date().getDay()];
-      const todayDate = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = dayNames[now.getDay()];
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const todayDate = `${year}-${month}-${day}`;
 
       // Find employees scheduled for today
       const scheduledEmployeeIds = new Set();
       schedules.forEach(schedule => {
         // Check if employee is scheduled today
-        if (schedule.schedule_dates) {
-          // Check specific dates
-          const todaySchedule = schedule.schedule_dates[today];
-          if (todaySchedule && todaySchedule.includes(todayDate)) {
+        // First check schedule_dates object for today's date
+        if (schedule.schedule_dates && schedule.schedule_dates[today]) {
+          const todayScheduleDates = schedule.schedule_dates[today];
+          if (Array.isArray(todayScheduleDates) && todayScheduleDates.includes(todayDate)) {
             scheduledEmployeeIds.add(schedule.employee_id);
           }
-        } else if (schedule.days && schedule.days.includes(today)) {
-          // Fallback: check if today is in their days array
+        }
+        // Fallback: check if today is in the days array (for schedules without specific dates)
+        else if (schedule.days && Array.isArray(schedule.days) && schedule.days.includes(today)) {
           scheduledEmployeeIds.add(schedule.employee_id);
         }
       });
 
       const scheduled = scheduledEmployeeIds.size;
 
-      // Count present (employees who clocked in today)
-      const present = todayAttendances.filter(att => att.clock_in).length;
+      // Count by status using the new status system
+      const present = todayAttendances.filter(att => 
+        att.status === "Present" || att.status === "COMPLETED" // Include legacy
+      ).length;
 
-      // Count absent (scheduled employees who haven't clocked in)
-      const presentEmployeeIds = new Set(todayAttendances.filter(att => att.clock_in).map(att => att.employee_id));
-      const absent = Array.from(scheduledEmployeeIds).filter(empId => !presentEmployeeIds.has(empId)).length;
+      const late = todayAttendances.filter(att => 
+        att.status === "Late"
+      ).length;
 
-      // Count late (clocked in after their shift start time)
-      // For now, using 8:15 AM as default, but should check individual shift times
-      const late = todayAttendances.filter(att => {
-        if (!att.clock_in) return false;
-        const clockIn = new Date(att.clock_in);
-        const hours = clockIn.getHours();
-        const minutes = clockIn.getMinutes();
-        // TODO: Check against employee's actual shift start time
-        return hours > 8 || (hours === 8 && minutes > 15);
-      }).length;
+      // Count absent - only count actual "Absent" status records
+      // Stale records are automatically cleaned up when schedules are assigned
+      const absent = todayAttendances.filter(att => att.status === "Absent").length;
 
       setMetrics({
         totalEmployees,

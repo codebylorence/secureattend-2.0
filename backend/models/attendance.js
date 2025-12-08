@@ -28,8 +28,9 @@ const Attendance = sequelize.define("Attendance", {
     allowNull: true,
   },
   status: {
-    type: DataTypes.ENUM("IN", "COMPLETED"),
-    defaultValue: "IN",
+    type: DataTypes.ENUM("IN", "COMPLETED", "Present", "Late", "Absent"),
+    defaultValue: "Present",
+    comment: "IN/COMPLETED are legacy values, use Present/Late/Absent for new records"
   },
 });
 

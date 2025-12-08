@@ -29,8 +29,8 @@ export default function LastAttendance() {
       if (employeeId) {
         const data = await getAttendances({ employee_id: employeeId });
         console.log("LastAttendance - Fetched data:", data);
-        // Get the most recent completed attendance
-        const completed = data.filter(a => a.status === "COMPLETED");
+        // Get the most recent completed attendance (Present, Late, or legacy COMPLETED)
+        const completed = data.filter(a => a.status === "Present" || a.status === "Late" || a.status === "COMPLETED");
         if (completed.length > 0) {
           setLastAttendance(completed[0]);
         }
@@ -95,7 +95,22 @@ export default function LastAttendance() {
                   <td className="py-3 px-4">
                     {lastAttendance.total_hours ? `${lastAttendance.total_hours.toFixed(2)} hrs` : "-"}
                   </td>
-                  <td className="py-3 px-4 text-green-600 font-medium">Completed</td>
+                  <td className="py-3 px-4 font-medium">
+                    {(() => {
+                      const statusDisplay = {
+                        'Present': { label: 'Present', color: 'text-green-600' },
+                        'Late': { label: 'Late', color: 'text-orange-600' },
+                        'IN': { label: 'Clocked In', color: 'text-blue-600' },
+                        'COMPLETED': { label: 'Completed', color: 'text-green-600' },
+                      };
+                      const display = statusDisplay[lastAttendance.status] || { label: lastAttendance.status, color: 'text-gray-600' };
+                      return (
+                        <span className={display.color}>
+                          {display.label}
+                        </span>
+                      );
+                    })()}
+                  </td>
                 </tr>
               )}
             </tbody>

@@ -33,35 +33,20 @@ export default function EmployeeMetrics() {
         return attDate >= thirtyDaysAgo;
       });
 
-      // Count present days (completed attendance records)
+      // Count by status using the new status system
       const present = recentAttendances.filter(att => 
-        att.status === "COMPLETED" && att.clock_in && att.clock_out
+        att.status === "Present" || att.status === "COMPLETED" // Include legacy
       ).length;
       
-      // Count late arrivals (clock in after scheduled start time or default 8:00 AM)
-      const late = recentAttendances.filter(att => {
-        if (!att.clock_in) return false;
-        const clockIn = new Date(att.clock_in);
-        const hours = clockIn.getHours();
-        const minutes = clockIn.getMinutes();
-        // Consider late if after 8:15 AM (15 min grace period)
-        return hours > 8 || (hours === 8 && minutes > 15);
-      }).length;
+      const late = recentAttendances.filter(att => 
+        att.status === "Late"
+      ).length;
 
-      // Calculate working days (excluding weekends)
-      let workingDays = 0;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      for (let d = new Date(thirtyDaysAgo); d <= today; d.setDate(d.getDate() + 1)) {
-        const dayOfWeek = d.getDay();
-        // Count Monday to Friday as working days
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-          workingDays++;
-        }
-      }
-      
-      const absent = Math.max(0, workingDays - present);
+      // Count absent - only count actual "Absent" status records
+      // This is consistent with Admin and Team metrics
+      const absent = recentAttendances.filter(att => 
+        att.status === "Absent"
+      ).length;
 
       // Calculate total overtime (hours worked beyond 8 hours per day)
       const totalOvertime = recentAttendances.reduce((sum, att) => {

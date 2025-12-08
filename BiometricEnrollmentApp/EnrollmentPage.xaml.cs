@@ -227,6 +227,98 @@ namespace BiometricEnrollmentApp
             return diff == 0;
         }
 
+        // ---------------- Settings handlers ----------------
+
+        private void SettingsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Load current setting
+                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
+                int currentThreshold = settingsService.GetLateThresholdMinutes();
+                LateThresholdInput.Text = currentThreshold.ToString();
+                
+                // Show overlay
+                SettingsOverlay.Visibility = Visibility.Visible;
+                SettingsStatus.Visibility = Visibility.Collapsed;
+                LateThresholdInput.Focus();
+                LateThresholdInput.SelectAll();
+                
+                LogHelper.Write($"⚙️ Settings opened (current threshold: {currentThreshold} min)");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error opening settings: {ex.Message}");
+            }
+        }
+
+        private void SettingsCancelBtn_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsOverlay.Visibility = Visibility.Collapsed;
+            SettingsStatus.Visibility = Visibility.Collapsed;
+            LogHelper.Write("⚙️ Settings cancelled");
+        }
+
+        private void SettingsSaveBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string input = LateThresholdInput.Text.Trim();
+                
+                if (!int.TryParse(input, out int minutes))
+                {
+                    SettingsStatus.Text = "❌ Please enter a valid number.";
+                    SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+                    SettingsStatus.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                if (minutes < 0 || minutes > 60)
+                {
+                    SettingsStatus.Text = "❌ Value must be between 0 and 60 minutes.";
+                    SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+                    SettingsStatus.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
+                bool success = settingsService.SetLateThresholdMinutes(minutes);
+
+                if (success)
+                {
+                    SettingsStatus.Text = $"✅ Late threshold updated to {minutes} minutes!";
+                    SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(5, 150, 105));
+                    SettingsStatus.Visibility = Visibility.Visible;
+                    
+                    LogHelper.Write($"✅ Late threshold updated to {minutes} minutes");
+                    
+                    // Close after 1.5 seconds
+                    var timer = new System.Windows.Threading.DispatcherTimer();
+                    timer.Interval = TimeSpan.FromSeconds(1.5);
+                    timer.Tick += (s, args) =>
+                    {
+                        timer.Stop();
+                        SettingsOverlay.Visibility = Visibility.Collapsed;
+                        SettingsStatus.Visibility = Visibility.Collapsed;
+                    };
+                    timer.Start();
+                }
+                else
+                {
+                    SettingsStatus.Text = "❌ Failed to save settings.";
+                    SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+                    SettingsStatus.Visibility = Visibility.Visible;
+                }
+            }
+            catch (Exception ex)
+            {
+                SettingsStatus.Text = $"❌ Error: {ex.Message}";
+                SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+                SettingsStatus.Visibility = Visibility.Visible;
+                LogHelper.Write($"💥 Error saving settings: {ex.Message}");
+            }
+        }
+
         // ---------------- Main handlers ----------------
 
         private void BackBtn_Click(object sender, RoutedEventArgs e)

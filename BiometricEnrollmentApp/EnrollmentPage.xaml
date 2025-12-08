@@ -73,6 +73,17 @@
                             Click="EnrollBtn_Click"
                             IsEnabled="False"
                             Margin="0,0,0,8"/>
+                    <Button x:Name="SettingsBtn"
+                            Content="⚙️ Settings"
+                            Height="36"
+                            Background="#6366f1"
+                            Foreground="White"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Click="SettingsBtn_Click"
+                            Margin="0,0,0,8"/>
                     <Button x:Name="BackBtn"
                             Content="← Back to Attendance"
                             Height="36"
@@ -400,6 +411,127 @@
                     </BeginStoryboard>
                 </EventTrigger>
             </Border.Triggers>
+        </Border>
+
+        <!-- Settings overlay -->
+        <Border x:Name="SettingsOverlay" Grid.ColumnSpan="2"
+                Background="#80000000"
+                Visibility="Collapsed"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
+            <Grid HorizontalAlignment="Center"
+                  VerticalAlignment="Center">
+                <Border Background="White"
+                        CornerRadius="15"
+                        Padding="28"
+                        Width="420"
+                        BorderBrush="#E2E8F0"
+                        BorderThickness="1">
+                    <StackPanel>
+                        <!-- Header -->
+                        <TextBlock Text="⚙️ Attendance Settings"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="#1E293B"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,14"/>
+
+                        <TextBlock Text="Configure attendance rules and thresholds."
+                                   FontSize="13"
+                                   Foreground="#475569"
+                                   TextAlignment="Center"
+                                   Margin="0,0,0,18"/>
+
+                        <!-- Late Threshold Setting -->
+                        <StackPanel Margin="0,0,0,12">
+                            <TextBlock Text="Late Threshold (minutes)"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="#334155"
+                                       Margin="0,0,0,6"/>
+                            <TextBlock Text="Employees clocking in after this many minutes will be marked as Late."
+                                       FontSize="12"
+                                       Foreground="#64748b"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8"/>
+                            <Border Background="#F8FAFC"
+                                    BorderBrush="#CBD5E1"
+                                    BorderThickness="1">
+                                <TextBox x:Name="LateThresholdInput"
+                                         Height="36"
+                                         Padding="8"
+                                         FontSize="14"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Text="15"/>
+                            </Border>
+                            <TextBlock Text="Current: 15 minutes (Default)"
+                                       FontSize="11"
+                                       Foreground="#64748b"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+
+                        <!-- Info Box -->
+                        <Border Background="#EFF6FF"
+                                BorderBrush="#BFDBFE"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                Margin="0,8,0,16">
+                            <StackPanel>
+                                <TextBlock Text="ℹ️ Examples:"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="#1E40AF"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock FontSize="11" Foreground="#1E40AF" TextWrapping="Wrap">
+                                    <Run Text="• 5 min: Strict (08:06 = Late)"/>
+                                    <LineBreak/>
+                                    <Run Text="• 15 min: Moderate (08:16 = Late)"/>
+                                    <LineBreak/>
+                                    <Run Text="• 30 min: Lenient (08:31 = Late)"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Status message -->
+                        <TextBlock x:Name="SettingsStatus"
+                                   Text=""
+                                   Foreground="#059669"
+                                   FontSize="13"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,0,0,8"/>
+
+                        <!-- Buttons -->
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Margin="0,8,0,0">
+                            <Button x:Name="SettingsCancelBtn"
+                                    Content="Cancel"
+                                    Width="100"
+                                    Height="36"
+                                    FontWeight="SemiBold"
+                                    Background="#E2E8F0"
+                                    Foreground="#1E293B"
+                                    BorderBrush="#CBD5E1"
+                                    BorderThickness="1"
+                                    Click="SettingsCancelBtn_Click"/>
+                            <Button x:Name="SettingsSaveBtn"
+                                    Content="Save"
+                                    Width="100"
+                                    Height="36"
+                                    FontWeight="SemiBold"
+                                    Margin="8,0,0,0"
+                                    Background="#059669"
+                                    Foreground="White"
+                                    BorderBrush="#059669"
+                                    BorderThickness="1"
+                                    Click="SettingsSaveBtn_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Border>
 
     </Grid>

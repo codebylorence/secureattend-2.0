@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa";
 import { getTodayAttendances } from "../api/AttendanceApi";
-import { getEmployeeSchedules } from "../api/ScheduleApi";
+import { getEmployeeScheduleById } from "../api/ScheduleApi";
 
 export default function TodaysSchedule() {
   const [status, setStatus] = useState("Not Clocked In");
@@ -37,12 +37,83 @@ export default function TodaysSchedule() {
       }
 
       // Fetch employee's schedules
-      const schedules = await getEmployeeSchedules(employeeId);
+      const schedules = await getEmployeeScheduleById(employeeId);
       const currentDay = getCurrentDay();
       
-      // Find schedule for today
-      const todaySchedule = schedules.find(s => s.days.includes(currentDay));
-      setSchedule(todaySchedule);
+      // Get today's date in local timezone (not UTC)
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const todayDate = `${year}-${month}-${day}`;
+      
+      console.log('📅 TodaysSchedule Debug:');
+      console.log('  Current Day:', currentDay);
+      console.log('  Today Date:', todayDate);
+      console.log('  Total Schedules:', schedules.length);
+      console.log('  Raw Schedules Data:', JSON.stringify(schedules, null, 2));
+      
+      // Find schedule for today - check schedule_dates first, then fall back to days array
+      const todaySchedule = schedules.find(s => {
+        console.log('  Checking schedule ID:', s.id);
+        console.log('    Days:', s.days);
+        console.log('    Schedule Dates:', s.schedule_dates);
+        console.log('    Template:', s.template);
+        
+        // Parse schedule_dates if it's a string
+        let scheduleDates = s.schedule_dates;
+        if (typeof scheduleDates === 'string') {
+          try {
+            scheduleDates = JSON.parse(scheduleDates);
+          } catch (e) {
+            console.log('    Failed to parse schedule_dates');
+            scheduleDates = null;
+          }
+        }
+        
+        // Check if today's date is in the schedule_dates object
+        if (scheduleDates && scheduleDates[currentDay]) {
+          const todayScheduleDates = scheduleDates[currentDay];
+          console.log('    Today Schedule Dates for', currentDay, ':', todayScheduleDates);
+          const hasDate = Array.isArray(todayScheduleDates) && todayScheduleDates.includes(todayDate);
+          console.log('    ✓ Has today date?', hasDate);
+          if (hasDate) return true;
+        }
+        
+        // Fallback: check if today is in the days array
+        let days = s.days;
+        if (typeof days === 'string') {
+          try {
+            days = JSON.parse(days);
+          } catch (e) {
+            console.log('    Failed to parse days');
+            days = [];
+          }
+        }
+        
+        const inDays = days && Array.isArray(days) && days.includes(currentDay);
+        console.log('    ✓ In days array?', inDays);
+        return inDays;
+      });
+      
+      console.log('  ✅ Found Schedule:', todaySchedule ? 'YES' : 'NO');
+      
+      // If schedule found, include template data for shift details
+      if (todaySchedule) {
+        if (todaySchedule.template) {
+          setSchedule({
+            ...todaySchedule,
+            shift_name: todaySchedule.template.shift_name,
+            start_time: todaySchedule.template.start_time,
+            end_time: todaySchedule.template.end_time
+          });
+        } else {
+          // If no template, try to use the schedule data directly
+          setSchedule(todaySchedule);
+        }
+      } else {
+        setSchedule(null);
+      }
 
       // Fetch attendance status
       const todayAttendances = await getTodayAttendances();
@@ -54,23 +125,18 @@ export default function TodaysSchedule() {
 
         if (myAttendance.clock_out) {
           setClockOutTime(new Date(myAttendance.clock_out));
-          setStatus("Completed");
-        } else {
-          setStatus("Clocked In");
         }
 
-        // Check if late based on schedule
-        if (todaySchedule) {
-          const [startHour, startMinute] = parseTime(todaySchedule.start_time);
-          const clockInHour = clockIn.getHours();
-          const clockInMinute = clockIn.getMinutes();
-          
-          if (clockInHour > startHour || (clockInHour === startHour && clockInMinute > startMinute)) {
-            if (!myAttendance.clock_out) {
-              setStatus("Late");
-            }
-          }
-        }
+        // Use the actual status from the database
+        // Map legacy statuses to display names
+        const statusMap = {
+          'Present': 'Present',
+          'Late': 'Late',
+          'IN': 'Clocked In',
+          'COMPLETED': 'Completed'
+        };
+        
+        setStatus(statusMap[myAttendance.status] || myAttendance.status);
       } else {
         setStatus("Not Clocked In");
         setClockInTime(null);
@@ -104,7 +170,7 @@ export default function TodaysSchedule() {
   };
 
   const getStatusColor = () => {
-    if (status === "Completed") return "text-green-600";
+    if (status === "Present" || status === "Completed") return "text-green-600";
     if (status === "Late") return "text-amber-600";
     if (status === "Clocked In") return "text-blue-600";
     return "text-gray-600";
