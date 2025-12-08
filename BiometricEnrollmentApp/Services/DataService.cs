@@ -781,17 +781,23 @@ namespace BiometricEnrollmentApp.Services
                 var now = DateTime.Now;
                 var today = now.ToString("yyyy-MM-dd");
                 var dayOfWeek = now.DayOfWeek.ToString();
+                var currentTime = now.ToString("HH:mm");
                 
-                LogHelper.Write($"🔍 Checking for absent employees on {dayOfWeek}, {today}");
+                LogHelper.Write($"🔍 ========== ABSENT MARKING CHECK ==========");
+                LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} ({dayOfWeek})");
                 
                 // Get all schedules for today
                 var schedulesToday = GetTodaysSchedules();
                 
-                LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for today");
+                LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for {dayOfWeek}");
                 
                 if (schedulesToday.Count == 0)
                 {
-                    LogHelper.Write("ℹ️ No employees scheduled for today. Make sure schedules are synced from server.");
+                    LogHelper.Write("⚠️ No employees scheduled for today!");
+                    LogHelper.Write("💡 Possible reasons:");
+                    LogHelper.Write("   1. No schedules synced from server");
+                    LogHelper.Write("   2. No employees assigned to work on " + dayOfWeek);
+                    LogHelper.Write("   3. Schedules not published in admin panel");
                     return 0;
                 }
                 
@@ -872,6 +878,7 @@ namespace BiometricEnrollmentApp.Services
         /// <summary>
         /// Check if shift end time has passed
         /// Supports both 24-hour format (HH:MM) and 12-hour format (HH:MM AM/PM)
+        /// Handles shifts that cross midnight and very short shifts
         /// </summary>
         private bool HasShiftEnded(string endTime)
         {
@@ -909,7 +916,7 @@ namespace BiometricEnrollmentApp.Services
                 }
                 else
                 {
-                    // 24-hour format: "17:00"
+                    // 24-hour format: "17:00" or "02:54"
                     var timeParts = endTime.Split(':');
                     if (timeParts.Length < 2)
                     {
@@ -921,11 +928,23 @@ namespace BiometricEnrollmentApp.Services
                     minutes = int.Parse(timeParts[1]);
                 }
                 
-                var shiftEndMinutes = hours * 60 + minutes;
-                var currentMinutes = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
+                // Create DateTime objects for comparison
+                var now = DateTime.Now;
+                var today = now.Date;
+                var shiftEndTime = today.AddHours(hours).AddMinutes(minutes);
                 
-                bool ended = currentMinutes >= shiftEndMinutes;
-                LogHelper.Write($"  🕐 Shift end: {endTime} ({hours:D2}:{minutes:D2}) = {shiftEndMinutes} min, Current: {DateTime.Now:HH:mm} = {currentMinutes} min, Ended: {ended}");
+                // If shift end time is in the past (earlier today), it has ended
+                bool ended = now >= shiftEndTime;
+                
+                // Add 1 minute grace period to ensure the shift has fully ended
+                // This prevents marking absent exactly at the end time
+                if (ended && (now - shiftEndTime).TotalMinutes < 1)
+                {
+                    ended = false;
+                    LogHelper.Write($"  ⏳ Within 1-minute grace period of shift end");
+                }
+                
+                LogHelper.Write($"  🕐 Shift end: {endTime} ({shiftEndTime:HH:mm}), Current: {now:HH:mm}, Ended: {ended}");
                 
                 return ended;
             }

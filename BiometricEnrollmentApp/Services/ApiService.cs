@@ -48,38 +48,50 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
-        public async Task<bool> SendAttendanceAsync(string employeeId, DateTime clockIn, DateTime? clockOut = null, string status = "IN")
+        public async Task<bool> SendAttendanceAsync(string employeeId, DateTime? clockIn, DateTime? clockOut = null, string status = "IN")
         {
             try
             {
                 var payload = new
                 {
                     employee_id = employeeId,
-                    clock_in = clockIn.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    clock_in = clockIn?.ToString("yyyy-MM-ddTHH:mm:ss"),
                     clock_out = clockOut?.ToString("yyyy-MM-ddTHH:mm:ss"),
                     status = status
                 };
 
-                var json = JsonSerializer.Serialize(payload);
+                var options = new JsonSerializerOptions
+                {
+                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never,
+                    WriteIndented = false
+                };
+
+                var json = JsonSerializer.Serialize(payload, options);
+                LogHelper.Write($"📤 Sending to server: {json}");
+                
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.PostAsync($"{_baseUrl}/api/attendances", content);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    LogHelper.Write($"✅ Attendance sent to server for {employeeId}");
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"✅ Attendance sent successfully for {employeeId}");
+                    LogHelper.Write($"   Server response: {responseContent}");
                     return true;
                 }
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    LogHelper.Write($"⚠️ Failed to send attendance: {response.StatusCode} - {errorContent}");
+                    LogHelper.Write($"❌ Failed to send attendance: {response.StatusCode}");
+                    LogHelper.Write($"   Error details: {errorContent}");
                     return false;
                 }
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Error sending attendance to server: {ex.Message}");
+                LogHelper.Write($"   Stack trace: {ex.StackTrace}");
                 return false;
             }
         }

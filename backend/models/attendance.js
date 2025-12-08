@@ -17,7 +17,7 @@ const Attendance = sequelize.define("Attendance", {
   },
   clock_in: {
     type: DataTypes.DATE,
-    allowNull: false,
+    allowNull: true, // Allow null for absent records
   },
   clock_out: {
     type: DataTypes.DATE,

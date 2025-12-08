@@ -14,8 +14,7 @@ export const markAbsentEmployees = async () => {
   const day = String(now.getDate()).padStart(2, "0");
   const todayDate = `${year}-${month}-${day}`;
   const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
-
-  console.log(`🔍 Checking for absent employees on ${todayDate} (${dayName})`);
+  const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
   // Get all employee schedules for today
   const schedules = await EmployeeSchedule.findAll({
@@ -37,7 +36,15 @@ export const markAbsentEmployees = async () => {
     const employee_id = schedule.employee_id;
     const shiftEndTime = schedule.template.end_time;
 
-    // Check if employee has already clocked in today
+    // Check if shift has ended (current time >= shift end time)
+    const hasShiftEnded = currentTime >= shiftEndTime;
+
+    if (!hasShiftEnded) {
+      // Skip if shift hasn't ended yet
+      continue;
+    }
+
+    // Check if employee has already clocked in today OR already marked absent
     const existingAttendance = await Attendance.findOne({
       where: {
         employee_id,
@@ -46,7 +53,7 @@ export const markAbsentEmployees = async () => {
     });
 
     if (!existingAttendance) {
-      // Mark as absent
+      // Mark as absent (only if no record exists at all)
       await Attendance.create({
         employee_id,
         date: todayDate,
@@ -55,11 +62,10 @@ export const markAbsentEmployees = async () => {
         status: "Absent",
       });
       markedAbsent++;
-      console.log(`❌ Marked ${employee_id} as absent`);
+      console.log(`❌ Marked ${employee_id} as absent (shift ended at ${shiftEndTime})`);
     }
   }
 
-  console.log(`✅ Marked ${markedAbsent} employee(s) as absent`);
   return { markedAbsent, date: todayDate };
 };
 

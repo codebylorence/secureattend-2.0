@@ -6,8 +6,18 @@ export const recordAttendance = async (req, res) => {
   try {
     const { employee_id, clock_in, clock_out, status } = req.body;
 
-    if (!employee_id || !clock_in) {
-      return res.status(400).json({ error: "employee_id and clock_in are required" });
+    console.log(`📥 Attendance request: employee_id=${employee_id}, clock_in=${clock_in}, clock_out=${clock_out}, status=${status}`);
+
+    // For absent records, clock_in can be null
+    if (!employee_id) {
+      console.log("❌ Missing employee_id");
+      return res.status(400).json({ error: "employee_id is required" });
+    }
+
+    // If status is Absent, clock_in is not required
+    if (!clock_in && status !== "Absent") {
+      console.log("❌ Missing clock_in for non-absent record");
+      return res.status(400).json({ error: "clock_in is required for non-absent records" });
     }
 
     // Verify employee exists
@@ -16,8 +26,20 @@ export const recordAttendance = async (req, res) => {
       return res.status(404).json({ error: "Employee not found" });
     }
 
-    const clockInDate = new Date(clock_in);
-    const date = clockInDate.toISOString().split('T')[0];
+    // For absent records, use today's date; for others, parse clock_in
+    let clockInDate;
+    let date;
+    
+    if (status === "Absent") {
+      // For absent records, use today's date
+      const today = new Date();
+      date = today.toISOString().split('T')[0];
+      clockInDate = null; // Don't need clockInDate for absent records
+    } else {
+      // For normal records, parse the clock_in time
+      clockInDate = new Date(clock_in);
+      date = clockInDate.toISOString().split('T')[0];
+    }
 
     // Check if there's an open session for this employee today
     // Look for sessions with Present, Late, or legacy IN status that don't have clock_out
@@ -48,16 +70,52 @@ export const recordAttendance = async (req, res) => {
         attendance: openSession
       });
     } else if (!openSession && !clock_out) {
-      // Create new clock-in session
+      // Check if ANY attendance record exists for this employee today (including Absent)
+      const existingRecord = await Attendance.findOne({
+        where: {
+          employee_id,
+          date
+        }
+      });
+
+      if (existingRecord) {
+        // If it's an absent record and we're trying to clock in, update it
+        if (existingRecord.status === "Absent" && status !== "Absent") {
+          existingRecord.clock_in = clockInDate;
+          existingRecord.status = status || "Present";
+          await existingRecord.save();
+          
+          return res.status(200).json({
+            message: "Absent record updated to clock-in",
+            attendance: existingRecord
+          });
+        }
+        
+        // If trying to create another absent record, skip it
+        if (existingRecord.status === "Absent" && status === "Absent") {
+          return res.status(200).json({
+            message: "Absent record already exists",
+            attendance: existingRecord
+          });
+        }
+        
+        // Otherwise, record already exists
+        return res.status(400).json({ error: "Attendance record already exists for today" });
+      }
+
+      // Create new attendance record
       const attendance = await Attendance.create({
         employee_id,
         date,
-        clock_in: clockInDate,
+        clock_in: status === "Absent" ? null : clockInDate, // Null for absent records
         status: status || "Present" // Default to Present instead of IN
       });
 
+      const message = status === "Absent" ? "Absent record created successfully" : "Clock-in recorded successfully";
+      console.log(`✅ ${message} for ${employee_id} on ${date}`);
+      
       return res.status(201).json({
-        message: "Clock-in recorded successfully",
+        message,
         attendance
       });
     } else if (openSession && !clock_out) {
@@ -66,8 +124,13 @@ export const recordAttendance = async (req, res) => {
       return res.status(400).json({ error: "No open session found for clock-out" });
     }
   } catch (error) {
-    console.error("Error recording attendance:", error);
-    res.status(500).json({ error: "Failed to record attendance" });
+    console.error("❌ Error recording attendance:", error);
+    console.error("Error details:", error.message);
+    console.error("Stack trace:", error.stack);
+    res.status(500).json({ 
+      error: "Failed to record attendance",
+      details: error.message 
+    });
   }
 };
 

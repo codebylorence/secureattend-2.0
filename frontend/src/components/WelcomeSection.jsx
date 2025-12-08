@@ -19,9 +19,9 @@ export default function WelcomeSection() {
       {department && (
         <p className="text-gray-600 font-medium">Department: {department}</p>
       )}
-      <p className="mt-1 text-gray-600 font-normal">
+      <div className="mt-1">
         <CurrentDateTime/>
-      </p>
+      </div>
     </div>
   );
 }

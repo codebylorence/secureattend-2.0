@@ -12,8 +12,8 @@ export default function CurrentDateTime() {
   }, []);
 
   return (
-    <p className="text-gray-600 font-normal">
+    <span className="text-gray-600 font-normal">
       {dateTime}
-    </p>
+    </span>
   );
 }

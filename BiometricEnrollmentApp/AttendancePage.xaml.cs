@@ -52,10 +52,13 @@ namespace BiometricEnrollmentApp
             _gridRefreshTimer.Elapsed += (_, _) => Dispatcher.Invoke(() => RefreshAttendances());
             _gridRefreshTimer.Start();
             
-            // Start absent marking timer (runs every hour)
-            _absentMarkingTimer = new System.Timers.Timer(60 * 60 * 1000); // every hour
+            // Start absent marking timer (runs every minute for real-time absent marking)
+            _absentMarkingTimer = new System.Timers.Timer(60 * 1000); // every minute
             _absentMarkingTimer.Elapsed += async (_, _) => await MarkAndSyncAbsentEmployeesAsync();
             _absentMarkingTimer.Start();
+            
+            // Run absent marking immediately on startup
+            Task.Run(async () => await MarkAndSyncAbsentEmployeesAsync());
             
             // Load schedules on startup (one-time)
             Task.Run(async () => 
@@ -100,35 +103,53 @@ namespace BiometricEnrollmentApp
                 
                 LogHelper.Write($"📊 Absent marking result: {markedAbsent} new absent record(s)");
                 
-                // Always sync all absent records to server (not just new ones)
-                var sessions = _dataService.GetTodaySessions();
-                var absentSessions = sessions.Where(s => s.Status == "Absent").ToList();
-                
-                if (absentSessions.Count > 0)
+                // Only sync if new absent records were created
+                if (markedAbsent > 0)
                 {
-                    LogHelper.Write($"📤 Syncing {absentSessions.Count} absent record(s) to server...");
+                    LogHelper.Write($"📤 Syncing {markedAbsent} new absent record(s) to server...");
+                    
+                    // Get only the newly created absent records
+                    var sessions = _dataService.GetTodaySessions();
+                    var absentSessions = sessions.Where(s => s.Status == "Absent").ToList();
                     
                     int synced = 0;
+                    int failed = 0;
                     foreach (var session in absentSessions)
                     {
                         try
                         {
-                            await _apiService.SendAttendanceAsync(
+                            LogHelper.Write($"  📤 Attempting to sync absent record for {session.EmployeeId}...");
+                            
+                            // For absent records, don't send a clock-in time (send null)
+                            bool success = await _apiService.SendAttendanceAsync(
                                 session.EmployeeId,
-                                DateTime.Now,
+                                null,
                                 null,
                                 "Absent"
                             );
-                            synced++;
-                            LogHelper.Write($"  ✅ Synced absent record for {session.EmployeeId}");
+                            
+                            if (success)
+                            {
+                                synced++;
+                                LogHelper.Write($"  ✅ Successfully synced absent record for {session.EmployeeId}");
+                            }
+                            else
+                            {
+                                failed++;
+                                LogHelper.Write($"  ❌ Server rejected absent record for {session.EmployeeId}");
+                            }
                         }
                         catch (Exception ex)
                         {
+                            failed++;
                             LogHelper.Write($"  ❌ Failed to sync absent record for {session.EmployeeId}: {ex.Message}");
+                            LogHelper.Write($"  Stack trace: {ex.StackTrace}");
                         }
                     }
                     
-                    LogHelper.Write($"✅ Sync complete: {synced}/{absentSessions.Count} absent records synced to server");
+                    LogHelper.Write($"✅ Sync complete: {synced} succeeded, {failed} failed");
+                    
+                    LogHelper.Write($"✅ Sync complete: {synced} absent record(s) synced to server");
                     
                     // Refresh the attendance grid immediately
                     Dispatcher.Invoke(() => 
@@ -137,9 +158,9 @@ namespace BiometricEnrollmentApp
                         UpdateStatus($"✅ {markedAbsent} new absent, {synced} synced to server");
                     });
                 }
-                else if (markedAbsent == 0)
+                else
                 {
-                    LogHelper.Write("ℹ️ No employees marked absent (all scheduled employees have attendance records)");
+                    LogHelper.Write("ℹ️ No new absent records to sync");
                 }
             }
             catch (Exception ex)
@@ -1096,5 +1117,7 @@ namespace BiometricEnrollmentApp
                 UpdateScheduleBtn.IsEnabled = true;
             }
         }
+
+
     }
 }
