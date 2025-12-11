@@ -13,7 +13,10 @@ import scheduleTemplateRoutes from "./routes/scheduleTemplateRoutes.js";
 import employeeScheduleRoutes from "./routes/employeeScheduleRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import cleanupRoutes from "./routes/cleanupRoutes.js";
+import registrationRoutes from "./routes/registrationRoutes.js";
+import positionRoutes from "./routes/positionRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
+import { seedPositions } from "./seeders/positionSeeder.js";
 // Import models first
 import "./models/employee.js";
 import "./models/user.js";
@@ -22,6 +25,8 @@ import "./models/department.js";
 import "./models/scheduleTemplate.js";
 import "./models/employeeSchedule.js";
 import "./models/notification.js";
+import "./models/registrationRequest.js";
+import "./models/position.js";
 // Import associations last
 import "./models/associations.js";
 
@@ -61,6 +66,8 @@ app.use("/api/templates", scheduleTemplateRoutes);
 app.use("/api/employee-schedules", employeeScheduleRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/cleanup", cleanupRoutes);
+app.use("/api/registration", registrationRoutes);
+app.use("/api/positions", positionRoutes);
 app.use("/employees", employeeRoutes);
 
 
@@ -74,6 +81,10 @@ sequelize
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, async () => {
   await syncDatabase();
+  
+  // Seed default positions
+  await seedPositions();
+  
   console.log(`✅ Node.js Server running on port ${PORT}`);
   console.log(`📡 Connected Biometric Service expected at http://localhost:5000`);
   console.log(`🔌 WebSocket server ready for real-time updates`);

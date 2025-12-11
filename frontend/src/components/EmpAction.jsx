@@ -12,12 +12,15 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
   const handleDelete = async () => {
     if (window.confirm("Are you sure you want to delete this employee?")) {
       try {
-        await deleteEmployee(id);
+        console.log(`Attempting to delete employee with ID: ${id}`);
+        const result = await deleteEmployee(id);
+        console.log("Delete result:", result);
         alert("Employee deleted successfully!");
         onDeleted();
       } catch (error) {
         console.error("Error deleting employee:", error);
-        alert("Failed to delete employee");
+        console.error("Error details:", error.response?.data || error.message);
+        alert(`Failed to delete employee: ${error.response?.data?.message || error.message}`);
       }
     }
   };
@@ -26,27 +29,29 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
     <>
       <div className="flex gap-2">
         <button 
-          className={`bg-[#51A451] w-[35px] h-[35px] flex items-center justify-center rounded ${
+          className={`w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors ${
             employee.has_fingerprint ? 'opacity-100' : 'opacity-30'
           }`}
           title={employee.has_fingerprint ? 'Fingerprint enrolled' : 'No fingerprint enrolled'}
         >
-          <FaFingerprint color="white" size="25" />
+          <FaFingerprint size={14} />
         </button>
 
         {/* Edit button */}
         <button
           onClick={() => setIsEditOpen(true)}
-          className="bg-[#4545AE] w-[35px] h-[35px] flex items-center justify-center rounded hover:bg-blue-700"
+          className="w-7 h-7 rounded-md bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
+          title="Edit employee"
         >
-          <FaEdit color="white" size="25" />
+          <FaEdit size={12} />
         </button>
 
         <button
           onClick={handleDelete}
-          className="bg-[#DC3545] w-[35px] h-[35px] flex items-center justify-center rounded hover:bg-red-700"
+          className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+          title="Delete employee"
         >
-          <MdDelete color="white" size="25" />
+          <MdDelete size={14} />
         </button>
       </div>
 

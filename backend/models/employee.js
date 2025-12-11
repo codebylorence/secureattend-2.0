@@ -12,7 +12,19 @@ const Employee = sequelize.define("Employee", {
     allowNull: false,
     unique: true,
   },
-  fullname: DataTypes.STRING,
+  firstname: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  lastname: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  // Keep fullname for backward compatibility
+  fullname: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   department: DataTypes.STRING,
   position: DataTypes.STRING,
   contact_number: DataTypes.STRING,

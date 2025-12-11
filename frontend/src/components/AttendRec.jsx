@@ -7,7 +7,8 @@ export default function AttendRec() {
   const [attendances, setAttendances] = useState([]);
   const [employees, setEmployees] = useState({});
   const [loading, setLoading] = useState(true);
-  const [limit, setLimit] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
     fetchData();
@@ -52,7 +53,7 @@ export default function AttendRec() {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
-  const displayedAttendances = attendances.slice(0, limit);
+
 
   return (
     <>
@@ -64,74 +65,143 @@ export default function AttendRec() {
             <h2 className="font-semibold text-white">Attendance Records</h2>
           </div>
 
-          <div className="flex items-center text-sm">
-            <span className="mr-2">Show</span>
-            <input
-              type="number"
-              min="1"
-              value={limit}
-              onChange={(e) => setLimit(parseInt(e.target.value) || 1)}
-              className="w-12 text-center border border-gray-300 rounded-md text-black bg-white"
-            />
-            <span className="ml-2">Entries</span>
-          </div>
+
         </div>
 
         {/* Table Section */}
-        <div className="overflow-x-auto p-6 bg-[#F3F4F6]">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-[#1E3A8A] text-white">
-              <tr>
-                <th className="py-3 px-4 text-left font-medium">Date</th>
-                <th className="py-3 px-4 text-left font-medium">Employee</th>
-                <th className="py-3 px-4 text-left font-medium">Clock In</th>
-                <th className="py-3 px-4 text-left font-medium">Clock Out</th>
-                <th className="py-3 px-4 text-left font-medium">Department</th>
-                <th className="py-3 px-4 text-left font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-700">
-              {loading ? (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan="6" className="py-4 px-4 text-center">Loading...</td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock In</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock Out</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 </tr>
-              ) : displayedAttendances.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="py-4 px-4 text-center">No attendance records found</td>
-                </tr>
-              ) : (
-                displayedAttendances.map((attendance) => {
-                  const employee = employees[attendance.employee_id] || {};
-                  return (
-                    <tr key={attendance.id} className="border-b-1 bg-white">
-                      <td className="py-3 px-4">{formatDate(attendance.date)}</td>
-                      <td className="py-3 px-4">{employee.fullname || attendance.employee_id}</td>
-                      <td className="py-3 px-4">{formatTime(attendance.clock_in)}</td>
-                      <td className="py-3 px-4">{formatTime(attendance.clock_out)}</td>
-                      <td className="py-3 px-4">{employee.department || "-"}</td>
-                      <td className="py-3 px-4 font-medium">
-                        {(() => {
-                          const statusDisplay = {
-                            'Present': { label: 'Present', color: 'text-green-600' },
-                            'Late': { label: 'Late', color: 'text-orange-600' },
-                            'Absent': { label: 'Absent', color: 'text-red-600' },
-                            'IN': { label: 'Clocked In', color: 'text-blue-600' },
-                            'COMPLETED': { label: 'Completed', color: 'text-green-600' },
-                          };
-                          const display = statusDisplay[attendance.status] || { label: attendance.status, color: 'text-gray-600' };
-                          return (
-                            <span className={display.color}>
-                              {display.label}
-                            </span>
-                          );
-                        })()}
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-4 text-center text-gray-500">Loading...</td>
+                  </tr>
+                ) : attendances.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-4 text-center text-gray-500">No attendance records found</td>
+                  </tr>
+                ) : (
+                  (() => {
+                    const startIndex = (currentPage - 1) * itemsPerPage;
+                    const endIndex = startIndex + itemsPerPage;
+                    const paginatedAttendances = attendances.slice(startIndex, endIndex);
+                    return paginatedAttendances.map((attendance) => {
+                    const employee = employees[attendance.employee_id] || {};
+                    return (
+                      <tr key={attendance.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(attendance.date)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{employee.fullname || attendance.employee_id}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_in)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_out)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{employee.department || "-"}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {(() => {
+                            const statusDisplay = {
+                              'Present': { label: 'Present', color: 'bg-green-100 text-green-800' },
+                              'Late': { label: 'Late', color: 'bg-orange-100 text-orange-800' },
+                              'Absent': { label: 'Absent', color: 'bg-red-100 text-red-800' },
+                              'IN': { label: 'Clocked In', color: 'bg-blue-100 text-blue-800' },
+                              'COMPLETED': { label: 'Completed', color: 'bg-green-100 text-green-800' },
+                            };
+                            const display = statusDisplay[attendance.status] || { label: attendance.status, color: 'bg-gray-100 text-gray-800' };
+                            return (
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${display.color}`}>
+                                {display.label}
+                              </span>
+                            );
+                          })()}
                       </td>
                     </tr>
-                  );
-                })
+                    );
+                  })
+                })()
               )}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Pagination */}
+          {attendances.length > itemsPerPage && (
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">Show</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+                <span className="text-sm text-gray-700">entries</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">
+                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, attendances.length)} to{' '}
+                  {Math.min(currentPage * itemsPerPage, attendances.length)} of {attendances.length} entries
+                </span>
+                
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  
+                  {(() => {
+                    const totalPages = Math.ceil(attendances.length / itemsPerPage);
+                    const pages = [];
+                    const startPage = Math.max(1, currentPage - 2);
+                    const endPage = Math.min(totalPages, startPage + 4);
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <button
+                          key={i}
+                          onClick={() => setCurrentPage(i)}
+                          className={`px-3 py-1 text-sm border rounded ${
+                            currentPage === i
+                              ? 'bg-blue-500 text-white border-blue-500'
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {i}
+                        </button>
+                      );
+                    }
+                    return pages;
+                  })()}
+                  
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(attendances.length / itemsPerPage)))}
+                    disabled={currentPage === Math.ceil(attendances.length / itemsPerPage)}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

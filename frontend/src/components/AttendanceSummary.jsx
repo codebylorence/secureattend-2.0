@@ -1,17 +1,22 @@
 import { useState, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
-import { FaClock } from "react-icons/fa";
+import { FaClock, FaEye } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import { getAttendances } from "../api/AttendanceApi";
 
 export default function AttendanceSummary() {
+  const navigate = useNavigate();
+  const [filter, setFilter] = useState("7"); // Default to 7 days (weekly)
   const [attendanceData, setAttendanceData] = useState([
     { name: "Present", value: 0 },
     { name: "Late", value: 0 },
+    { name: "Absent", value: 0 },
   ]);
+  const [totalDays, setTotalDays] = useState(0);
 
   useEffect(() => {
     fetchAttendanceSummary();
-  }, []);
+  }, [filter]);
 
   const fetchAttendanceSummary = async () => {
     try {
@@ -24,71 +29,220 @@ export default function AttendanceSummary() {
       // Get employee's attendances
       const allAttendances = await getAttendances({ employee_id: employeeId });
       
-      // Get today's date
+      // Calculate date range based on filter
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const startDate = new Date();
+      startDate.setDate(today.getDate() - parseInt(filter) + 1); // Include today
+      startDate.setHours(0, 0, 0, 0);
       
-      // Filter for today's attendances only
-      const todayAttendances = allAttendances.filter(att => {
+      const endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+      
+      // Filter attendances within the date range
+      const filteredAttendances = allAttendances.filter(att => {
         const attDate = new Date(att.date);
-        attDate.setHours(0, 0, 0, 0);
-        return attDate.getTime() === today.getTime();
+        return attDate >= startDate && attDate <= endDate;
       });
 
-      // Count by actual status from database
-      const present = todayAttendances.filter(att => 
-        att.status === "Present" || att.status === "COMPLETED" // Include legacy
+      // Count by status
+      const present = filteredAttendances.filter(att => 
+        att.status === "Present" || att.status === "COMPLETED"
       ).length;
       
-      const late = todayAttendances.filter(att => 
+      const late = filteredAttendances.filter(att => 
         att.status === "Late"
       ).length;
 
+      const absent = filteredAttendances.filter(att => 
+        att.status === "Absent" || att.status === "ABSENT"
+      ).length;
+
+      console.log('🔍 Attendance Summary Debug:', {
+        filter: filter,
+        totalAttendances: allAttendances.length,
+        filteredAttendances: filteredAttendances.length,
+        present,
+        late,
+        absent,
+        sampleRecords: filteredAttendances.slice(0, 3).map(att => ({
+          date: att.date,
+          status: att.status
+        }))
+      });
+
+      // Calculate total working days in the period (excluding weekends)
+      let workingDays = 0;
+      const currentDate = new Date(startDate);
+      const endDateCopy = new Date(endDate);
+      endDateCopy.setHours(0, 0, 0, 0); // Reset to start of day for comparison
+      
+      while (currentDate <= endDateCopy) {
+        const dayOfWeek = currentDate.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Exclude Sunday (0) and Saturday (6)
+          workingDays++;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      setTotalDays(workingDays);
       setAttendanceData([
         { name: "Present", value: present },
         { name: "Late", value: late },
+        { name: "Absent", value: absent },
       ]);
     } catch (error) {
       console.error("Error fetching attendance summary:", error);
     }
   };
 
-  const COLORS = ["#10B981", "#F59E0B"]; // Green for Present, Amber for Late
+  const handleViewAttendance = () => {
+    console.log('🔍 Navigating to My Attendance page...');
+    try {
+      // Get user role to determine correct route
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const userRole = user.role;
+      
+      // Navigate based on user role
+      if (userRole === "teamleader") {
+        navigate("/team/myattendance");
+      } else {
+        navigate("/employee/myattendance");
+      }
+      
+      console.log('✅ Navigation completed successfully to:', userRole === "teamleader" ? "/team/myattendance" : "/employee/myattendance");
+    } catch (error) {
+      console.error('❌ Navigation error:', error);
+    }
+  };
+
+  const COLORS = ["#10B981", "#F59E0B", "#EF4444"]; // Green for Present, Amber for Late, Red for Absent
+
+  const getFilterLabel = () => {
+    switch(filter) {
+      case "7": return "Last 7 Days";
+      case "30": return "Last 30 Days";
+      default: return "Last 7 Days";
+    }
+  };
 
   return (
     <div className="bg-white rounded-md shadow">
       <div className="flex items-center justify-between bg-[#1E3A8A] text-white px-4 py-2 rounded-t-md">
         <div className="flex items-center gap-2">
           <FaClock />
-          <h3 className="font-medium">Today's Attendance Summary</h3>
+          <h3 className="font-medium">Attendance Summary</h3>
         </div>
+        <button
+          onClick={handleViewAttendance}
+          className="flex items-center gap-1 text-sm hover:bg-blue-700 px-2 py-1 rounded transition-colors cursor-pointer"
+          title="View Full Attendance"
+        >
+          <FaEye size={12} />
+          View
+        </button>
       </div>
 
-      <div className="h-48 flex items-center justify-center">
-        {attendanceData.every(item => item.value === 0) ? (
-          <div className="text-center text-gray-500">
-            <p className="text-lg font-medium">No attendance recorded today</p>
-            <p className="text-sm mt-1">Clock in to see your attendance summary</p>
+      <div className="p-4">
+        {/* Filter Options */}
+        <div className="flex justify-center mb-4">
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setFilter("7")}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                filter === "7" 
+                  ? "bg-blue-600 text-white" 
+                  : "text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Weekly
+            </button>
+            <button
+              onClick={() => setFilter("30")}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                filter === "30" 
+                  ? "bg-blue-600 text-white" 
+                  : "text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              30 Days
+            </button>
           </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={attendanceData}
-                cx="50%"
-                cy="50%"
-                innerRadius={40}
-                outerRadius={60}
-                dataKey="value"
-                label={({ name, value }) => `${name}: ${value}`}
-              >
-                {attendanceData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index]} />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-        )}
+        </div>
+
+        {/* Period Info */}
+        <div className="text-center mb-4">
+          <p className="text-sm text-gray-600">{getFilterLabel()}</p>
+          <p className="text-xs text-gray-500">
+            Total Records: {attendanceData[0].value + attendanceData[1].value + attendanceData[2].value}
+          </p>
+        </div>
+
+        {/* Chart */}
+        <div className="h-40 flex items-center justify-center">
+          {attendanceData.every(item => item.value === 0) ? (
+            <div className="text-center text-gray-500">
+              <p className="text-sm font-medium">No attendance recorded</p>
+              <p className="text-xs mt-1">for the selected period</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={attendanceData.filter(item => item.value > 0)}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={30}
+                  outerRadius={50}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}`}
+                  labelLine={false}
+                >
+                  {attendanceData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index]} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Summary Stats */}
+        <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+          {(() => {
+            const totalRecords = attendanceData[0].value + attendanceData[1].value + attendanceData[2].value;
+            return (
+              <>
+                <div className="bg-green-50 p-2 rounded">
+                  <div className="text-lg font-semibold text-green-600">{attendanceData[0].value}</div>
+                  <div className="text-xs text-green-600">Present</div>
+                  {totalRecords > 0 && (
+                    <div className="text-xs text-green-500">
+                      {Math.round((attendanceData[0].value / totalRecords) * 100)}%
+                    </div>
+                  )}
+                </div>
+                <div className="bg-yellow-50 p-2 rounded">
+                  <div className="text-lg font-semibold text-yellow-600">{attendanceData[1].value}</div>
+                  <div className="text-xs text-yellow-600">Late</div>
+                  {totalRecords > 0 && (
+                    <div className="text-xs text-yellow-500">
+                      {Math.round((attendanceData[1].value / totalRecords) * 100)}%
+                    </div>
+                  )}
+                </div>
+                <div className="bg-red-50 p-2 rounded">
+                  <div className="text-lg font-semibold text-red-600">{attendanceData[2].value}</div>
+                  <div className="text-xs text-red-600">Absent</div>
+                  {totalRecords > 0 && (
+                    <div className="text-xs text-red-500">
+                      {Math.round((attendanceData[2].value / totalRecords) * 100)}%
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import {
   MdGroups,
   MdCalendarToday,
   MdOutlineHowToReg,
-  MdIntegrationInstructions,
+
   MdOutlineBusiness,
   MdSettings,
   MdCalendarMonth,
@@ -13,6 +13,7 @@ import {
   MdExpandMore,
   MdExpandLess,
 } from "react-icons/md";
+import { FaUserPlus, FaFileExcel } from "react-icons/fa";
 
 function Sidebar({ role }) {
   const [scheduleMenuOpen, setScheduleMenuOpen] = useState(false);
@@ -57,7 +58,10 @@ function Sidebar({ role }) {
             <SidebarItem icon={<MdOutlineHowToReg size={30} />} to="/admin/attendance" text="Attendance" />
             <SidebarItem icon={<MdGroups size={30} />} to="/admin/employees" text="Employees" />
             <SidebarItem icon={<MdOutlineBusiness size={30} />} to="/admin/departments" text="Departments" />
-            <SidebarItem icon={<MdIntegrationInstructions size={30} />} to="/admin/reports" text="Reports" />
+            <SidebarItem icon={<MdOutlineBusiness size={30} />} to="/admin/positions" text="Positions" />
+            <SidebarItem icon={<FaUserPlus size={30} />} to="/admin/registrations" text="Registrations" />
+
+            <SidebarItem icon={<FaFileExcel size={30} />} to="/admin/attendance-reports" text="Reports" />
             <SidebarItem icon={<MdSettings size={30} />} to="/admin/settings" text="Settings" />
           </>
         )}

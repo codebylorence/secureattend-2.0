@@ -14,10 +14,16 @@ import TeamSchedule from "../pages/TeamSchedule";
 import ManageSchedule from "../pages/ManageSchedule";
 import ViewSchedules from "../pages/ViewSchedules";
 import EmployeeAttendance from "../pages/EmployeeAttendance";
-import Reports from "../pages/Reports";
+
 import Departments from "../pages/Departments";
 import Settings from "../pages/Settings";
 import Profile from "../pages/Profile";
+import EmployeeRegistration from "../pages/EmployeeRegistration";
+import RegistrationStatus from "../pages/RegistrationStatus";
+import RegistrationManagement from "../pages/RegistrationManagement";
+import CheckRegistrationStatus from "../pages/CheckRegistrationStatus";
+import PositionManagement from "../pages/PositionManagement";
+import AttendanceReports from "../pages/AttendanceReports";
 
 // Component to redirect logged-in users away from login page
 function LoginRedirect() {
@@ -46,8 +52,11 @@ export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Route - Redirects if already logged in */}
+        {/* Public Routes */}
         <Route path="/" element={<LoginRedirect />} />
+        <Route path="/register" element={<EmployeeRegistration />} />
+        <Route path="/check-status" element={<CheckRegistrationStatus />} />
+        <Route path="/registration-status/:employee_id" element={<RegistrationStatus />} />
 
         {/* Admin Routes - Protected */}
         <Route element={<PrivateRoute allowedRole="admin" />}>
@@ -57,8 +66,11 @@ export default function AppRouter() {
             <Route path="/admin/schedule" element={<ManageSchedule />} />
             <Route path="/admin/view-schedules" element={<ViewSchedules />} />
             <Route path="/admin/attendance" element={<EmployeeAttendance />} />
-            <Route path="/admin/reports" element={<Reports />} />
+
+            <Route path="/admin/attendance-reports" element={<AttendanceReports />} />
             <Route path="/admin/departments" element={<Departments />} />
+            <Route path="/admin/positions" element={<PositionManagement />} />
+            <Route path="/admin/registrations" element={<RegistrationManagement />} />
             <Route path="/admin/settings" element={<Settings />} />
             <Route path="/admin/profile" element={<Profile />} />
           </Route>

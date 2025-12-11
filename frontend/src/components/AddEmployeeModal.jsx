@@ -16,11 +16,13 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
 
   const [allDepartments, setAllDepartments] = useState([]);
   const [departmentsWithTeamLeader, setDepartmentsWithTeamLeader] = useState([]);
-  const positions = ["Picker", "Packer", "Inventory Clerk", "Supervisor", "Team Leader"];
+  const [positions, setPositions] = useState([]);
+  const [positionsLoading, setPositionsLoading] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
       loadDepartments();
+      loadPositions();
     }
   }, [isOpen]);
 
@@ -45,9 +47,42 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     }
   };
 
+  const loadPositions = async () => {
+    try {
+      setPositionsLoading(true);
+      const response = await fetch('http://localhost:5000/api/positions');
+      if (response.ok) {
+        const data = await response.json();
+        setPositions(data);
+      } else {
+        console.error('Failed to fetch positions');
+        // Fallback to default positions if API fails
+        setPositions([
+          { id: 1, name: 'Picker' },
+          { id: 2, name: 'Packer' },
+          { id: 3, name: 'Inventory Clerk' },
+          { id: 4, name: 'Supervisor' },
+          { id: 5, name: 'Team Leader' }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error fetching positions:', error);
+      // Fallback to default positions if network fails
+      setPositions([
+        { id: 1, name: 'Picker' },
+        { id: 2, name: 'Packer' },
+        { id: 3, name: 'Inventory Clerk' },
+        { id: 4, name: 'Supervisor' },
+        { id: 5, name: 'Team Leader' }
+      ]);
+    } finally {
+      setPositionsLoading(false);
+    }
+  };
+
   // Get filtered departments based on selected position
   const getAvailableDepartments = () => {
-    if (formData.position === "Team Leader") {
+    if (isTeamLeaderPosition(formData.position)) {
       // Only show departments without team leaders
       return allDepartments.filter(
         dept => !departmentsWithTeamLeader.includes(dept.name)
@@ -57,6 +92,12 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     return allDepartments;
   };
 
+  // Check if position is Team Leader
+  const isTeamLeaderPosition = (positionName) => {
+    return positionName.toLowerCase().includes('team leader') || 
+           positionName.toLowerCase().includes('teamleader');
+  };
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -64,10 +105,9 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Combine firstname and lastname into fullname for backend
+      // Send firstname and lastname separately to backend
       const employeeData = {
         ...formData,
-        fullname: `${formData.firstname} ${formData.lastname}`.trim(),
         status: "Active" // Default status
       };
       
@@ -138,12 +178,15 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               value={formData.position}
               onChange={handleChange}
               required
-              className="w-full border border-gray-300 rounded-md p-2 bg-white"
+              disabled={positionsLoading}
+              className="w-full border border-gray-300 rounded-md p-2 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="">Select Position</option>
-              {positions.map((pos, idx) => (
-                <option key={idx} value={pos}>
-                  {pos}
+              <option value="">
+                {positionsLoading ? 'Loading positions...' : 'Select Position'}
+              </option>
+              {positions.map((position) => (
+                <option key={position.id} value={position.name}>
+                  {position.name}
                 </option>
               ))}
             </select>
@@ -166,12 +209,12 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
                 </option>
               ))}
             </select>
-            {formData.position === "Team Leader" && getAvailableDepartments().length === 0 && (
+            {isTeamLeaderPosition(formData.position) && getAvailableDepartments().length === 0 && (
               <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                 <MdWarning size={14} /> All departments already have team leaders assigned
               </p>
             )}
-            {formData.position === "Team Leader" && getAvailableDepartments().length > 0 && (
+            {isTeamLeaderPosition(formData.position) && getAvailableDepartments().length > 0 && (
               <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
                 <MdInfo size={14} /> Only showing departments without team leaders
               </p>

@@ -148,7 +148,9 @@ export default function Profile() {
             {/* Profile Info */}
             <div className="flex-1 text-center md:text-left">
               <h2 className="text-3xl font-bold text-white mb-2">
-                {user?.employee?.fullname || "Employee Name"}
+                {user?.employee?.firstname && user?.employee?.lastname 
+                  ? `${user.employee.firstname} ${user.employee.lastname}`
+                  : user?.employee?.fullname || "Employee Name"}
               </h2>
               <p className="text-blue-100 text-lg mb-1">
                 {user?.employee?.position || "Position"}
@@ -186,7 +188,11 @@ export default function Profile() {
                 <FaUser className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Full Name</p>
-                  <p className="text-gray-900 font-medium">{user?.employee?.fullname || "N/A"}</p>
+                  <p className="text-gray-900 font-medium">
+                    {user?.employee?.firstname && user?.employee?.lastname 
+                      ? `${user.employee.firstname} ${user.employee.lastname}`
+                      : user?.employee?.fullname || "N/A"}
+                  </p>
                 </div>
               </div>
 

@@ -32,43 +32,25 @@ export const addEmployee = async (req, res) => {
 export const deleteEmployee = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`🗑️ Attempting to delete employee with ID: ${id}`);
     
-    // First, get the employee details before deleting
-    const { default: Employee } = await import("../models/employee.js");
-    const { default: User } = await import("../models/user.js");
-    const { default: Department } = await import("../models/department.js");
-    
-    const employee = await Employee.findByPk(id);
-    
-    if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
-    }
-    
-    // Check if this employee is a team leader
-    const user = await User.findOne({
-      where: { employeeId: id }
-    });
-    
-    if (user && user.role === "teamleader" && employee.department) {
-      // Update the department's manager to "No Manager"
-      await Department.update(
-        { manager: "No Manager" },
-        { where: { name: employee.department } }
-      );
-      console.log(`✅ Updated ${employee.department} manager to "No Manager" after deleting team leader ${employee.employee_id}`);
-    }
-    
-    // Delete the employee
+    // Use the service function which handles all the logic
     const deleted = await removeEmployee(id);
 
     if (!deleted) {
+      console.log(`❌ Employee not found with ID: ${id}`);
       return res.status(404).json({ message: "Employee not found" });
     }
 
+    console.log(`✅ Employee deleted successfully with ID: ${id}`);
     res.status(200).json({ message: "Employee deleted successfully" });
   } catch (error) {
-    console.error("Error deleting employee:", error);
-    res.status(500).json({ message: "Error deleting employee" });
+    console.error("❌ Error deleting employee:", error);
+    console.error("Error stack:", error.stack);
+    res.status(500).json({ 
+      message: "Error deleting employee", 
+      error: error.message 
+    });
   }
 };
 

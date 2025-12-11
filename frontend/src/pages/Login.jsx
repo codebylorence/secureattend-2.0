@@ -129,8 +129,30 @@ export default function Login() {
           </button>
         </form>
 
+        {/* Registration Links */}
+        <div className="text-center mt-6 space-y-2">
+          <p className="text-gray-600 text-sm">
+            Don't have an account?{' '}
+            <button
+              onClick={() => navigate('/register')}
+              className="text-[#1E3A8A] hover:underline font-medium"
+            >
+              Register here
+            </button>
+          </p>
+          <p className="text-gray-600 text-sm">
+            Already submitted a registration?{' '}
+            <button
+              onClick={() => navigate('/check-status')}
+              className="text-[#1E3A8A] hover:underline font-medium"
+            >
+              Check status
+            </button>
+          </p>
+        </div>
+
         {/* Footer */}
-        <div className="text-center text-gray-400 text-xs mt-6">
+        <div className="text-center text-gray-400 text-xs mt-4">
           © 2025 SecureAttend | Toplis Solutions Inc.
         </div>
       </div>

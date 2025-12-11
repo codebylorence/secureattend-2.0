@@ -43,73 +43,111 @@ const EmployeeList = forwardRef((props, ref) => {
   }, []);
 
   return (
-    <div className="bg-white shadow rounded-md overflow-hidden">
-      {/* Header */}
+    <div className="bg-white rounded-lg shadow overflow-hidden">
+
+      {/* Header Bar */}
       <div className="bg-[#1E3A8A] text-white flex items-center justify-between px-4 py-3">
         <div className="flex items-center space-x-2">
-          <MdManageAccounts size={25} />
-          <h2 className="font-semibold text-white">Employee Accounts</h2>
+          <MdManageAccounts size={20} />
+          <h2 className="font-semibold text-white">Employee Accounts ({employees.length})</h2>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto p-6 bg-[#F3F4F6]">
-        {loading ? (
-          <p className="text-center text-gray-600">Loading employees...</p>
-        ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-[#1E3A8A] text-white">
+      {loading ? (
+        <div className="p-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+          </div>
+        </div>
+      ) : employees.length === 0 ? (
+        <div className="p-6 text-center text-gray-500">
+          <MdManageAccounts className="text-4xl mx-auto mb-4 text-gray-300" />
+          <p>No employees found</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <th className="py-3 px-4 text-left font-medium">Employee ID</th>
-                <th className="py-3 px-4 text-left font-medium">Name</th>
-                <th className="py-3 px-4 text-left font-medium">Department</th>
-                <th className="py-3 px-4 text-left font-medium">Position</th>
-                <th className="py-3 px-4 text-left font-medium">Status</th>
-                <th className="py-3 px-4 text-left font-medium">Action</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Employee ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Department
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Position
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
             </thead>
-
-            <tbody className="text-gray-700">
-              {employees.length > 0 ? (
-                employees.map((emp) => (
-                  <tr
-                    key={emp.id}
-                    className="border-b bg-white hover:bg-gray-50 transition"
-                  >
-                    <td className="py-3 px-4">{emp.employee_id}</td>
-                    <td className="py-3 px-4">{emp.fullname}</td>
-                    <td className="py-3 px-4">{emp.department}</td>
-                    <td className="py-3 px-4">{emp.position}</td>
-                    <td className="py-3 px-4">{emp.status}</td>
-
-                    {/* ✅ Pass employee ID, fingerprint status, and refresh function */}
-                    <td className="py-3 px-4">
-                      <EmpAction
-                        id={emp.id}
-                        employee={{
-                          ...emp,
-                          has_fingerprint: fingerprintStatus[emp.employee_id] || false
-                        }}
-                        onDeleted={loadEmployees}
-                        onUpdated={loadEmployees}
-                      />
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan="6"
-                    className="text-center py-4 text-gray-500 italic bg-white"
-                  >
-                    No employees found.
+            <tbody className="bg-white divide-y divide-gray-200">
+              {employees.map((emp) => (
+                <tr key={emp.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {emp.employee_id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {(() => {
+                        // Try firstname + lastname first
+                        if (emp.firstname && emp.lastname) {
+                          return `${emp.firstname} ${emp.lastname}`;
+                        }
+                        // Try fullname
+                        if (emp.fullname && emp.fullname.trim()) {
+                          return emp.fullname;
+                        }
+                        // Try just firstname if lastname is missing
+                        if (emp.firstname && emp.firstname.trim()) {
+                          return emp.firstname;
+                        }
+                        // Fallback
+                        return `Employee ${emp.employee_id}`;
+                      })()}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {emp.department}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {emp.position}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${emp.status === 'Active'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                      }`}>
+                      {emp.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <EmpAction
+                      id={emp.id}
+                      employee={{
+                        ...emp,
+                        has_fingerprint: fingerprintStatus[emp.employee_id] || false
+                      }}
+                      onDeleted={loadEmployees}
+                      onUpdated={loadEmployees}
+                    />
                   </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 });

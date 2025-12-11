@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { updateEmployee } from "../api/EmployeeApi";
+import { fetchDepartments } from "../api/DepartmentApi";
 
 export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated }) {
   const [formData, setFormData] = useState({
     employee_id: "",
-    fullname: "",
+    firstname: "",
+    lastname: "",
     department: "",
     position: "",
     contact_number: "",
@@ -12,12 +14,35 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
     status: "Active",
   });
 
+  const [departments, setDepartments] = useState([]);
+  const [positions, setPositions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load data when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadDepartmentsAndPositions();
+    }
+  }, [isOpen]);
+
   // 🔁 When modal opens, populate fields with selected employee
   useEffect(() => {
     if (employee) {
+      // Handle both old and new data formats
+      let firstname = employee.firstname || '';
+      let lastname = employee.lastname || '';
+      
+      // If no firstname/lastname but fullname exists, split it
+      if (!firstname && !lastname && employee.fullname) {
+        const nameParts = employee.fullname.trim().split(' ');
+        firstname = nameParts[0] || '';
+        lastname = nameParts.slice(1).join(' ') || '';
+      }
+      
       setFormData({
         employee_id: employee.employee_id || "",
-        fullname: employee.fullname || "",
+        firstname,
+        lastname,
         department: employee.department || "",
         position: employee.position || "",
         contact_number: employee.contact_number || "",
@@ -27,8 +52,50 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
     }
   }, [employee]);
 
-  const departments = ["Zone A", "Zone B", "Zone C", "Warehouse Admin", "HR Department"];
-  const positions = ["Picker", "Packer", "Inventory Clerk", "Supervisor", "Team Leader"];
+  const loadDepartmentsAndPositions = async () => {
+    try {
+      setLoading(true);
+      
+      // Load departments
+      const deptResponse = await fetchDepartments();
+      setDepartments(deptResponse);
+
+      // Load positions
+      const posResponse = await fetch('http://localhost:5000/api/positions');
+      if (posResponse.ok) {
+        const posData = await posResponse.json();
+        setPositions(posData);
+      } else {
+        // Fallback positions
+        setPositions([
+          { id: 1, name: 'Picker' },
+          { id: 2, name: 'Packer' },
+          { id: 3, name: 'Inventory Clerk' },
+          { id: 4, name: 'Supervisor' },
+          { id: 5, name: 'Team Leader' }
+        ]);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      // Fallback data
+      setDepartments([
+        { id: 1, name: 'Zone A' },
+        { id: 2, name: 'Zone B' },
+        { id: 3, name: 'Zone C' },
+        { id: 4, name: 'Warehouse Admin' },
+        { id: 5, name: 'HR Department' }
+      ]);
+      setPositions([
+        { id: 1, name: 'Picker' },
+        { id: 2, name: 'Packer' },
+        { id: 3, name: 'Inventory Clerk' },
+        { id: 4, name: 'Supervisor' },
+        { id: 5, name: 'Team Leader' }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -69,16 +136,31 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
             />
           </div>
 
-          {/* Full Name */}
+          {/* First Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Full Name</label>
+            <label className="block text-sm font-medium text-gray-700">First Name</label>
             <input
               type="text"
-              name="fullname"
-              value={formData.fullname}
+              name="firstname"
+              value={formData.firstname}
               onChange={handleChange}
               required
               className="w-full border border-gray-300 rounded-md p-2"
+              placeholder="e.g., John"
+            />
+          </div>
+
+          {/* Last Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Last Name</label>
+            <input
+              type="text"
+              name="lastname"
+              value={formData.lastname}
+              onChange={handleChange}
+              required
+              className="w-full border border-gray-300 rounded-md p-2"
+              placeholder="e.g., Doe"
             />
           </div>
 
@@ -90,12 +172,15 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
               value={formData.department}
               onChange={handleChange}
               required
-              className="w-full border border-gray-300 rounded-md p-2 bg-white"
+              disabled={loading}
+              className="w-full border border-gray-300 rounded-md p-2 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="">Select Department</option>
+              <option value="">
+                {loading ? 'Loading departments...' : 'Select Department'}
+              </option>
               {departments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
+                <option key={dept.id} value={dept.name}>
+                  {dept.name}
                 </option>
               ))}
             </select>
@@ -109,12 +194,15 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
               value={formData.position}
               onChange={handleChange}
               required
-              className="w-full border border-gray-300 rounded-md p-2 bg-white"
+              disabled={loading}
+              className="w-full border border-gray-300 rounded-md p-2 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="">Select Position</option>
-              {positions.map((pos) => (
-                <option key={pos} value={pos}>
-                  {pos}
+              <option value="">
+                {loading ? 'Loading positions...' : 'Select Position'}
+              </option>
+              {positions.map((position) => (
+                <option key={position.id} value={position.name}>
+                  {position.name}
                 </option>
               ))}
             </select>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FaClock } from "react-icons/fa";
+import { FaClock, FaCalendarAlt, FaUserCheck } from "react-icons/fa";
 import { getTodayAttendances } from "../api/AttendanceApi";
 import { getEmployeeScheduleById } from "../api/ScheduleApi";
 
@@ -150,19 +150,7 @@ export default function TodaysSchedule() {
     }
   };
 
-  const parseTime = (timeStr) => {
-    // Parse "9:00 AM" format to [hour, minute]
-    const [time, period] = timeStr.split(" ");
-    let [hour, minute] = time.split(":").map(Number);
-    
-    if (period === "PM" && hour !== 12) {
-      hour += 12;
-    } else if (period === "AM" && hour === 12) {
-      hour = 0;
-    }
-    
-    return [hour, minute];
-  };
+
 
   const formatTime = (date) => {
     if (!date) return "-";
@@ -170,10 +158,10 @@ export default function TodaysSchedule() {
   };
 
   const getStatusColor = () => {
-    if (status === "Present" || status === "Completed") return "text-green-600";
-    if (status === "Late") return "text-amber-600";
-    if (status === "Clocked In") return "text-blue-600";
-    return "text-gray-600";
+    if (status === "Present" || status === "Completed") return "text-green-700";
+    if (status === "Late") return "text-amber-700";
+    if (status === "Clocked In") return "text-blue-700";
+    return "text-gray-700";
   };
 
   if (loading) {
@@ -185,8 +173,16 @@ export default function TodaysSchedule() {
             <h3 className="font-medium">Today's Schedule</h3>
           </div>
         </div>
-        <div className="p-4 text-gray-700 text-center">
-          <p>Loading...</p>
+        <div className="p-4">
+          <div className="text-center py-8">
+            <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3 animate-pulse">
+              <FaClock size={20} className="text-gray-400" />
+            </div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-1">Loading Schedule</h4>
+            <p className="text-xs text-gray-500">
+              Please wait...
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -200,32 +196,94 @@ export default function TodaysSchedule() {
           <h3 className="font-medium">Today's Schedule</h3>
         </div>
       </div>
-      <div className="p-4 text-gray-700 space-y-2">
+      
+      <div className="p-4">
         {schedule ? (
-          <>
-            <p>
-              <strong>Shift:</strong> {schedule.shift_name}
-            </p>
-            <p>
-              <strong>Shift Start:</strong> {schedule.start_time}
-            </p>
-            <p>
-              <strong>Shift End:</strong> {schedule.end_time}
-            </p>
-            <p>
-              <strong>Clock In:</strong> {formatTime(clockInTime)}
-            </p>
-            <p>
-              <strong>Clock Out:</strong> {formatTime(clockOutTime)}
-            </p>
-            <p>
-              <strong>Status:</strong>{" "}
-              <span className={`${getStatusColor()} font-semibold`}>{status}</span>
-            </p>
-          </>
+          <div className="space-y-4">
+            {/* Shift Information */}
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+              <div className="flex items-center gap-2 mb-3">
+                <FaCalendarAlt className="text-blue-700" size={14} />
+                <h4 className="text-sm font-semibold text-blue-900">Shift Details</h4>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Shift</span>
+                  <span className="text-sm font-semibold text-blue-800">{schedule.shift_name}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Start</span>
+                  <span className="text-sm font-semibold text-blue-800">{schedule.start_time}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">End</span>
+                  <span className="text-sm font-semibold text-blue-800">{schedule.end_time}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Attendance Status */}
+            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+              <div className="flex items-center gap-2 mb-3">
+                <FaUserCheck className="text-gray-700" size={14} />
+                <h4 className="text-sm font-semibold text-gray-900">Attendance</h4>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Clock In</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {clockInTime ? formatTime(clockInTime) : (
+                      <span className="text-gray-400 italic text-xs">Not clocked in</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Clock Out</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {clockOutTime ? formatTime(clockOutTime) : (
+                      <span className="text-gray-400 italic text-xs">Not clocked out</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Status</span>
+                  <span className={`${getStatusColor()} font-bold text-sm px-2 py-1 rounded-full bg-white border ${
+                    status === "Present" || status === "Completed" ? "border-green-200" :
+                    status === "Late" ? "border-amber-200" :
+                    status === "Clocked In" ? "border-blue-200" : "border-gray-200"
+                  }`}>
+                    {status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Today's Date */}
+            <div className="text-center pt-2">
+              <p className="text-xs text-gray-500">
+                {new Date().toLocaleDateString('en-US', { 
+                  weekday: 'long', 
+                  month: 'short', 
+                  day: 'numeric' 
+                })}
+              </p>
+            </div>
+          </div>
         ) : (
-          <div className="text-center py-4">
-            <p className="text-gray-500">No schedule assigned for today ({getCurrentDay()})</p>
+          <div className="text-center py-8">
+            <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+              <FaClock size={20} className="text-gray-400" />
+            </div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-1">No Schedule Today</h4>
+            <p className="text-xs text-gray-500 mb-1">
+              No schedule assigned for today
+            </p>
+            <p className="text-xs text-gray-400">
+              {getCurrentDay()}, {new Date().toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric' 
+              })}
+            </p>
           </div>
         )}
       </div>

@@ -14,6 +14,8 @@ export default function ManageDepartment() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [departmentMembers, setDepartmentMembers] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
     loadDepartments();
@@ -23,6 +25,20 @@ export default function ManageDepartment() {
   const loadTeamLeaders = async () => {
     try {
       const data = await fetchTeamLeaders();
+      console.log('🔍 Team leaders debug:', {
+        count: data.length,
+        leaders: data.map(leader => ({
+          id: leader.id,
+          username: leader.username,
+          employee: leader.employee ? {
+            employee_id: leader.employee.employee_id,
+            firstname: leader.employee.firstname,
+            lastname: leader.employee.lastname,
+            fullname: leader.employee.fullname,
+            department: leader.employee.department
+          } : null
+        }))
+      });
       setTeamLeaders(data);
     } catch (error) {
       console.error("Error loading team leaders:", error);
@@ -93,7 +109,42 @@ export default function ManageDepartment() {
       const allEmployees = response.data;
       
       // Filter employees by department
-      const members = allEmployees.filter(emp => emp.department === dept.name);
+      let members = allEmployees.filter(emp => emp.department === dept.name);
+      
+      // If there's a manager assigned, make sure they're included even if from different department
+      if (dept.manager) {
+        const manager = allEmployees.find(emp => {
+          // Check both fullname and firstname+lastname combinations
+          const empFullName = emp.firstname && emp.lastname 
+            ? `${emp.firstname} ${emp.lastname}` 
+            : emp.fullname;
+          return empFullName === dept.manager || emp.fullname === dept.manager;
+        });
+        
+        // If manager exists but not in current members list, add them
+        if (manager && !members.find(m => m.id === manager.id)) {
+          members.push(manager);
+        }
+      }
+      
+      console.log('🔍 Department members debug:', {
+        department: dept.name,
+        manager: dept.manager,
+        totalEmployees: allEmployees.length,
+        departmentMembers: members.length,
+        regularMembers: allEmployees.filter(emp => emp.department === dept.name).length,
+        sampleMember: members[0],
+        memberNames: members.map(m => ({
+          id: m.id,
+          employee_id: m.employee_id,
+          firstname: m.firstname,
+          lastname: m.lastname,
+          fullname: m.fullname,
+          position: m.position,
+          department: m.department
+        }))
+      });
+      
       setDepartmentMembers(members);
     } catch (error) {
       console.error("Error loading department members:", error);
@@ -137,11 +188,40 @@ export default function ManageDepartment() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Team Leader</p>
-                    <p className="font-semibold">{selectedDepartment?.manager || "Not Assigned"}</p>
+                    <p className="font-semibold">
+                      {selectedDepartment?.manager || "Not Assigned"}
+                      {selectedDepartment?.manager && (
+                        <>
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                            Manager
+                          </span>
+                          {(() => {
+                            const manager = departmentMembers.find(m => {
+                              const memberFullName = m.firstname && m.lastname 
+                                ? `${m.firstname} ${m.lastname}` 
+                                : m.fullname;
+                              return memberFullName === selectedDepartment?.manager || m.fullname === selectedDepartment?.manager;
+                            });
+                            return manager && manager.department !== selectedDepartment?.name ? (
+                              <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                From {manager.department}
+                              </span>
+                            ) : null;
+                          })()}
+                        </>
+                      )}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Total Members</p>
-                    <p className="font-semibold">{departmentMembers.length}</p>
+                    <p className="font-semibold">
+                      {departmentMembers.length}
+                      {departmentMembers.some(m => m.department !== selectedDepartment?.name) && (
+                        <span className="text-xs text-gray-500 ml-1">
+                          (includes cross-dept manager)
+                        </span>
+                      )}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Description</p>
@@ -152,42 +232,78 @@ export default function ManageDepartment() {
 
               {/* Members Table */}
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm">
-                  <thead className="bg-gray-100">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <th className="py-3 px-4 text-left font-medium text-gray-700">Employee ID</th>
-                      <th className="py-3 px-4 text-left font-medium text-gray-700">Name</th>
-                      <th className="py-3 px-4 text-left font-medium text-gray-700">Position</th>
-                      <th className="py-3 px-4 text-left font-medium text-gray-700">Email</th>
-                      <th className="py-3 px-4 text-left font-medium text-gray-700">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="text-gray-700">
+                  <tbody className="bg-white divide-y divide-gray-200">
                     {departmentMembers.length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="py-4 px-4 text-center text-gray-500">
+                        <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
                           No members in this department
                         </td>
                       </tr>
                     ) : (
                       departmentMembers.map((member) => {
-                        const isTeamLeader = member.fullname === selectedDepartment?.manager;
+                        // Get member's full name (handle both firstname/lastname and fullname formats)
+                        const memberFullName = (() => {
+                          if (member.firstname && member.lastname) {
+                            return `${member.firstname} ${member.lastname}`;
+                          }
+                          if (member.fullname && member.fullname.trim()) {
+                            return member.fullname;
+                          }
+                          if (member.firstname && member.firstname.trim()) {
+                            return member.firstname;
+                          }
+                          return `Employee ${member.employee_id}`;
+                        })();
+                        
+                        // Check if this member is the team leader (compare with manager name)
+                        const isTeamLeader = memberFullName === selectedDepartment?.manager || 
+                                           member.fullname === selectedDepartment?.manager ||
+                                           (member.firstname && member.lastname && 
+                                            `${member.firstname} ${member.lastname}` === selectedDepartment?.manager);
+                        
                         return (
                           <tr 
                             key={member.id} 
-                            className={`border-b ${
+                            className={`hover:bg-gray-50 ${
                               isTeamLeader 
                                 ? 'bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-600' 
-                                : 'hover:bg-gray-50'
+                                : ''
                             }`}
                           >
-                            <td className="py-3 px-4">{member.employee_id}</td>
-                            <td className="py-3 px-4 font-medium">{member.fullname}</td>
-                            <td className="py-3 px-4">{member.position}</td>
-                            <td className="py-3 px-4">{member.email}</td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                member.status === 'active' 
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{member.employee_id}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {memberFullName}
+                              {isTeamLeader && (
+                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                  Team Leader
+                                </span>
+                              )}
+                              {member.department !== selectedDepartment?.name && (
+                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                  From {member.department}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {member.position}
+                              {isTeamLeader && member.department !== selectedDepartment?.name && (
+                                <div className="text-xs text-gray-500 mt-1">Managing from {member.department}</div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{member.email}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                member.status === 'Active' || member.status === 'active'
                                   ? 'bg-green-100 text-green-800' 
                                   : 'bg-red-100 text-red-800'
                               }`}>
@@ -224,125 +340,221 @@ export default function ManageDepartment() {
           </div>
         </div>
 
-        <div className="overflow-x-auto p-6 bg-[#F3F4F6]">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-[#1E3A8A] text-white">
-              <tr>
-                <th className="py-3 px-4 text-left font-medium">Department</th>
-                <th className="py-3 px-4 text-left font-medium">Description</th>
-                <th className="py-3 px-4 text-left font-medium">Employee Count</th>
-                <th className="py-3 px-4 text-left font-medium">Manager</th>
-                <th className="py-3 px-4 text-left font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-700">
-              {loading ? (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan="5" className="py-4 px-4 text-center">Loading...</td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee Count</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manager</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
-              ) : departments.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="py-4 px-4 text-center">No departments found</td>
-                </tr>
-              ) : (
-                departments.map((dept) => (
-                  <tr key={dept.id} className="border-b-1 bg-white">
-                    <td className="py-3 px-4">
-                      {editingId === dept.id ? (
-                        <input
-                          type="text"
-                          value={editForm.name}
-                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="border rounded px-2 py-1 w-full"
-                        />
-                      ) : (
-                        dept.name
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      {editingId === dept.id ? (
-                        <input
-                          type="text"
-                          value={editForm.description}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                          className="border rounded px-2 py-1 w-full"
-                        />
-                      ) : (
-                        dept.description || "-"
-                      )}
-                    </td>
-                    <td className="py-3 px-4">{dept.employeeCount}</td>
-                    <td className="py-3 px-4">
-                      {editingId === dept.id ? (
-                        <select
-                          value={editForm.manager}
-                          onChange={(e) => setEditForm({ ...editForm, manager: e.target.value })}
-                          className="border rounded px-2 py-1 w-full"
-                        >
-                          <option value="">No Manager</option>
-                          {teamLeaders.length === 0 ? (
-                            <option disabled>No team leaders available</option>
-                          ) : (
-                            teamLeaders.map((leader) => (
-                              <option key={leader.id} value={leader.employee?.fullname || leader.username}>
-                                {leader.employee?.fullname || leader.username} 
-                                {leader.employee?.employee_id && ` (${leader.employee.employee_id})`}
-                                {leader.employee?.department && leader.employee.department !== dept.name && ` - ${leader.employee.department}`}
-                              </option>
-                            ))
-                          )}
-                        </select>
-                      ) : (
-                        dept.manager || "-"
-                      )}
-                    </td>
-                    <td className="py-3 px-4 flex gap-2">
-                      {editingId === dept.id ? (
-                        <>
-                          <button
-                            onClick={() => handleSaveEdit(dept.id)}
-                            className="bg-green-600 px-3 py-1 text-white rounded hover:bg-green-700"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            className="bg-gray-600 px-3 py-1 text-white rounded hover:bg-gray-700"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => handleViewMembers(dept)}
-                            className="bg-[#10b981] w-[35px] h-[35px] flex items-center justify-center rounded hover:bg-green-700"
-                            title="View Members"
-                          >
-                            <FaEye color="white" size="20" />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(dept)}
-                            className="bg-[#4545AE] w-[35px] h-[35px] flex items-center justify-center rounded hover:bg-blue-700"
-                            title="Edit"
-                          >
-                            <FaEdit color="white" size="20" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(dept.id, dept.name, dept.employeeCount)}
-                            className="bg-[#DC3545] w-[35px] h-[35px] flex items-center justify-center rounded hover:bg-red-700"
-                            title="Delete"
-                          >
-                            <MdDelete color="white" size="25" />
-                          </button>
-                        </>
-                      )}
-                    </td>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">Loading...</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : departments.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">No departments found</td>
+                  </tr>
+                ) : (
+                  (() => {
+                    const startIndex = (currentPage - 1) * itemsPerPage;
+                    const endIndex = startIndex + itemsPerPage;
+                    const paginatedDepartments = departments.slice(startIndex, endIndex);
+                    return paginatedDepartments.map((dept) => (
+                    <tr key={dept.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {editingId === dept.id ? (
+                          <input
+                            type="text"
+                            value={editForm.name}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            className="border rounded px-2 py-1 w-full text-sm"
+                          />
+                        ) : (
+                          <div className="text-sm font-medium text-gray-900">{dept.name}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {editingId === dept.id ? (
+                          <input
+                            type="text"
+                            value={editForm.description}
+                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                            className="border rounded px-2 py-1 w-full text-sm"
+                          />
+                        ) : (
+                          <div className="text-sm text-gray-900">{dept.description || "-"}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{dept.employeeCount}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {editingId === dept.id ? (
+                          <select
+                            value={editForm.manager}
+                            onChange={(e) => setEditForm({ ...editForm, manager: e.target.value })}
+                            className="border rounded px-2 py-1 w-full text-sm"
+                          >
+                            <option value="">No Manager</option>
+                            {teamLeaders.length === 0 ? (
+                              <option disabled>No team leaders available</option>
+                            ) : (
+                              teamLeaders.map((leader) => {
+                                // Get leader's full name (handle both firstname/lastname and fullname formats)
+                                const leaderFullName = (() => {
+                                  if (leader.employee?.firstname && leader.employee?.lastname) {
+                                    return `${leader.employee.firstname} ${leader.employee.lastname}`;
+                                  }
+                                  if (leader.employee?.fullname && leader.employee.fullname.trim()) {
+                                    return leader.employee.fullname;
+                                  }
+                                  return leader.username;
+                                })();
+                                
+                                return (
+                                  <option key={leader.id} value={leaderFullName}>
+                                    {leaderFullName}
+                                    {leader.employee?.employee_id && ` (${leader.employee.employee_id})`}
+                                    {leader.employee?.department && leader.employee.department !== dept.name && ` - ${leader.employee.department}`}
+                                  </option>
+                                );
+                              })
+                            )}
+                          </select>
+                        ) : (
+                          <div className="text-sm text-gray-900">{dept.manager || "-"}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex gap-2">
+                          {editingId === dept.id ? (
+                            <>
+                              <button
+                                onClick={() => handleSaveEdit(dept.id)}
+                                className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
+                                title="Save changes"
+                              >
+                                <FaEdit size={12} />
+                              </button>
+                              <button
+                                onClick={handleCancelEdit}
+                                className="w-7 h-7 rounded-md bg-gray-500 hover:bg-gray-600 text-white flex items-center justify-center transition-colors"
+                                title="Cancel"
+                              >
+                                <MdClose size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleViewMembers(dept)}
+                                className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
+                                title="View Members"
+                              >
+                                <FaEye size={12} />
+                              </button>
+                              <button
+                                onClick={() => handleEdit(dept)}
+                                className="w-7 h-7 rounded-md bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
+                                title="Edit"
+                              >
+                                <FaEdit size={12} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(dept.id, dept.name, dept.employeeCount)}
+                                className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                                title="Delete"
+                              >
+                                <MdDelete size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    ))
+                  })()
+                )}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Pagination */}
+          {departments.length > itemsPerPage && (
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">Show</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+                <span className="text-sm text-gray-700">entries</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">
+                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, departments.length)} to{' '}
+                  {Math.min(currentPage * itemsPerPage, departments.length)} of {departments.length} entries
+                </span>
+                
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  
+                  {(() => {
+                    const totalPages = Math.ceil(departments.length / itemsPerPage);
+                    const pages = [];
+                    const startPage = Math.max(1, currentPage - 2);
+                    const endPage = Math.min(totalPages, startPage + 4);
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <button
+                          key={i}
+                          onClick={() => setCurrentPage(i)}
+                          className={`px-3 py-1 text-sm border rounded ${
+                            currentPage === i
+                              ? 'bg-blue-500 text-white border-blue-500'
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {i}
+                        </button>
+                      );
+                    }
+                    return pages;
+                  })()}
+                  
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(departments.length / itemsPerPage)))}
+                    disabled={currentPage === Math.ceil(departments.length / itemsPerPage)}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

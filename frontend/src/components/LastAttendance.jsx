@@ -67,54 +67,56 @@ export default function LastAttendance() {
         </div>
 
         {/* Table Section */}
-        <div className="overflow-x-auto p-6 bg-[#F3F4F6]">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-[#1E3A8A] text-white">
-              <tr>
-                <th className="py-3 px-4 text-left font-medium">Date</th>
-                <th className="py-3 px-4 text-left font-medium">Clock In</th>
-                <th className="py-3 px-4 text-left font-medium">Clock Out</th>
-                <th className="py-3 px-4 text-left font-medium">Hours Worked</th>
-                <th className="py-3 px-4 text-left font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-700">
-              {loading ? (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan="5" className="py-4 px-4 text-center">Loading...</td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock In</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock Out</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours Worked</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 </tr>
-              ) : !lastAttendance ? (
-                <tr>
-                  <td colSpan="5" className="py-4 px-4 text-center">No completed attendance records found</td>
-                </tr>
-              ) : (
-                <tr className="border-b-1 bg-white">
-                  <td className="py-3 px-4">{formatDate(lastAttendance.date)}</td>
-                  <td className="py-3 px-4">{formatTime(lastAttendance.clock_in)}</td>
-                  <td className="py-3 px-4">{formatTime(lastAttendance.clock_out)}</td>
-                  <td className="py-3 px-4">
-                    {lastAttendance.total_hours ? `${lastAttendance.total_hours.toFixed(2)} hrs` : "-"}
-                  </td>
-                  <td className="py-3 px-4 font-medium">
-                    {(() => {
-                      const statusDisplay = {
-                        'Present': { label: 'Present', color: 'text-green-600' },
-                        'Late': { label: 'Late', color: 'text-orange-600' },
-                        'IN': { label: 'Clocked In', color: 'text-blue-600' },
-                        'COMPLETED': { label: 'Completed', color: 'text-green-600' },
-                      };
-                      const display = statusDisplay[lastAttendance.status] || { label: lastAttendance.status, color: 'text-gray-600' };
-                      return (
-                        <span className={display.color}>
-                          {display.label}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">Loading...</td>
+                  </tr>
+                ) : !lastAttendance ? (
+                  <tr>
+                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">No completed attendance records found</td>
+                  </tr>
+                ) : (
+                  <tr className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(lastAttendance.date)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(lastAttendance.clock_in)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(lastAttendance.clock_out)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {lastAttendance.total_hours ? `${lastAttendance.total_hours.toFixed(2)} hrs` : "-"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        const statusDisplay = {
+                          'Present': { label: 'Present', color: 'bg-green-100 text-green-800' },
+                          'Late': { label: 'Late', color: 'bg-orange-100 text-orange-800' },
+                          'IN': { label: 'Clocked In', color: 'bg-blue-100 text-blue-800' },
+                          'COMPLETED': { label: 'Completed', color: 'bg-green-100 text-green-800' },
+                        };
+                        const display = statusDisplay[lastAttendance.status] || { label: lastAttendance.status, color: 'bg-gray-100 text-gray-800' };
+                        return (
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${display.color}`}>
+                            {display.label}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </>

@@ -7,31 +7,27 @@ export default function ViewSched() {
     { employee: "Jane Smith", shift: "Night Shift", date: "Nov 5, 2025" },
   ]);
   return (
-    <div className="bg-[#F3F4F6] rounded-lg shadow-md p-6">
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A] mb-4">
-        <MdViewList /> View Assigned Schedules
-      </h2>
-      <table className="w-full text-sm text-gray-600 bg-white">
-        <thead className="bg-[#1E3A8A] text-white">
-          <tr>
-            <th className="py-3 px-4 font-medium text-left">Employee</th>
-            <th className="py-3 px-4 font-medium text-left">Shift</th>
-            <th className="py-3 px-4 font-medium text-left">Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {assignments.map((a, index) => (
-            <tr
-              key={index}
-              className="border-b-1 hover:bg-gray-50 transition-colors"
-            >
-              <td className="py-3 px-4 text-left font-medium">{a.employee}</td>
-              <td className="py-3 px-4 text-left font-medium">{a.shift}</td>
-              <td className="py-3 px-4 text-left font-medium">{a.date}</td>
+    <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shift</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {assignments.map((a, index) => (
+              <tr key={index} className="hover:bg-gray-50">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{a.employee}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{a.shift}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{a.date}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

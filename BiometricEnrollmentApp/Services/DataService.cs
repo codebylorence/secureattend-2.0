@@ -712,17 +712,23 @@ namespace BiometricEnrollmentApp.Services
                     shiftEnd = shiftEnd.AddDays(1);
                 }
                 
-                // Check if current time is before shift start (NO GRACE PERIOD)
-                if (now < shiftStart)
+                // Allow clock-in 30 minutes before shift start (early arrival grace period)
+                var earlyClockInWindow = shiftStart.AddMinutes(-30);
+                
+                // Check if current time is too early (more than 30 minutes before shift)
+                if (now < earlyClockInWindow)
                 {
-                    var minutesUntilStart = (shiftStart - now).TotalMinutes;
-                    return (false, $"Shift hasn't started yet. Shift starts at {shiftStartTime}. Please wait {minutesUntilStart:F0} more minutes.");
+                    var minutesUntilWindow = (earlyClockInWindow - now).TotalMinutes;
+                    return (false, $"Too early to clock in. You can clock in starting {earlyClockInWindow:HH:mm} (30 minutes before shift). Please wait {minutesUntilWindow:F0} more minutes.");
                 }
                 
-                // Check if current time is after shift end
-                if (now > shiftEnd)
+                // Allow clock-in up to 30 minutes after shift end (late clock-in grace period)
+                var lateClockInWindow = shiftEnd.AddMinutes(30);
+                
+                // Check if current time is too late (more than 30 minutes after shift end)
+                if (now > lateClockInWindow)
                 {
-                    return (false, $"Shift has ended. Shift time was {shiftStartTime} - {shiftEndTime}.");
+                    return (false, $"Too late to clock in. Shift ended at {shiftEndTime} with 30-minute grace period until {lateClockInWindow:HH:mm}.");
                 }
                 
                 return (true, "");
@@ -771,7 +777,11 @@ namespace BiometricEnrollmentApp.Services
         }
 
         /// <summary>
-        /// Mark employees as absent if their shift has ended and they didn't clock in
+        /// Mark employees as absent if ALL conditions are met:
+        /// 1. Employee has enrolled fingerprints
+        /// 2. Employee's shift has started
+        /// 3. Employee's shift has ended + grace period (30 minutes)
+        /// 4. Employee has not clocked in today
         /// This should be called periodically (e.g., every hour or at end of day)
         /// </summary>
         public int MarkAbsentEmployees()
@@ -801,16 +811,34 @@ namespace BiometricEnrollmentApp.Services
                     return 0;
                 }
                 
+                // Get all enrolled employees (those with fingerprints)
+                var enrolledEmployees = GetAllEnrollments().Select(e => e.EmployeeId).ToHashSet();
+                LogHelper.Write($"👆 Found {enrolledEmployees.Count} employees with enrolled fingerprints");
+                
                 int markedAbsent = 0;
                 
                 foreach (var schedule in schedulesToday)
                 {
                     LogHelper.Write($"  📋 Checking {schedule.EmployeeId}: Shift {schedule.ShiftName} ({schedule.StartTime} - {schedule.EndTime})");
                     
-                    // Check if shift has ended
-                    if (!HasShiftEnded(schedule.EndTime))
+                    // Check if employee has enrolled fingerprints
+                    if (!enrolledEmployees.Contains(schedule.EmployeeId))
                     {
-                        LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet ({schedule.EndTime})");
+                        LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - No enrolled fingerprints, skipping absent marking");
+                        continue;
+                    }
+                    
+                    // FIRST: Check if shift has started (must start before we can mark absent)
+                    if (!HasShiftStarted(schedule.StartTime))
+                    {
+                        LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift hasn't started yet ({schedule.StartTime}), cannot mark absent");
+                        continue;
+                    }
+                    
+                    // SECOND: Check if shift has ended with grace period (30 minutes after shift end)
+                    if (!HasShiftEndedWithGracePeriod(schedule.EndTime, 30))
+                    {
+                        LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet or within grace period ({schedule.EndTime})");
                         continue;
                     }
                     
@@ -861,7 +889,7 @@ namespace BiometricEnrollmentApp.Services
                         insertCmd.ExecuteNonQuery();
                         
                         markedAbsent++;
-                        LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent");
+                        LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent (shift started, ended + grace period passed, no clock-in)");
                     }
                 }
                 
@@ -951,6 +979,151 @@ namespace BiometricEnrollmentApp.Services
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 HasShiftEnded error for '{endTime}': {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Check if shift start time has passed
+        /// This ensures we only mark absent employees whose shift has actually started
+        /// </summary>
+        private bool HasShiftStarted(string startTime)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(startTime))
+                {
+                    LogHelper.Write($"⚠️ HasShiftStarted: startTime is null or empty");
+                    return false;
+                }
+
+                int hours, minutes;
+                
+                // Check if it's 12-hour format with AM/PM
+                var parts = startTime.Split(' ');
+                if (parts.Length == 2)
+                {
+                    // 12-hour format: "08:00 AM"
+                    var timeParts = parts[0].Split(':');
+                    if (timeParts.Length != 2) 
+                    {
+                        LogHelper.Write($"⚠️ HasShiftStarted: Invalid time format: {startTime}");
+                        return false;
+                    }
+                    
+                    hours = int.Parse(timeParts[0]);
+                    minutes = int.Parse(timeParts[1]);
+                    var period = parts[1].ToUpper();
+                    
+                    // Convert to 24-hour format
+                    if (period == "PM" && hours != 12)
+                        hours += 12;
+                    else if (period == "AM" && hours == 12)
+                        hours = 0;
+                }
+                else
+                {
+                    // 24-hour format: "08:00"
+                    var timeParts = startTime.Split(':');
+                    if (timeParts.Length < 2)
+                    {
+                        LogHelper.Write($"⚠️ HasShiftStarted: Invalid time format: {startTime}");
+                        return false;
+                    }
+                    
+                    hours = int.Parse(timeParts[0]);
+                    minutes = int.Parse(timeParts[1]);
+                }
+                
+                // Create DateTime objects for comparison
+                var now = DateTime.Now;
+                var today = now.Date;
+                var shiftStartTime = today.AddHours(hours).AddMinutes(minutes);
+                
+                // Check if current time is past the shift start time
+                bool started = now >= shiftStartTime;
+                
+                LogHelper.Write($"  🕐 Shift start: {startTime} ({shiftStartTime:HH:mm}), Current: {now:HH:mm}, Started: {started}");
+                
+                return started;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 HasShiftStarted error for '{startTime}': {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Check if shift end time has passed with a grace period for absent marking
+        /// This prevents marking employees absent too early
+        /// </summary>
+        private bool HasShiftEndedWithGracePeriod(string endTime, int gracePeriodMinutes)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(endTime))
+                {
+                    LogHelper.Write($"⚠️ HasShiftEndedWithGracePeriod: endTime is null or empty");
+                    return false;
+                }
+
+                int hours, minutes;
+                
+                // Check if it's 12-hour format with AM/PM
+                var parts = endTime.Split(' ');
+                if (parts.Length == 2)
+                {
+                    // 12-hour format: "05:00 PM"
+                    var timeParts = parts[0].Split(':');
+                    if (timeParts.Length != 2) 
+                    {
+                        LogHelper.Write($"⚠️ HasShiftEndedWithGracePeriod: Invalid time format: {endTime}");
+                        return false;
+                    }
+                    
+                    hours = int.Parse(timeParts[0]);
+                    minutes = int.Parse(timeParts[1]);
+                    var period = parts[1].ToUpper();
+                    
+                    // Convert to 24-hour format
+                    if (period == "PM" && hours != 12)
+                        hours += 12;
+                    else if (period == "AM" && hours == 12)
+                        hours = 0;
+                }
+                else
+                {
+                    // 24-hour format: "17:00" or "02:54"
+                    var timeParts = endTime.Split(':');
+                    if (timeParts.Length < 2)
+                    {
+                        LogHelper.Write($"⚠️ HasShiftEndedWithGracePeriod: Invalid time format: {endTime}");
+                        return false;
+                    }
+                    
+                    hours = int.Parse(timeParts[0]);
+                    minutes = int.Parse(timeParts[1]);
+                }
+                
+                // Create DateTime objects for comparison
+                var now = DateTime.Now;
+                var today = now.Date;
+                var shiftEndTime = today.AddHours(hours).AddMinutes(minutes);
+                
+                // Add grace period to shift end time
+                var shiftEndWithGrace = shiftEndTime.AddMinutes(gracePeriodMinutes);
+                
+                // Check if current time is past the shift end + grace period
+                bool ended = now >= shiftEndWithGrace;
+                
+                LogHelper.Write($"  🕐 Shift end: {endTime} ({shiftEndTime:HH:mm}), Grace end: {shiftEndWithGrace:HH:mm}, Current: {now:HH:mm}, Ended: {ended}");
+                
+                return ended;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 HasShiftEndedWithGracePeriod error for '{endTime}': {ex.Message}");
                 return false;
             }
         }

@@ -10,9 +10,71 @@ export const getDepartments = async (req, res) => {
 
     const departmentsWithCount = await Promise.all(
       departments.map(async (dept) => {
-        const employeeCount = await Employee.count({
+        // Count employees in this department
+        let employeeCount = await Employee.count({
           where: { department: dept.name }
         });
+        
+        // If there's a manager assigned, check if they need to be counted
+        if (dept.manager) {
+          // Check if the manager is already counted (i.e., they're in this department)
+          let managerInDept = await Employee.findOne({
+            where: {
+              department: dept.name,
+              fullname: dept.manager
+            }
+          });
+          
+          // Additional check for firstname+lastname combination if not found by fullname
+          if (!managerInDept && dept.manager) {
+            const nameParts = dept.manager.split(' ');
+            if (nameParts.length >= 2) {
+              const firstName = nameParts[0];
+              const lastName = nameParts.slice(1).join(' ');
+              
+              managerInDept = await Employee.findOne({
+                where: {
+                  department: dept.name,
+                  firstname: firstName,
+                  lastname: lastName
+                }
+              });
+            }
+          }
+          
+          console.log(`🔍 Manager check for ${dept.name}: manager=${dept.manager}, inDept=${!!managerInDept}`);
+          
+          // If manager is not in this department, add 1 to count
+          if (!managerInDept) {
+            let managerExists = await Employee.findOne({
+              where: {
+                fullname: dept.manager
+              }
+            });
+            
+            // If not found by fullname, try firstname+lastname combination
+            if (!managerExists && dept.manager) {
+              const nameParts = dept.manager.split(' ');
+              if (nameParts.length >= 2) {
+                const firstName = nameParts[0];
+                const lastName = nameParts.slice(1).join(' ');
+                
+                managerExists = await Employee.findOne({
+                  where: {
+                    firstname: firstName,
+                    lastname: lastName
+                  }
+                });
+              }
+            }
+            
+            if (managerExists) {
+              employeeCount += 1;
+              console.log(`✅ Added cross-department manager ${dept.manager} to ${dept.name} count`);
+            }
+          }
+        }
+        
         return {
           ...dept.toJSON(),
           employeeCount
@@ -82,28 +144,67 @@ export const updateDepartment = async (req, res) => {
     if (manager !== undefined && manager !== oldManager) {
       // If a new manager is assigned
       if (manager && manager !== "") {
-        await Employee.update(
-          { department: department.name },
-          { 
-            where: { 
-              fullname: manager,
-              position: "Team Leader"
-            } 
+        // Find the manager using both fullname and firstname+lastname combinations
+        let managerEmployee = await Employee.findOne({
+          where: {
+            fullname: manager,
+            position: "Team Leader"
           }
-        );
+        });
+        
+        // If not found by fullname, try firstname+lastname combination
+        if (!managerEmployee && manager) {
+          const nameParts = manager.split(' ');
+          if (nameParts.length >= 2) {
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(' ');
+            
+            managerEmployee = await Employee.findOne({
+              where: {
+                firstname: firstName,
+                lastname: lastName,
+                position: "Team Leader"
+              }
+            });
+          }
+        }
+
+        if (managerEmployee) {
+          await managerEmployee.update({ department: department.name });
+          console.log(`✅ Updated manager ${manager} department to ${department.name}`);
+        }
       }
 
       // If old manager was removed, optionally set their department to "No Department"
       if (oldManager && oldManager !== "" && (!manager || manager === "")) {
-        await Employee.update(
-          { department: "No Department" },
-          { 
-            where: { 
-              fullname: oldManager,
-              position: "Team Leader"
-            } 
+        let oldManagerEmployee = await Employee.findOne({
+          where: {
+            fullname: oldManager,
+            position: "Team Leader"
           }
-        );
+        });
+        
+        // If not found by fullname, try firstname+lastname combination
+        if (!oldManagerEmployee && oldManager) {
+          const nameParts = oldManager.split(' ');
+          if (nameParts.length >= 2) {
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(' ');
+            
+            oldManagerEmployee = await Employee.findOne({
+              where: {
+                firstname: firstName,
+                lastname: lastName,
+                position: "Team Leader"
+              }
+            });
+          }
+        }
+
+        if (oldManagerEmployee) {
+          await oldManagerEmployee.update({ department: "No Department" });
+          console.log(`✅ Removed old manager ${oldManager} from department`);
+        }
       }
     }
 

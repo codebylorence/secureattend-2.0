@@ -1,5 +1,6 @@
 import User from "../models/user.js";
 import Employee from "../models/employee.js";
+import { fixTeamLeaderRoles as fixRoles } from "../utils/fixTeamLeaderRoles.js";
 
 // 👤 GET USER PROFILE (using verifyToken middleware)
 export const getUserProfile = async (req, res) => {
@@ -51,7 +52,7 @@ export const getTeamLeaders = async (req, res) => {
         {
           model: Employee,
           as: "employee",
-          attributes: ["employee_id", "fullname", "department"],
+          attributes: ["employee_id", "firstname", "lastname", "fullname", "department"],
         },
       ],
     });
@@ -137,5 +138,32 @@ export const createMissingTeamLeaderAccounts = async (req, res) => {
   } catch (error) {
     console.error("Error creating team leader accounts:", error);
     res.status(500).json({ error: "Failed to create team leader accounts" });
+  }
+};
+
+// 🔧 FIX TEAM LEADER ROLES
+export const fixTeamLeaderRoles = async (req, res) => {
+  try {
+    console.log("🔧 Starting team leader role fix via API...");
+    
+    const result = await fixRoles();
+    
+    if (result.success) {
+      res.status(200).json({
+        message: "Team leader roles fixed successfully",
+        fixed: result.fixed
+      });
+    } else {
+      res.status(500).json({
+        message: "Failed to fix team leader roles",
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error("Error in fix team leader roles API:", error);
+    res.status(500).json({ 
+      message: "Failed to fix team leader roles",
+      error: error.message 
+    });
   }
 };

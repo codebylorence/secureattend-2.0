@@ -136,7 +136,7 @@ export const recordAttendance = async (req, res) => {
 
 export const getAttendances = async (req, res) => {
   try {
-    const { date, employee_id } = req.query;
+    const { date, employee_id, start_date, end_date } = req.query;
     
     let whereClause = {};
     
@@ -148,14 +148,53 @@ export const getAttendances = async (req, res) => {
       whereClause.employee_id = employee_id;
     }
 
+    // Handle date range filtering for reports
+    if (start_date && end_date) {
+      whereClause.date = {
+        [Op.between]: [start_date, end_date]
+      };
+    }
+
     const attendances = await Attendance.findAll({
       where: whereClause,
-      order: [['clock_in', 'DESC']]
+      include: [
+        {
+          model: Employee,
+          as: 'employee',
+          attributes: ['employee_id', 'firstname', 'lastname', 'fullname', 'email', 'department', 'position'],
+          required: false // LEFT JOIN to include attendances even if employee is deleted
+        }
+      ],
+      order: [['date', 'DESC'], ['clock_in', 'DESC']]
     });
 
-    res.status(200).json(attendances);
+    // Format the response to include employee information at the top level
+    const formattedAttendances = attendances.map(attendance => {
+      const attendanceData = attendance.toJSON();
+      const employee = attendanceData.employee;
+      
+      // Get employee name (handle both formats)
+      let employeeName = 'Unknown Employee';
+      if (employee) {
+        if (employee.firstname && employee.lastname) {
+          employeeName = `${employee.firstname} ${employee.lastname}`;
+        } else if (employee.fullname) {
+          employeeName = employee.fullname;
+        }
+      }
+
+      return {
+        ...attendanceData,
+        employee_name: employeeName,
+        employee_email: employee?.email || `${attendanceData.employee_id}@company.com`,
+        department: employee?.department || 'N/A',
+        position: employee?.position || 'N/A'
+      };
+    });
+
+    res.status(200).json(formattedAttendances);
   } catch (error) {
-    console.error("Error fetching attendances:", error);
+    console.error("❌ Error fetching attendances:", error);
     res.status(500).json({ error: "Failed to fetch attendances" });
   }
 };

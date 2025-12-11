@@ -152,7 +152,7 @@ export default function Navbar() {
 
         {/* Profile Section */}
         <div
-          className="flex items-center gap-2 cursor-pointer select-none"
+          className="flex items-center gap-3 cursor-pointer select-none"
           onClick={() => {
             setShowProfileMenu(!showProfileMenu);
             setShowNotifications(false);
@@ -169,7 +169,12 @@ export default function Navbar() {
               <FaUser className="text-gray-600" size={20} />
             </div>
           )}
-          <p className="text-white text-sm font-medium">{username}</p>
+          <div className="text-white text-right">
+            <p className="text-sm font-medium leading-tight">{username}</p>
+            {user.employee?.position && (
+              <p className="text-xs text-blue-200 leading-tight">{user.employee.position}</p>
+            )}
+          </div>
         </div>
 
         {/* Notifications Dropdown */}
@@ -317,7 +322,11 @@ export default function Navbar() {
                 <p className="font-semibold text-gray-800 text-sm">
                   {username}
                 </p>
-                <p className="text-xs text-gray-500 capitalize">{role}</p>
+                {user.employee?.position ? (
+                  <p className="text-xs text-blue-600">{user.employee.position}</p>
+                ) : (
+                  <p className="text-xs text-gray-500 capitalize">{role}</p>
+                )}
               </div>
             </div>
 
