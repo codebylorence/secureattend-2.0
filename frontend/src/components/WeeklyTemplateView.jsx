@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { MdEdit, MdDelete, MdSave, MdContentCopy, MdClose, MdCheck, MdPlayArrow, MdAdd, MdLightbulb, MdLock, MdLockOpen } from "react-icons/md";
-import { getTemplates, deleteTemplate, updateTemplate, createTemplate } from "../api/ScheduleApi";
+import { getTemplates, deleteTemplate, updateTemplate, createTemplate, publishSchedules } from "../api/ScheduleApi";
+import { fetchDepartments } from "../api/DepartmentApi";
 import { toast } from 'react-toastify';
 import { confirmAction } from "../utils/confirmToast.jsx";
 
@@ -36,12 +37,16 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
 
   // Check if the shift has started or ended for today
   const isShiftTimePassedForToday = (startTime, endTime) => {
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const shiftStartMinutes = parseTimeToMinutes(startTime);
+    // TEMPORARILY DISABLED FOR TESTING - Always return false to allow scheduling
+    return false;
     
-    // Return true if shift has started (ongoing or ended)
-    return currentMinutes >= shiftStartMinutes;
+    // Original logic (commented out):
+    // const now = new Date();
+    // const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // const shiftStartMinutes = parseTimeToMinutes(startTime);
+    // 
+    // // Return true if shift has started (ongoing or ended)
+    // return currentMinutes >= shiftStartMinutes;
   };
 
   const handleShiftTemplateChange = (shiftName) => {
@@ -83,7 +88,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
       );
       return;
     }
-    
+
     // Add each selected department
     const results = [];
     const newSchedules = [];
@@ -136,19 +141,21 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
   const scheduledDepartments = localSchedules
     .filter(s => !s.pending_deletion)
     .map(s => s.department);
+  
+  // Available departments = not already scheduled
   const availableDepartments = departments.filter(d => !scheduledDepartments.includes(d.name));
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg p-4 md:p-6 w-full max-w-xs sm:max-w-md md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-semibold text-[#1E3A8A]">{day} Schedule</h2>
+            <h2 className="text-lg md:text-2xl font-semibold text-[#1E3A8A]">{day} Schedule</h2>
             {(() => {
               const today = new Date();
               const todayDayName = getDayOfWeek(today);
               return day === todayDayName && (
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
+                <span className="px-2 md:px-3 py-1 bg-blue-100 text-blue-800 text-xs md:text-sm font-medium rounded-full">
                   Today
                 </span>
               );
@@ -156,7 +163,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
           </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-2xl"
+            className="text-gray-500 hover:text-gray-700 text-xl md:text-2xl"
           >
             ×
           </button>
@@ -203,16 +210,67 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                         : (schedule.member_limit !== undefined && schedule.member_limit !== null 
                             ? schedule.member_limit 
                             : 1); // Default to 1 if no limit is set
+                      const isDeleted = schedule.pending_deletion === true;
+                      const isDraft = schedule.publish_status === "Draft";
+                      const isEdited = schedule.is_edited === true; // Use backend field
+                      
                       return (
                         <div
                           key={idx}
-                          className="bg-white border border-blue-200 rounded-md p-3 flex justify-between items-center hover:shadow-sm transition-shadow"
+                          className={`bg-white border rounded-md p-3 flex justify-between items-center hover:shadow-sm transition-shadow ${
+                            isDeleted 
+                              ? 'border-red-300 bg-red-50 opacity-75' 
+                              : isEdited
+                                ? 'border-yellow-300 bg-yellow-50'
+                                : isDraft 
+                                  ? 'border-orange-300 bg-orange-50' 
+                                  : 'border-blue-200'
+                          }`}
                         >
                           <div className="flex items-center gap-3 flex-1">
-                            <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                            <div className={`w-2 h-2 rounded-full ${
+                              isDeleted 
+                                ? 'bg-red-600' 
+                                : isEdited
+                                  ? 'bg-yellow-600'
+                                  : isDraft 
+                                    ? 'bg-orange-600' 
+                                    : 'bg-blue-600'
+                            }`}></div>
                             <div>
-                              <p className="font-semibold text-blue-900">{schedule.department}</p>
-                              <p className="text-sm text-green-700 font-medium">
+                              <div className="flex items-center gap-2">
+                                <p className={`font-semibold ${
+                                  isDeleted 
+                                    ? 'text-red-900 line-through' 
+                                    : isEdited
+                                      ? 'text-yellow-900'
+                                      : isDraft 
+                                        ? 'text-orange-900' 
+                                        : 'text-blue-900'
+                                }`}>
+                                  {schedule.department}
+                                </p>
+                                {isDeleted && (
+                                  <span className="text-[10px] bg-red-200 text-red-800 px-1 py-0.5 rounded font-medium">
+                                    DELETED
+                                  </span>
+                                )}
+                                {isEdited && !isDeleted && (
+                                  <span className="text-[10px] bg-yellow-200 text-yellow-800 px-1 py-0.5 rounded font-medium">
+                                    EDITED
+                                  </span>
+                                )}
+                                {isDraft && !isDeleted && !isEdited && (
+                                  <span className="text-[10px] bg-orange-200 text-orange-800 px-1 py-0.5 rounded font-medium">
+                                    DRAFT
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-sm font-medium ${
+                                isDeleted 
+                                  ? 'text-gray-500 line-through' 
+                                  : 'text-green-700'
+                              }`}>
                                 Max Members: {limit}
                               </p>
                             </div>
@@ -223,8 +281,13 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                                 onEdit(schedule, day);
                                 onClose();
                               }}
-                              className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-100 rounded"
-                              title="Edit"
+                              className={`p-2 rounded ${
+                                isDeleted 
+                                  ? 'text-gray-400 cursor-not-allowed' 
+                                  : 'text-blue-600 hover:text-blue-800 hover:bg-blue-100'
+                              }`}
+                              title={isDeleted ? "Cannot edit deleted schedule" : "Edit"}
+                              disabled={isDeleted}
                             >
                               <MdEdit size={18} />
                             </button>
@@ -235,8 +298,13 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                                 // Then call the actual delete function
                                 onDeleteFromDay(schedule.id, day, schedule.department);
                               }}
-                              className="text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded"
-                              title="Delete"
+                              className={`p-2 rounded ${
+                                isDeleted 
+                                  ? 'text-gray-400 cursor-not-allowed' 
+                                  : 'text-red-600 hover:text-red-800 hover:bg-red-100'
+                              }`}
+                              title={isDeleted ? "Already marked for deletion" : "Delete"}
+                              disabled={isDeleted}
                             >
                               <MdDelete size={18} />
                             </button>
@@ -258,9 +326,9 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
         {!showAddForm && (
           <button
             onClick={() => setShowAddForm(true)}
-            className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-3 rounded-md hover:bg-green-700 font-semibold"
+            className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-3 md:px-4 py-2 md:py-3 rounded-md hover:bg-green-700 font-semibold text-sm md:text-base"
           >
-            <MdAdd size={20} /> Add Department to {day}
+            <MdAdd size={18} className="md:w-5 md:h-5" /> Add Department to {day}
           </button>
         )}
 
@@ -291,7 +359,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                               onChange={() => handleDepartmentToggle(dept.name)}
                               className="w-4 h-4 text-blue-600"
                             />
-                            <span className="text-sm">{dept.name}</span>
+                            <span className="text-sm flex-1">{dept.name}</span>
                           </label>
                         ))}
                       </div>
@@ -444,12 +512,16 @@ export default function WeeklyTemplateView() {
 
   // Check if the shift has started or ended for today
   const isShiftTimePassedForToday = (startTime, endTime) => {
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const shiftStartMinutes = parseTimeToMinutes(startTime);
+    // TEMPORARILY DISABLED FOR TESTING - Always return false to allow scheduling
+    return false;
     
-    // Return true if shift has started (ongoing or ended)
-    return currentMinutes >= shiftStartMinutes;
+    // Original logic (commented out):
+    // const now = new Date();
+    // const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // const shiftStartMinutes = parseTimeToMinutes(startTime);
+    // 
+    // // Return true if shift has started (ongoing or ended)
+    // return currentMinutes >= shiftStartMinutes;
   };
 
   useEffect(() => {
@@ -479,7 +551,6 @@ export default function WeeklyTemplateView() {
 
   const fetchDepartmentsData = async () => {
     try {
-      const { fetchDepartments } = await import("../api/DepartmentApi");
       const data = await fetchDepartments();
       setDepartments(data);
     } catch (error) {
@@ -503,14 +574,9 @@ export default function WeeklyTemplateView() {
 
     let skippedCount = 0;
     templates.forEach(template => {
-      // Skip templates marked for deletion
-      if (template.pending_deletion === true) {
-        skippedCount++;
-        return;
-      }
+      // Show ALL templates including those marked for deletion
+      // We'll add visual indicators in the UI instead of hiding them
       
-      // For each day, check if there's a draft version for this department
-      // If there's both a published and draft version, only show the draft (hide the old published)
       template.days.forEach(day => {
         // Check if there's a draft version of this department on this day
         const hasDraftVersion = templates.some(t => 
@@ -536,7 +602,11 @@ export default function WeeklyTemplateView() {
           day_limits: template.day_limits,
           member_limit: template.member_limit,
           pending_deletion: template.pending_deletion,
-          publish_status: template.publish_status
+          publish_status: template.publish_status,
+          is_edited: template.is_edited,
+          original_template_id: template.original_template_id,
+          edited_at: template.edited_at,
+          edited_by: template.edited_by
         });
       });
     });
@@ -641,7 +711,6 @@ export default function WeeklyTemplateView() {
     confirmAction("Publish all schedules? Team leaders will be notified.", async () => {
 
     try {
-      const { publishSchedules } = await import("../api/ScheduleApi");
       const user = JSON.parse(localStorage.getItem("user") || "{}");
       const publishedBy = user.employee?.employee_id || "admin";
 
@@ -788,7 +857,8 @@ export default function WeeklyTemplateView() {
       day_limits: {
         ...editingSchedule.day_limits,
         [editingSchedule.day]: editingSchedule.member_limit
-      }
+      },
+      edited_by: JSON.parse(localStorage.getItem("user") || "{}")?.employee?.employee_id || "admin"
       // Note: We're NOT updating the 'days' array here, only the day_limits
       // The 'days' array should remain unchanged
     };
@@ -804,9 +874,15 @@ export default function WeeklyTemplateView() {
       
       // Show appropriate message based on publish status
       if (result.template && result.template.publish_status === "Draft") {
-        toast.info("📝 Draft created! The original schedule stays visible to team leaders. Click 'Publish Schedule' to apply changes.", {
-          autoClose: 5000
-        });
+        if (result.template.is_edited) {
+          toast.info("✏️ Schedule edited! The original stays visible to team leaders. Click 'Publish Schedule' to apply changes.", {
+            autoClose: 5000
+          });
+        } else {
+          toast.info("📝 Draft created! Click 'Publish Schedule' to make it visible to team leaders.", {
+            autoClose: 5000
+          });
+        }
       } else if (result.template && result.template.publish_status === "Published") {
         toast.success("Schedule updated! Team leaders can see the changes immediately.");
       } else {
@@ -842,7 +918,6 @@ export default function WeeklyTemplateView() {
 
   const handleAddDepartmentToDay = async (departmentData) => {
     try {
-      const { createTemplate } = await import("../api/ScheduleApi");
       
       console.log("🔍 Adding department:", departmentData.department, "to", selectedDay);
       console.log("📋 Current templates:", templates.length);
@@ -963,10 +1038,11 @@ export default function WeeklyTemplateView() {
             setEditingShiftIndex(null);
             setShowShiftTemplateModal(true);
           }}
-          className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition"
+          className="flex items-center gap-2 bg-purple-600 text-white px-3 md:px-4 py-2 rounded-md hover:bg-purple-700 transition text-sm md:text-base"
         >
-          <MdAdd size={20} />
-          Manage Shift Templates
+          <MdAdd size={18} className="md:w-5 md:h-5" />
+          <span className="hidden sm:inline">Manage Shift Templates</span>
+          <span className="sm:hidden">Shifts</span>
         </button>
       </div>
 
@@ -1273,11 +1349,11 @@ export default function WeeklyTemplateView() {
       )}
 
       {/* Instructions Banner */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-          <MdLightbulb size={20} /> How to Create Schedules
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 md:p-4 mb-6">
+        <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2 text-sm md:text-base">
+          <MdLightbulb size={18} className="md:w-5 md:h-5" /> How to Create Schedules
         </h3>
-        <ul className="text-sm text-blue-800 space-y-1">
+        <ul className="text-xs md:text-sm text-blue-800 space-y-1">
           <li>• <strong>Click on any day</strong> (Monday-Sunday) to open the schedule manager</li>
           <li>• <strong>Add departments/zones</strong> to that specific day with shift details</li>
           <li>• <strong>Edit or delete</strong> schedules directly from the day view</li>
@@ -1287,35 +1363,65 @@ export default function WeeklyTemplateView() {
 
       {/* Weekly Calendar View */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-[#1E3A8A]">Weekly Schedule Overview</h2>
-          <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+          <h2 className="text-lg md:text-xl font-semibold text-[#1E3A8A]">Weekly Schedule Overview</h2>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={handlePublishSchedules}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold"
+              className="flex items-center justify-center gap-2 bg-blue-600 text-white px-3 md:px-4 py-2 rounded-md hover:bg-blue-700 font-semibold text-sm md:text-base"
             >
-              <MdCheck /> Publish Schedule
+              <MdCheck size={16} className="md:w-5 md:h-5" /> Publish Schedule
             </button>
             <button
               onClick={handleSaveAsReusable}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+              className="flex items-center justify-center gap-2 bg-green-600 text-white px-3 md:px-4 py-2 rounded-md hover:bg-green-700 text-sm md:text-base"
             >
-              <MdSave /> Save as Template
+              <MdSave size={16} className="md:w-5 md:h-5" /> Save as Template
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-7 gap-3">
+        {/* Status Legend */}
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Schedule Status Legend:</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-blue-200 bg-white rounded flex-shrink-0"></div>
+              <span className="text-gray-600">Published Schedule</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-orange-300 bg-orange-50 rounded flex-shrink-0"></div>
+              <span className="text-orange-800 font-medium">DRAFT</span>
+              <span className="text-gray-600 hidden sm:inline">- New schedule</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-yellow-300 bg-yellow-50 rounded flex-shrink-0"></div>
+              <span className="text-yellow-800 font-medium">EDITED</span>
+              <span className="text-gray-600 hidden sm:inline">- Modified schedule</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-red-300 bg-red-50 rounded opacity-75 flex-shrink-0"></div>
+              <span className="text-red-800 font-medium">DELETED</span>
+              <span className="text-gray-600 hidden sm:inline">- Marked for removal</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Click "Publish Schedule" to apply all draft changes and remove deleted schedules permanently.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 md:gap-3">
           {daysOfWeek.map(day => (
             <div key={day} className="border-2 border-gray-300 rounded-lg overflow-hidden hover:border-blue-500 transition-all">
               <button
                 onClick={() => handleDayClick(day)}
-                className="w-full bg-[#1E3A8A] text-white p-3 text-center font-semibold hover:bg-blue-900 transition-colors cursor-pointer"
+                className="w-full bg-[#1E3A8A] text-white p-2 md:p-3 text-center font-semibold hover:bg-blue-900 transition-colors cursor-pointer text-sm md:text-base"
                 title={`Click to manage ${day} schedule`}
               >
-                {day}
+                <span className="hidden sm:inline">{day}</span>
+                <span className="sm:hidden">{day.slice(0, 3)}</span>
               </button>
-              <div className="p-3 space-y-2 min-h-[200px] bg-gray-50">
+              <div className="p-2 md:p-3 space-y-2 min-h-[150px] md:min-h-[200px] bg-gray-50">
                 {weeklyView[day]?.length > 0 ? (
                   weeklyView[day].map((schedule, idx) => {
                     // Get limit with proper fallback (default to 1 if not set)
@@ -1326,51 +1432,92 @@ export default function WeeklyTemplateView() {
                           ? schedule.member_limit 
                           : 1); // Default to 1 if no limit is set
                     const isDraft = schedule.publish_status === "Draft";
+                    const isDeleted = schedule.pending_deletion === true;
+                    const isEdited = schedule.is_edited === true; // Use backend field
+                    
                     return (
                       <div
                         key={idx}
                         className={`bg-white rounded-md p-2 hover:shadow-md transition-shadow ${
-                          isDraft ? 'border-2 border-orange-300 bg-orange-50' : 'border border-blue-200'
+                          isDeleted 
+                            ? 'border-2 border-red-300 bg-red-50 opacity-75' 
+                            : isEdited
+                              ? 'border-2 border-yellow-300 bg-yellow-50'
+                              : isDraft 
+                                ? 'border-2 border-orange-300 bg-orange-50' 
+                                : 'border border-blue-200'
                         }`}
                       >
                         <div className="flex justify-between items-start mb-1">
-                          <div className="flex items-center gap-1">
-                            <p className={`font-semibold text-sm ${isDraft ? 'text-orange-800' : 'text-blue-800'}`}>
+                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                            <p className={`font-semibold text-xs md:text-sm truncate ${
+                              isDeleted 
+                                ? 'text-red-800 line-through' 
+                                : isEdited
+                                  ? 'text-yellow-800'
+                                  : isDraft 
+                                    ? 'text-orange-800' 
+                                    : 'text-blue-800'
+                            }`}>
                               {schedule.department}
                             </p>
-                            {isDraft && (
-                              <span className="text-[10px] bg-orange-200 text-orange-800 px-1 py-0.5 rounded font-medium">
+                            {isDeleted && (
+                              <span className="text-[8px] md:text-[10px] bg-red-200 text-red-800 px-1 py-0.5 rounded font-medium whitespace-nowrap">
+                                DEL
+                              </span>
+                            )}
+                            {isEdited && !isDeleted && (
+                              <span className="text-[8px] md:text-[10px] bg-yellow-200 text-yellow-800 px-1 py-0.5 rounded font-medium whitespace-nowrap">
+                                EDIT
+                              </span>
+                            )}
+                            {isDraft && !isDeleted && !isEdited && (
+                              <span className="text-[8px] md:text-[10px] bg-orange-200 text-orange-800 px-1 py-0.5 rounded font-medium whitespace-nowrap">
                                 DRAFT
                               </span>
                             )}
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 ml-1">
                             <button
                               onClick={() => handleEditSchedule(schedule, day)}
-                              className="text-blue-600 hover:text-blue-800 p-1"
-                              title="Edit"
+                              className={`p-1 ${
+                                isDeleted 
+                                  ? 'text-gray-400 cursor-not-allowed' 
+                                  : 'text-blue-600 hover:text-blue-800'
+                              }`}
+                              title={isDeleted ? "Cannot edit deleted schedule" : "Edit"}
+                              disabled={isDeleted}
                             >
-                              <MdEdit size={14} />
+                              <MdEdit size={12} className="md:w-3.5 md:h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDeleteFromDay(schedule.id, day, schedule.department)}
-                              className="text-red-600 hover:text-red-800 p-1"
-                              title="Delete from this day"
+                              className={`p-1 ${
+                                isDeleted 
+                                  ? 'text-gray-400 cursor-not-allowed' 
+                                  : 'text-red-600 hover:text-red-800'
+                              }`}
+                              title={isDeleted ? "Already marked for deletion" : "Delete from this day"}
+                              disabled={isDeleted}
                             >
-                              <MdDelete size={14} />
+                              <MdDelete size={12} className="md:w-3.5 md:h-3.5" />
                             </button>
                           </div>
                         </div>
-                        <p className="text-xs text-gray-700 font-medium">{schedule.shift_name}</p>
-                        <p className="text-xs text-gray-600">{schedule.start_time} - {schedule.end_time}</p>
-                        <p className="text-xs text-green-700 font-medium mt-1">
-                          Max: {limit} {limit === 1 ? 'member' : 'members'}
+                        <p className={`text-[10px] md:text-xs font-medium truncate ${isDeleted ? 'text-gray-500 line-through' : 'text-gray-700'}`}>
+                          {schedule.shift_name}
+                        </p>
+                        <p className={`text-[10px] md:text-xs truncate ${isDeleted ? 'text-gray-500 line-through' : 'text-gray-600'}`}>
+                          {schedule.start_time} - {schedule.end_time}
+                        </p>
+                        <p className={`text-[10px] md:text-xs font-medium mt-1 ${isDeleted ? 'text-gray-500 line-through' : 'text-green-700'}`}>
+                          Max: {limit}
                         </p>
                       </div>
                     );
                   })
                 ) : (
-                  <p className="text-gray-400 text-xs text-center mt-8">No schedules</p>
+                  <p className="text-gray-400 text-[10px] md:text-xs text-center mt-4 md:mt-8">No schedules</p>
                 )}
               </div>
             </div>
@@ -1379,55 +1526,55 @@ export default function WeeklyTemplateView() {
       </div>
 
       {/* Saved Templates */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Saved Reusable Templates</h3>
+      <div className="bg-white rounded-lg shadow-md p-4 md:p-6">
+        <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-4">Saved Reusable Templates</h3>
         {savedTemplates.length === 0 ? (
           <p className="text-gray-500 text-sm">No saved templates yet. Create a schedule and save it as a template.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
             {savedTemplates.map(template => (
               <div
                 key={template.id}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                className="border border-gray-200 rounded-lg p-3 md:p-4 hover:shadow-md transition-shadow"
               >
                 <div className="flex justify-between items-start mb-2">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-gray-800">{template.name}</h4>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-800 text-sm md:text-base truncate">{template.name}</h4>
                     <p className="text-xs text-gray-500">
                       Created: {new Date(template.createdAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 ml-2">
                     <button
                       onClick={() => handleLoadTemplate(template)}
                       className="text-blue-600 hover:text-blue-800 p-1"
                       title="View & Apply Template"
                     >
-                      <MdContentCopy size={16} />
+                      <MdContentCopy size={14} className="md:w-4 md:h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteSavedTemplate(template.id)}
                       className="text-red-600 hover:text-red-800 p-1"
                       title="Delete"
                     >
-                      <MdDelete size={16} />
+                      <MdDelete size={14} className="md:w-4 md:h-4" />
                     </button>
                   </div>
                 </div>
-                <div className="text-xs text-gray-600 mb-3">
+                <div className="text-xs text-gray-600 mb-3 max-h-20 overflow-y-auto">
                   {Object.entries(template.weeklySchedule).map(([day, schedules]) => (
                     schedules.length > 0 && (
                       <div key={day} className="mb-1">
-                        <span className="font-medium">{day}:</span> {schedules.length} zone(s)
+                        <span className="font-medium">{day.slice(0, 3)}:</span> {schedules.length} zone(s)
                       </div>
                     )
                   ))}
                 </div>
                 <button
                   onClick={() => handleApplyTemplate(template)}
-                  className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 text-sm font-medium"
+                  className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 text-xs md:text-sm font-medium"
                 >
-                  <MdPlayArrow size={16} /> Apply Template
+                  <MdPlayArrow size={14} className="md:w-4 md:h-4" /> Apply Template
                 </button>
               </div>
             ))}

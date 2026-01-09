@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { FaCamera, FaUser, FaEnvelope, FaPhone, FaIdCard, FaBriefcase, FaBuilding, FaUserTag } from "react-icons/fa";
-import { uploadEmployeePhoto, getEmployeeById } from "../api/EmployeeApi";
+import { FaCamera, FaUser, FaEnvelope, FaPhone, FaIdCard, FaBriefcase, FaBuilding, FaUserTag, FaEdit, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import { uploadEmployeePhoto, getEmployeeById, updateUserCredentials } from "../api/EmployeeApi";
 import { toast } from 'react-toastify';
 
 export default function Profile() {
@@ -8,6 +8,19 @@ export default function Profile() {
   const [photo, setPhoto] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [credentialsForm, setCredentialsForm] = useState({
+    username: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false
+  });
+  const [updatingCredentials, setUpdatingCredentials] = useState(false);
 
   useEffect(() => {
     fetchUserData();
@@ -87,6 +100,73 @@ export default function Profile() {
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleEditCredentials = () => {
+    setCredentialsForm({
+      username: user?.username || "",
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: ""
+    });
+    setShowCredentialsModal(true);
+  };
+
+  const handleCredentialsChange = (e) => {
+    setCredentialsForm({
+      ...credentialsForm,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const togglePasswordVisibility = (field) => {
+    setShowPasswords({
+      ...showPasswords,
+      [field]: !showPasswords[field]
+    });
+  };
+
+  const handleCredentialsSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (credentialsForm.newPassword !== credentialsForm.confirmPassword) {
+      toast.error("New passwords do not match");
+      return;
+    }
+
+    if (credentialsForm.newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters long");
+      return;
+    }
+
+    setUpdatingCredentials(true);
+    try {
+      await updateUserCredentials(user.id, {
+        username: credentialsForm.username,
+        password: credentialsForm.newPassword,
+        currentPassword: credentialsForm.currentPassword
+      });
+
+      // Update local storage with new username
+      const updatedUser = { ...user, username: credentialsForm.username };
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+
+      toast.success("Credentials updated successfully!");
+      setShowCredentialsModal(false);
+      setCredentialsForm({
+        username: "",
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: ""
+      });
+    } catch (error) {
+      console.error("Error updating credentials:", error);
+      const errorMessage = error.response?.data?.message || "Failed to update credentials";
+      toast.error(errorMessage);
+    } finally {
+      setUpdatingCredentials(false);
+    }
   };
 
   if (loading) {
@@ -247,8 +327,19 @@ export default function Profile() {
               <div className="flex items-start gap-3">
                 <FaUser className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
-                  <p className="text-xs text-gray-500 mb-1">Username</p>
-                  <p className="text-gray-900 font-medium">{user?.username || "N/A"}</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Username</p>
+                      <p className="text-gray-900 font-medium">{user?.username || "N/A"}</p>
+                    </div>
+                    <button
+                      onClick={handleEditCredentials}
+                      className="text-[#1E3A8A] hover:text-blue-700 p-2 rounded-full hover:bg-blue-50 transition-colors"
+                      title="Edit Username & Password"
+                    >
+                      <FaEdit size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -272,9 +363,157 @@ export default function Profile() {
           <p className="text-sm text-blue-800">
             <strong>Tip:</strong> Click the camera icon on your profile photo to upload a new picture. 
             Your photo will be displayed across the system and used for attendance verification.
+            Click the edit icon next to your username to update your login credentials.
           </p>
         </div>
       </div>
+
+      {/* Credentials Edit Modal */}
+      {showCredentialsModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-[#1E3A8A] flex items-center gap-2">
+                <FaLock size={20} />
+                Edit Credentials
+              </h2>
+              <button
+                onClick={() => setShowCredentialsModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+              {/* Username */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  name="username"
+                  value={credentialsForm.username}
+                  onChange={handleCredentialsChange}
+                  required
+                  className="w-full border border-gray-300 rounded-md p-3 focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                  placeholder="Enter new username"
+                />
+              </div>
+
+              {/* Current Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPasswords.current ? "text" : "password"}
+                    name="currentPassword"
+                    value={credentialsForm.currentPassword}
+                    onChange={handleCredentialsChange}
+                    required
+                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                    placeholder="Enter current password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => togglePasswordVisibility('current')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPasswords.current ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* New Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPasswords.new ? "text" : "password"}
+                    name="newPassword"
+                    value={credentialsForm.newPassword}
+                    onChange={handleCredentialsChange}
+                    required
+                    minLength={6}
+                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                    placeholder="Enter new password (min 6 characters)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => togglePasswordVisibility('new')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPasswords.new ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm New Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPasswords.confirm ? "text" : "password"}
+                    name="confirmPassword"
+                    value={credentialsForm.confirmPassword}
+                    onChange={handleCredentialsChange}
+                    required
+                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                    placeholder="Confirm new password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => togglePasswordVisibility('confirm')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPasswords.confirm ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCredentialsModal(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
+                  disabled={updatingCredentials}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingCredentials}
+                  className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md hover:bg-blue-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {updatingCredentials ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Credentials'
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* Security Note */}
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-xs text-yellow-800">
+                <strong>Security Note:</strong> After updating your credentials, you'll need to log in again with your new username and password.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

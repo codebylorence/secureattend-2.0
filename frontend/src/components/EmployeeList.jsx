@@ -1,4 +1,4 @@
-import React, {
+import {
   useEffect,
   useState,
   forwardRef,
@@ -8,7 +8,7 @@ import EmpAction from "./EmpAction";
 import { MdManageAccounts } from "react-icons/md";
 import { fetchEmployees, getFingerprintStatus } from "../api/EmployeeApi";
 
-const EmployeeList = forwardRef((props, ref) => {
+const EmployeeList = forwardRef(({ supervisorView = false }, ref) => {
   const [employees, setEmployees] = useState([]);
   const [fingerprintStatus, setFingerprintStatus] = useState({});
   const [loading, setLoading] = useState(true);
@@ -16,17 +16,41 @@ const EmployeeList = forwardRef((props, ref) => {
   //  Fetch employees and fingerprint status from API
   const loadEmployees = async () => {
     try {
+      // Check if user is authenticated before making requests
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('👥 EmployeeList: No token found, skipping employee fetch');
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
+      console.log('🔄 Loading employees...');
+      
       const [employeesData, fingerprintData] = await Promise.all([
         fetchEmployees(),
         getFingerprintStatus()
       ]);
-      console.log('👥 Employees loaded:', employeesData.length);
-      console.log('👆 Fingerprint status received:', fingerprintData);
-      setEmployees(employeesData);
+      
+      console.log('📊 Raw employees data:', employeesData);
+      console.log('👆 Raw fingerprint data:', fingerprintData);
+      
+      let filteredEmployees = employeesData;
+      
+      // For supervisor view, show all employees but still filter out inactive ones
+      if (supervisorView) {
+        filteredEmployees = employeesData.filter(emp => 
+          emp.status === "Active"
+        );
+        console.log('👥 Filtered employees for supervisor:', filteredEmployees.length);
+      }
+      
+      console.log('✅ Final employees to display:', filteredEmployees.length);
+      setEmployees(filteredEmployees);
       setFingerprintStatus(fingerprintData);
     } catch (error) {
-      console.error("Error fetching employees:", error);
+      console.error("❌ Error fetching employees:", error);
+      console.error("Error details:", error.response?.data || error.message);
     } finally {
       setLoading(false);
     }
@@ -64,7 +88,13 @@ const EmployeeList = forwardRef((props, ref) => {
       ) : employees.length === 0 ? (
         <div className="p-6 text-center text-gray-500">
           <MdManageAccounts className="text-4xl mx-auto mb-4 text-gray-300" />
-          <p>No employees found</p>
+          <p>{supervisorView ? "No active employees found" : "No employees found"}</p>
+          <p className="text-sm mt-2">
+            {supervisorView 
+              ? "All active employees will appear here." 
+              : "Click 'Add Employee' to create the first employee record."
+            }
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -86,9 +116,11 @@ const EmployeeList = forwardRef((props, ref) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+                {!supervisorView && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -131,17 +163,19 @@ const EmployeeList = forwardRef((props, ref) => {
                       {emp.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <EmpAction
-                      id={emp.id}
-                      employee={{
-                        ...emp,
-                        has_fingerprint: fingerprintStatus[emp.employee_id] || false
-                      }}
-                      onDeleted={loadEmployees}
-                      onUpdated={loadEmployees}
-                    />
-                  </td>
+                  {!supervisorView && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <EmpAction
+                        id={emp.id}
+                        employee={{
+                          ...emp,
+                          has_fingerprint: fingerprintStatus[emp.employee_id] || false
+                        }}
+                        onDeleted={loadEmployees}
+                        onUpdated={loadEmployees}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

@@ -1,6 +1,5 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
-import Employee from "./employee.js";
 
 const User = sequelize.define("User", {
   id: {
@@ -18,7 +17,7 @@ const User = sequelize.define("User", {
     allowNull: false,
   },
   role: {
-    type: DataTypes.ENUM("admin", "teamleader", "employee"),
+    type: DataTypes.ENUM("admin", "supervisor", "teamleader", "employee"),
     defaultValue: "employee",
   },
   employeeId: {
@@ -31,9 +30,5 @@ const User = sequelize.define("User", {
     onDelete: "CASCADE",
   },
 });
-
-// associations (only here)
-User.belongsTo(Employee, { foreignKey: "employeeId", as: "employee" });
-Employee.hasOne(User, { foreignKey: "employeeId", as: "user" });
 
 export default User;

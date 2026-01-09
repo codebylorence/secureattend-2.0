@@ -87,14 +87,77 @@ export const editTemplate = async (req, res) => {
     if (!oldTemplate) {
       return res.status(404).json({ message: "Template not found" });
     }
+
+    // Check if we're editing a published schedule
+    const isEditingPublished = oldTemplate.publish_status === "Published";
     
-    const template = await updateTemplate(id, req.body);
+    let template;
+    
+    if (isEditingPublished) {
+      // When editing a published schedule, create a new draft with edited status
+      console.log(`📝 Creating edited draft for published template ${id} (${oldTemplate.department})`);
+      
+      const { createTemplate } = await import("../services/scheduleTemplateService.js");
+      
+      // Create a new draft template with edited status
+      const editedTemplateData = {
+        ...oldTemplate.dataValues, // Start with all original template data
+        ...req.body, // Override with edited fields
+        id: undefined, // Let database generate new ID
+        department: oldTemplate.department, // Ensure department is preserved
+        days: oldTemplate.days, // Ensure days array is preserved
+        publish_status: "Draft",
+        is_edited: true,
+        original_template_id: oldTemplate.id,
+        edited_at: new Date(),
+        edited_by: req.body.edited_by || "admin",
+        created_by: oldTemplate.created_by,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      template = await createTemplate(editedTemplateData);
+      console.log(`✅ Created edited draft template ${template.id}`);
+      
+    } else {
+      // If it's already a draft, just update it normally
+      console.log(`📝 Updating existing draft template ${id}`);
+      
+      // Add edited status fields if not already set
+      const updateData = {
+        ...req.body,
+        edited_at: new Date(),
+        edited_by: req.body.edited_by || "admin"
+      };
+      
+      // If this draft doesn't have edited status but is editing a published schedule, set it
+      if (!oldTemplate.is_edited && !oldTemplate.original_template_id) {
+        const { getAllTemplates } = await import("../services/scheduleTemplateService.js");
+        const allTemplates = await getAllTemplates(false);
+        
+        // Check if there's a published version of this department
+        const publishedVersion = allTemplates.find(t => 
+          t.department === oldTemplate.department &&
+          t.publish_status === "Published" &&
+          t.days.some(d => oldTemplate.days.includes(d)) &&
+          t.id !== oldTemplate.id &&
+          !t.pending_deletion
+        );
+        
+        if (publishedVersion) {
+          updateData.is_edited = true;
+          updateData.original_template_id = publishedVersion.id;
+        }
+      }
+      
+      template = await updateTemplate(id, updateData);
+    }
     
     // Send notification to team leader about the schedule change
-    // Only notify if the template is published (team leaders can see it)
-    if (template.publish_status === "Published") {
+    // Only notify if the original template was published (team leaders could see it)
+    if (isEditingPublished) {
       try {
-        const { notifyTeamLeaders } = await import("../services/notificationService.js");
+        const { notifyMultipleRoles } = await import("../services/notificationService.js");
         
         console.log(`📝 Checking for changes in template ${template.id} (${template.department})`);
         console.log(`Old template:`, {
@@ -142,12 +205,13 @@ export const editTemplate = async (req, res) => {
         if (changes.length > 0) {
           const message = changes.join('\n');
           
-          console.log(`📧 Sending notification to ${template.department} team leader...`);
-          await notifyTeamLeaders(
+          console.log(`📧 Sending notification to multiple roles in ${template.department}...`);
+          await notifyMultipleRoles(
+            ["teamleader", "supervisor", "employee"], // Notify team leaders, supervisors, and employees
             [template.department],
             "Schedule Modified",
             message,
-            "schedule_update", // Shortened to fit database column
+            "schedule_update",
             null,
             "admin"
           );
@@ -161,7 +225,7 @@ export const editTemplate = async (req, res) => {
         // Don't fail the update if notification fails
       }
     } else {
-      console.log(`ℹ️ Template is not published (status: ${template.publish_status}), skipping notification`);
+      console.log(`ℹ️ Template is not published (status: ${oldTemplate.publish_status}), skipping notification`);
     }
     
     // Emit real-time update
@@ -213,6 +277,39 @@ export const removeTemplate = async (req, res) => {
   }
 };
 
+// DELETE /api/templates/:id/permanent
+export const permanentlyRemoveTemplate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get template details before deleting
+    const template = await getTemplateById(id);
+    
+    if (!template) {
+      return res.status(404).json({ message: "Template not found" });
+    }
+    
+    // Permanently delete the template (for drafts)
+    const { permanentlyDeleteTemplate } = await import("../services/scheduleTemplateService.js");
+    const deleted = await permanentlyDeleteTemplate(id);
+    
+    if (!deleted) {
+      return res.status(404).json({ message: "Template not found" });
+    }
+    
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('template:deleted', { id });
+    }
+    
+    res.status(200).json({ message: "Template permanently deleted" });
+  } catch (error) {
+    console.error("Error permanently deleting template:", error);
+    res.status(500).json({ message: "Error permanently deleting template" });
+  }
+};
+
 
 // POST /api/templates/publish
 export const publishSchedules = async (req, res) => {
@@ -223,7 +320,7 @@ export const publishSchedules = async (req, res) => {
     
     const { default: ScheduleTemplate } = await import("../models/scheduleTemplate.js");
     const { permanentlyDeleteTemplate } = await import("../services/scheduleTemplateService.js");
-    const { notifyTeamLeaders } = await import("../services/notificationService.js");
+    const { notifyMultipleRoles } = await import("../services/notificationService.js");
     const { Op } = await import("sequelize");
     const io = req.app.get('io');
     
@@ -294,7 +391,7 @@ export const publishSchedules = async (req, res) => {
       }
     }
     
-    // Step 2: Handle draft templates that replace published ones
+    // Step 2: Handle edited templates and other draft templates
     // Find all draft templates
     const draftTemplates = await ScheduleTemplate.findAll({
       where: {
@@ -310,51 +407,98 @@ export const publishSchedules = async (req, res) => {
     
     let replacedCount = 0;
     for (const draft of draftTemplates) {
-      // Check if there's a published template with the same department and overlapping days
-      // This draft is likely an edited version of a published template
-      const publishedVersions = await ScheduleTemplate.findAll({
-        where: {
-          department: draft.department,
-          publish_status: "Published",
-          pending_deletion: false,
-          id: { [Op.ne]: draft.id } // Not the same template
-        }
-      });
-      
-      for (const publishedVersion of publishedVersions) {
-        // Check if they have overlapping days
-        const hasOverlap = draft.days.some(day => publishedVersion.days.includes(day));
+      // Handle edited templates first (they have original_template_id)
+      if (draft.is_edited && draft.original_template_id) {
+        console.log(`  ✏️ Processing edited template ${draft.id} (original: ${draft.original_template_id})`);
         
-        if (hasOverlap) {
-          console.log(`  🔄 Draft ${draft.id} replaces published ${publishedVersion.id} for ${draft.department}`);
-          console.log(`     Draft: ${draft.shift_name} (${draft.days.join(', ')})`);
-          console.log(`     Published: ${publishedVersion.shift_name} (${publishedVersion.days.join(', ')})`);
+        // Find the original published template
+        const originalTemplate = await ScheduleTemplate.findByPk(draft.original_template_id);
+        
+        if (originalTemplate && originalTemplate.publish_status === "Published") {
+          console.log(`  🔄 Edited draft ${draft.id} replaces original ${originalTemplate.id} for ${draft.department}`);
+          console.log(`     New: ${draft.shift_name} (${draft.days.join(', ')})`);
+          console.log(`     Original: ${originalTemplate.shift_name} (${originalTemplate.days.join(', ')})`);
           
           // Store replacement info for notifications
           replacements.push({
             department: draft.department,
-            oldShift: publishedVersion.shift_name,
+            oldShift: originalTemplate.shift_name,
             newShift: draft.shift_name,
-            oldTime: `${publishedVersion.start_time} - ${publishedVersion.end_time}`,
+            oldTime: `${originalTemplate.start_time} - ${originalTemplate.end_time}`,
             newTime: `${draft.start_time} - ${draft.end_time}`,
-            days: draft.days.filter(day => publishedVersion.days.includes(day))
+            days: draft.days,
+            isEdited: true
           });
           
-          // Delete employee assignments for the old published template
+          // Delete employee assignments for the original template
           const { default: EmployeeSchedule } = await import("../models/employeeSchedule.js");
           const deletedAssignments = await EmployeeSchedule.destroy({
-            where: { template_id: publishedVersion.id }
+            where: { template_id: originalTemplate.id }
           });
           
           if (deletedAssignments > 0) {
-            console.log(`     Removed ${deletedAssignments} employee assignment(s) from old template`);
+            console.log(`     Removed ${deletedAssignments} employee assignment(s) from original template`);
           }
           
-          // Delete the old published template
-          await permanentlyDeleteTemplate(publishedVersion.id);
+          // Clear the foreign key reference in the edited template before deleting the original
+          await draft.update({ 
+            original_template_id: null,
+            is_edited: false // Will be set to false again in Step 3, but doing it here for clarity
+          });
+          
+          // Now delete the original published template
+          await permanentlyDeleteTemplate(originalTemplate.id);
           replacedCount++;
           
-          console.log(`     ✅ Deleted old published version: ${publishedVersion.shift_name}`);
+          console.log(`     ✅ Deleted original published version: ${originalTemplate.shift_name}`);
+        }
+      } else {
+        // Handle non-edited drafts (legacy logic for backward compatibility)
+        const publishedVersions = await ScheduleTemplate.findAll({
+          where: {
+            department: draft.department,
+            publish_status: "Published",
+            pending_deletion: false,
+            id: { [Op.ne]: draft.id } // Not the same template
+          }
+        });
+        
+        for (const publishedVersion of publishedVersions) {
+          // Check if they have overlapping days
+          const hasOverlap = draft.days.some(day => publishedVersion.days.includes(day));
+          
+          if (hasOverlap) {
+            console.log(`  🔄 Draft ${draft.id} replaces published ${publishedVersion.id} for ${draft.department}`);
+            console.log(`     Draft: ${draft.shift_name} (${draft.days.join(', ')})`);
+            console.log(`     Published: ${publishedVersion.shift_name} (${publishedVersion.days.join(', ')})`);
+            
+            // Store replacement info for notifications
+            replacements.push({
+              department: draft.department,
+              oldShift: publishedVersion.shift_name,
+              newShift: draft.shift_name,
+              oldTime: `${publishedVersion.start_time} - ${publishedVersion.end_time}`,
+              newTime: `${draft.start_time} - ${draft.end_time}`,
+              days: draft.days.filter(day => publishedVersion.days.includes(day)),
+              isEdited: false
+            });
+            
+            // Delete employee assignments for the old published template
+            const { default: EmployeeSchedule } = await import("../models/employeeSchedule.js");
+            const deletedAssignments = await EmployeeSchedule.destroy({
+              where: { template_id: publishedVersion.id }
+            });
+            
+            if (deletedAssignments > 0) {
+              console.log(`     Removed ${deletedAssignments} employee assignment(s) from old template`);
+            }
+            
+            // Delete the old published template
+            await permanentlyDeleteTemplate(publishedVersion.id);
+            replacedCount++;
+            
+            console.log(`     ✅ Deleted old published version: ${publishedVersion.shift_name}`);
+          }
         }
       }
     }
@@ -363,12 +507,14 @@ export const publishSchedules = async (req, res) => {
       console.log(`✅ Replaced ${replacedCount} published template(s) with draft versions`);
     }
     
-    // Step 3: Publish all draft schedules (not pending deletion)
+    // Step 3: Publish all draft schedules and clear edited status
     const [updatedCount] = await ScheduleTemplate.update(
       {
         publish_status: "Published",
         published_at: new Date(),
-        published_by: published_by || "admin"
+        published_by: published_by || "admin",
+        is_edited: false, // Clear edited status when publishing
+        original_template_id: null // Clear reference to original template
       },
       {
         where: {
@@ -559,7 +705,8 @@ export const publishSchedules = async (req, res) => {
           });
           
           if (message) {
-            await notifyTeamLeaders(
+            await notifyMultipleRoles(
+              ["teamleader", "supervisor", "employee"],
               [department],
               "Schedule Deleted",
               message.trim(),
@@ -567,7 +714,7 @@ export const publishSchedules = async (req, res) => {
               null,
               published_by || "admin"
             );
-            console.log(`✅ Deletion notification sent to ${department} team leader(s)`);
+            console.log(`✅ Deletion notification sent to multiple roles in ${department}`);
           }
         }
       } catch (deleteNotifyError) {
@@ -680,8 +827,9 @@ export const publishSchedules = async (req, res) => {
             // Note: Deletions are handled separately in Step 4.5
           }
           
-          // Send notification to this specific department's team leader
-          await notifyTeamLeaders(
+          // Send notification to multiple roles in this specific department
+          await notifyMultipleRoles(
+            ["teamleader", "supervisor", "employee"],
             [department],
             "Your Schedule Updated",
             message.trim(),
@@ -690,7 +838,7 @@ export const publishSchedules = async (req, res) => {
             published_by || "admin"
           );
           
-          console.log(`✅ Notification sent to ${department} team leader`);
+          console.log(`✅ Notification sent to multiple roles in ${department}`);
         }
       } catch (notifyError) {
         console.error("❌ Error sending notifications:", notifyError);
@@ -738,5 +886,50 @@ export const publishSchedules = async (req, res) => {
       message: "Error publishing schedules",
       error: error.message 
     });
+  }
+};
+// GET /api/templates/stats - Get template statistics
+export const getTemplateStats = async (req, res) => {
+  try {
+    const { default: ScheduleTemplate } = await import("../models/scheduleTemplate.js");
+    
+    const stats = await ScheduleTemplate.findAll({
+      attributes: [
+        'publish_status',
+        'is_edited',
+        'pending_deletion',
+        [ScheduleTemplate.sequelize.fn('COUNT', '*'), 'count']
+      ],
+      group: ['publish_status', 'is_edited', 'pending_deletion']
+    });
+    
+    // Process stats into a more readable format
+    const processedStats = {
+      published: 0,
+      draft: 0,
+      edited: 0,
+      deleted: 0,
+      total: 0
+    };
+    
+    stats.forEach(stat => {
+      const count = parseInt(stat.dataValues.count);
+      processedStats.total += count;
+      
+      if (stat.pending_deletion) {
+        processedStats.deleted += count;
+      } else if (stat.publish_status === "Published") {
+        processedStats.published += count;
+      } else if (stat.is_edited) {
+        processedStats.edited += count;
+      } else {
+        processedStats.draft += count;
+      }
+    });
+    
+    res.status(200).json(processedStats);
+  } catch (error) {
+    console.error("Error fetching template stats:", error);
+    res.status(500).json({ message: "Error fetching template stats" });
   }
 };

@@ -1,16 +1,28 @@
+import { useState } from "react";
 import AdminMetrics from "../components/AdminMetrics";
-import DropdownStatus from "../components/DropdownStatus";
-import DropdownZone from "../components/DropdownZone";
-import SearchBar from "../components/SearchBar";
 import TodaysAttendance from "../components/TodaysAttendance";
 import WelcomeSection from "../components/WelcomeSection";
 
 export default function Dashboard() {
+  // State for filters
+  const [statusFilter, setStatusFilter] = useState("");
+  const [zoneFilter, setZoneFilter] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  // Get user role from localStorage
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = user.role;
+  
+  // Check for admin, supervisor, or teamleader roles
+  const isSupervisor = userRole === "supervisor" || userRole === "admin" || userRole === "teamleader";
+
   return (
     <div className="pr-10 bg-gray-50">
       {/* Header Section */}
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">Dashboard</h1>
+        <h1 className="text-[#374151] text-[21px] font-semibold">
+          Dashboard
+        </h1>
       </div>
       
       <WelcomeSection />
@@ -19,13 +31,44 @@ export default function Dashboard() {
       <div className="flex justify-between my-6">
         <div className="flex items-center gap-4">
           <p className="text-[#374151] mr-5">Filter :</p>
-          <DropdownStatus />
-          <DropdownZone />
+          {/* For now, use simple dropdowns - can be enhanced later */}
+          <select 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700"
+          >
+            <option value="">All Status</option>
+            <option value="Present">Present</option>
+            <option value="Late">Late</option>
+            <option value="Absent">Absent</option>
+          </select>
+          <select 
+            value={zoneFilter} 
+            onChange={(e) => setZoneFilter(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700"
+          >
+            <option value="">All Departments</option>
+            <option value="IT">IT</option>
+            <option value="HR">HR</option>
+            <option value="Finance">Finance</option>
+            <option value="Operations">Operations</option>
+          </select>
         </div>
-          <SearchBar />
+        <input
+          type="text"
+          placeholder="Search employees..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700"
+        />
       </div>
 
-      <TodaysAttendance />
+      <TodaysAttendance 
+        supervisorView={isSupervisor} 
+        statusFilter={statusFilter}
+        zoneFilter={zoneFilter}
+        searchTerm={searchTerm}
+      />
     </div>
   );
 }

@@ -37,10 +37,18 @@ export const verifyLogin = async (username, password) => {
   };
 };
 
-export const changeUserCredentials = async (id, username, password) => {
+export const changeUserCredentials = async (id, username, password, currentPassword = null) => {
   const user = await User.findByPk(id);
   if (!user) {
     throw new Error("User not found");
+  }
+
+  // If current password is provided, verify it
+  if (currentPassword) {
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      throw new Error("Current password is incorrect");
+    }
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);

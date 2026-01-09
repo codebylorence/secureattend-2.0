@@ -20,11 +20,10 @@ export default function TeamMetrics({ department }) {
         getEmployeeSchedules()
       ]);
 
-      // Filter employees by department (exclude team leaders from count)
+      // Filter employees by department (include team leaders in count)
       const departmentEmployees = employeeData.filter(emp => 
         emp.department === department && 
-        emp.status === "Active" &&
-        emp.position !== "Team Leader"
+        emp.status === "Active"
       );
       const departmentEmployeeIds = new Set(departmentEmployees.map(emp => emp.employee_id));
 
@@ -59,7 +58,7 @@ export default function TeamMetrics({ department }) {
 
       const scheduled = scheduledEmployeeIds.size;
 
-      // Filter attendances for this department
+      // Filter attendances for this department (include team leaders)
       const departmentAttendances = attendanceData.filter(att => 
         departmentEmployeeIds.has(att.employee_id)
       );
@@ -77,6 +76,7 @@ export default function TeamMetrics({ department }) {
       const absentRecords = departmentAttendances.filter(att => att.status === "Absent");
       console.log('🔍 Team Metrics Debug:');
       console.log('  Department:', department);
+      console.log('  Department employees (including team leaders):', departmentEmployees.length);
       console.log('  Total department attendances:', departmentAttendances.length);
       console.log('  Absent records:', absentRecords);
       console.log('  Absent count:', absentRecords.length);

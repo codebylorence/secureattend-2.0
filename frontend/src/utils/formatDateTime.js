@@ -5,9 +5,9 @@ export function formatDateTimePH() {
     year: "numeric",
     month: "short",
     day: "numeric",
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hour12: false, // Changed to 24-hour format
   };
   return new Intl.DateTimeFormat("en-US", options).format(now);
 }

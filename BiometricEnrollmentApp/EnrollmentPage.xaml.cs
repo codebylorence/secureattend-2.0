@@ -9,47 +9,133 @@ using System.Windows.Media.Imaging;
 using BiometricEnrollmentApp.Services;
 using System.Collections.Generic;
 using System.Linq;
+using System.Collections.ObjectModel;
+using System.Windows.Threading;
 
 namespace BiometricEnrollmentApp
 {
-    // Matches your API JSON: "employeeId", "fullname", "department"
-    public record EmployeeDto(string employeeId, string fullname, string department);
+    // Matches your API JSON: "employee_id", "fullname", "department"
+    public record EmployeeDto(string employee_id, string fullname, string department)
+    {
+        // Add a property to map to the expected field name
+        public string employeeId => employee_id;
+    }
+
+    // Model for ComboBox display
+    public class EmployeeSuggestion
+    {
+        public string EmployeeId { get; set; } = "";
+        public string FullName { get; set; } = "";
+        public string Department { get; set; } = "";
+        public string DisplayText => $"{EmployeeId} - {FullName} ({Department})";
+        
+        // Override ToString to ensure proper display even if DisplayMemberPath fails
+        public override string ToString()
+        {
+            return DisplayText;
+        }
+    }
 
     public partial class EnrollmentPage : Page
     {
         private readonly ZKTecoService _zkService;
+        private readonly EnrollmentScannerService _enrollmentScanner;
         private readonly DataService _dataService = new();
-
-        private const string FallbackAdminUser = "admin";
-        private const string FallbackAdminPass = "secret123";
+        private ObservableCollection<EmployeeSuggestion> _employeeSuggestions = new();
+        private List<EmployeeDto> _allEmployees = new();
 
         public EnrollmentPage(ZKTecoService zkService)
         {
-            InitializeComponent();
-            _zkService = zkService ?? new ZKTecoService();
-
-            // Hook SDK events
-            _zkService.OnImageCaptured += ImgCaptured;
-            _zkService.OnStatus += msg =>
+            try
             {
-                Dispatcher.Invoke(() => StatusText.Text = msg);
-                LogHelper.Write($"[ZK STATUS] {msg}");
-            };
+                LogHelper.Write("🔥 EnrollmentPage constructor starting...");
+                
+                InitializeComponent();
+                LogHelper.Write("🔥 InitializeComponent completed");
+                
+                _zkService = zkService ?? new ZKTecoService();
+                LogHelper.Write("🔥 ZKService initialized");
+                
+                _enrollmentScanner = new EnrollmentScannerService();
+                LogHelper.Write("🔥 EnrollmentScanner created");
 
-            SetControlsEnabled(false); // disabled until admin login
+                // Initialize collections with null safety
+                _employeeSuggestions = new ObservableCollection<EmployeeSuggestion>();
+                _allEmployees = new List<EmployeeDto>();
+                LogHelper.Write("🔥 Collections initialized");
 
-            // Auto-sync deleted employees every 5 minutes
-            var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
-            syncTimer.Elapsed += async (_, _) => await SyncDeletionsFromServerAsync();
-            syncTimer.Start();
+                // Hook enrollment scanner events (separate from attendance scanner)
+                _enrollmentScanner.OnImageCaptured += ImgCaptured;
+                _enrollmentScanner.OnStatus += msg =>
+                {
+                    try
+                    {
+                        Dispatcher.Invoke(() => 
+                        {
+                            if (StatusText != null)
+                                StatusText.Text = msg;
+                        });
+                        LogHelper.Write($"[ENROLLMENT] {msg}");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"💥 Error updating status from scanner: {ex.Message}");
+                    }
+                };
+                LogHelper.Write("🔥 Event handlers attached");
 
-            // Auto-init device & load templates on page load
-            Loaded += EnrollmentPage_Loaded;
+                // Initialize employee suggestions
+                if (EmployeeIdInput != null)
+                {
+                    EmployeeIdInput.ItemsSource = _employeeSuggestions;
+                    LogHelper.Write("🔥 ComboBox ItemsSource set");
+                }
+                else
+                {
+                    LogHelper.Write("⚠️ EmployeeIdInput is null!");
+                }
+
+                // Auto-sync deleted employees every 5 minutes
+                var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
+                syncTimer.Elapsed += async (_, _) => await SyncDeletionsFromServerAsync();
+                syncTimer.Start();
+                LogHelper.Write("🔥 Sync timer started");
+
+                // Auto-init enrollment scanner on page load
+                Loaded += EnrollmentPage_Loaded;
+                Unloaded += EnrollmentPage_Unloaded;
+                LogHelper.Write("🔥 Event handlers for Loaded/Unloaded attached");
+                
+                LogHelper.Write("✅ EnrollmentPage constructor completed successfully");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in EnrollmentPage constructor: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                
+                // Show error to user
+                try
+                {
+                    MessageBox.Show($"Error initializing enrollment page: {ex.Message}", "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch { }
+                
+                // Try to initialize basic components even if there's an error
+                try
+                {
+                    _employeeSuggestions = new ObservableCollection<EmployeeSuggestion>();
+                    _allEmployees = new List<EmployeeDto>();
+                }
+                catch (Exception initEx)
+                {
+                    LogHelper.Write($"💥 Failed to initialize basic components: {initEx.Message}");
+                }
+            }
         }
 
         private void SetControlsEnabled(bool enabled)
         {
-            // Enable enroll button for admin
+            // All controls are always enabled - no admin restrictions
             EnrollBtn.IsEnabled = enabled;
         }
 
@@ -72,12 +158,19 @@ namespace BiometricEnrollmentApp
 
         private BitmapSource? ConvertToBitmapImage(byte[] rawImage)
         {
-            int width = _zkService.SensorWidth;
-            int height = _zkService.SensorHeight;
-            int expected = _zkService.ExpectedImageSize;
+            int width = _enrollmentScanner.SensorWidth;
+            int height = _enrollmentScanner.SensorHeight;
+            int expected = _enrollmentScanner.ExpectedImageSize;
 
-            if (width <= 0 || height <= 0) return null;
-            if (rawImage == null || rawImage.Length != expected) return null;
+            if (width <= 0 || height <= 0) 
+            {
+                // Use default dimensions if not available
+                width = 256;
+                height = 360;
+                expected = width * height;
+            }
+            
+            if (rawImage == null || rawImage.Length < expected) return null;
 
             int stride = width;
             var bmp = BitmapSource.Create(width, height, 96, 96,
@@ -86,419 +179,773 @@ namespace BiometricEnrollmentApp
             return bmp;
         }
 
-        // Called when the page loads: ensure device initialized and load stored templates into SDK
+        // Called when the page loads: ensure enrollment scanner initialized
         private void EnrollmentPage_Loaded(object? sender, RoutedEventArgs e)
         {
-            // Apply blur effect to main content since overlay is visible by default
-            var mainContent = this.FindName("MainContentGrid") as Grid;
-            if (mainContent != null)
-            {
-                mainContent.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 10 };
-            }
+            LogHelper.Write("🔥 EnrollmentPage_Loaded starting...");
             
-            // Load fingerprint records into the grid
-            RefreshEnrollmentRecords();
-            
-            Task.Run(async () =>
+            try
             {
-                try
+                LogHelper.Write("🔥 About to refresh enrollment records");
+                // Load fingerprint records into the grid
+                RefreshEnrollmentRecords();
+                LogHelper.Write("🔥 Enrollment records refreshed");
+                
+                // Load employee suggestions from server (async, non-blocking)
+                Task.Run(async () =>
                 {
-                    // Ensure device is initialized (idempotent)
-                    if (_zkService.EnsureInitialized())
+                    try
                     {
-                        try
+                        LogHelper.Write("🔥 Loading employee suggestions from server...");
+                        await LoadEmployeeSuggestionsAsync();
+                        LogHelper.Write("🔥 Employee suggestions loaded");
+                        
+                        // After loading employees, update suggestions to show available ones
+                        Dispatcher.Invoke(() => 
                         {
-                            // Load stored templates into SDK memory (so identify works immediately)
-                            _zkService.LoadEnrollmentsToSdk(_dataService);
-                            Dispatcher.Invoke(() => StatusText.Text = "Device connected and templates loaded.");
+                            LogHelper.Write("🔥 Updating employee suggestions UI");
+                            UpdateEmployeeSuggestions("");
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"⚠️ Failed to load employee suggestions: {ex.Message}");
+                    }
+                });
+                
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        LogHelper.Write("🔥 Initializing enrollment scanner...");
+                        // Initialize dedicated enrollment scanner (separate from attendance)
+                        if (_enrollmentScanner.EnsureInitialized())
+                        {
+                            Dispatcher.Invoke(() => StatusText.Text = "Enrollment scanner ready.");
+                            LogHelper.Write("✅ Enrollment scanner initialized successfully");
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            LogHelper.Write($"⚠️ LoadEnrollmentsToSdk error: {ex.Message}");
-                            Dispatcher.Invoke(() => StatusText.Text = "Device connected (load templates failed).");
+                            Dispatcher.Invoke(() => StatusText.Text = "⚠️ Enrollment scanner not connected.");
+                            LogHelper.Write("❌ Failed to initialize enrollment scanner");
                         }
 
                         // Run initial sync on page load
                         try
                         {
+                            LogHelper.Write("🔥 Running initial sync...");
                             await SyncDeletionsFromServerAsync();
                             // Refresh records after sync
                             Dispatcher.Invoke(() => RefreshEnrollmentRecords());
+                            LogHelper.Write("🔥 Initial sync completed");
                         }
                         catch (Exception ex)
                         {
                             LogHelper.Write($"⚠️ Initial sync failed: {ex.Message}");
                         }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        Dispatcher.Invoke(() => StatusText.Text = "⚠️ Device not connected.");
+                        LogHelper.Write($"⚠️ EnrollmentPage initialization failed: {ex.Message}");
+                        Dispatcher.Invoke(() => StatusText.Text = $"Init error: {ex.Message}");
+                    }
+                });
+                
+                LogHelper.Write("🔥 EnrollmentPage_Loaded completed successfully");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in EnrollmentPage_Loaded: {ex.Message}");
+                StatusText.Text = "⚠️ Page load error - check logs";
+                
+                // Show error to user
+                try
+                {
+                    MessageBox.Show($"Error loading enrollment page: {ex.Message}", "Page Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch { }
+            }
+        }
+
+        // Called when the page unloads: cleanup enrollment scanner
+        private void EnrollmentPage_Unloaded(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                LogHelper.Write("📴 Enrollment page unloading - closing enrollment scanner");
+                _enrollmentScanner.CloseEnrollmentScanner();
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Error during enrollment page unload: {ex.Message}");
+            }
+        }
+
+        private void UpdateEmployeeSuggestions(string searchText)
+        {
+            try
+            {
+                // Ensure we're on the UI thread
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.Invoke(() => UpdateEmployeeSuggestions(searchText));
+                    return;
+                }
+
+                // Null check for _employeeSuggestions
+                if (_employeeSuggestions == null)
+                {
+                    LogHelper.Write("⚠️ _employeeSuggestions is null, reinitializing...");
+                    _employeeSuggestions = new ObservableCollection<EmployeeSuggestion>();
+                    if (EmployeeIdInput != null)
+                        EmployeeIdInput.ItemsSource = _employeeSuggestions;
+                }
+
+                _employeeSuggestions.Clear();
+                
+                LogHelper.Write($"🔍 UpdateEmployeeSuggestions called with searchText: '{searchText ?? "null"}'");
+                LogHelper.Write($"📊 Total employees loaded: {_allEmployees?.Count ?? 0}");
+                
+                if (_allEmployees == null || _allEmployees.Count == 0)
+                {
+                    LogHelper.Write("⚠️ No employees available - _allEmployees is null or empty");
+                    return;
+                }
+
+                // Get employees who already have fingerprint records with null safety
+                var enrolledEmployeeIds = new HashSet<string>();
+                try
+                {
+                    var enrollments = _dataService?.GetAllEnrollments();
+                    if (enrollments != null)
+                    {
+                        enrolledEmployeeIds = enrollments
+                            .Where(e => !string.IsNullOrEmpty(e.EmployeeId))
+                            .Select(e => e.EmployeeId)
+                            .ToHashSet();
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogHelper.Write($"⚠️ EnrollmentPage initialization failed: {ex.Message}");
-                    Dispatcher.Invoke(() => StatusText.Text = $"Init error: {ex.Message}");
-                }
-            });
-        }
-
-
-
-        // ---------------- Admin overlay handlers ----------------
-
-        private void AdminCancelBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var attendancePage = new AttendancePage(_zkService);
-                NavigationService?.Navigate(attendancePage);
-                LogHelper.Write("[ADMIN] canceled login - returned to Attendance Page.");
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"[ADMIN] cancel navigation failed: {ex.Message}");
-            }
-        }
-
-        private void AdminLoginBtn_Click(object sender, RoutedEventArgs e)
-        {
-            string username = AdminUsername.Text.Trim();
-            string password = AdminPassword.Password;
-
-            AdminLoginStatus.Visibility = Visibility.Collapsed;
-
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-            {
-                AdminLoginStatus.Text = "Please enter username and password.";
-                AdminLoginStatus.Visibility = Visibility.Visible;
-                return;
-            }
-
-            bool ok = false;
-            try
-            {
-                var validateMethod = _dataService?.GetType().GetMethod("ValidateAdmin");
-                if (validateMethod != null)
-                {
-                    var result = validateMethod.Invoke(_dataService, new object[] { username, password });
-                    if (result is bool b && b) ok = true;
-                }
-            }
-            catch { }
-
-            if (!ok)
-            {
-                ok = SecureEquals(username, FallbackAdminUser) && SecureEquals(password, FallbackAdminPass);
-            }
-
-            if (ok)
-            {
-                AdminOverlay.Visibility = Visibility.Collapsed;
-                
-                // Remove blur effect from main content
-                var mainContent = this.FindName("MainContentGrid") as Grid;
-                if (mainContent != null)
-                {
-                    mainContent.Effect = null;
+                    LogHelper.Write($"⚠️ Error getting enrolled employees: {ex.Message}");
                 }
                 
-                SetControlsEnabled(true);
-                EmployeeIdInput.Focus();
-                StatusText.Text = "🔒 Admin authenticated. You may proceed.";
-                LogHelper.Write("[ADMIN] login successful.");
-                // Do NOT call destructive sync automatically here.
-            }
-            else
-            {
-                AdminLoginStatus.Text = "Invalid username or password.";
-                AdminLoginStatus.Visibility = Visibility.Visible;
-                LogHelper.Write("[ADMIN] login failed for user: " + username);
-            }
-        }
+                LogHelper.Write($"📋 Enrolled employees: {enrolledEmployeeIds.Count} ({string.Join(", ", enrolledEmployeeIds.Take(5))})");
 
-        private static bool SecureEquals(string a, string b)
-        {
-            if (a == null || b == null) return false;
-            if (a.Length != b.Length) return false;
-            int diff = 0;
-            for (int i = 0; i < a.Length; i++)
-                diff |= a[i] ^ b[i];
-            return diff == 0;
-        }
+                // Filter to show only employees WITHOUT fingerprint records
+                var availableEmployees = _allEmployees
+                    .Where(emp => emp != null && 
+                                 !string.IsNullOrEmpty(emp.employeeId) &&
+                                 !enrolledEmployeeIds.Contains(emp.employeeId)) // Exclude already enrolled
+                    .ToList();
 
-        // ---------------- Settings handlers ----------------
+                LogHelper.Write($"📊 Available employees (not enrolled): {availableEmployees.Count}");
 
-        private void SettingsBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // Load current setting
-                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
-                int currentThreshold = settingsService.GetLateThresholdMinutes();
-                LateThresholdInput.Text = currentThreshold.ToString();
-                
-                // Show overlay
-                SettingsOverlay.Visibility = Visibility.Visible;
-                SettingsStatus.Visibility = Visibility.Collapsed;
-                LateThresholdInput.Focus();
-                LateThresholdInput.SelectAll();
-                
-                LogHelper.Write($"⚙️ Settings opened (current threshold: {currentThreshold} min)");
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"💥 Error opening settings: {ex.Message}");
-            }
-        }
-
-        private void SettingsCancelBtn_Click(object sender, RoutedEventArgs e)
-        {
-            SettingsOverlay.Visibility = Visibility.Collapsed;
-            SettingsStatus.Visibility = Visibility.Collapsed;
-            LogHelper.Write("⚙️ Settings cancelled");
-        }
-
-        private void SettingsSaveBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string input = LateThresholdInput.Text.Trim();
-                
-                if (!int.TryParse(input, out int minutes))
+                // Apply search filter if search text is provided
+                var filtered = availableEmployees;
+                if (!string.IsNullOrEmpty(searchText))
                 {
-                    SettingsStatus.Text = "❌ Please enter a valid number.";
-                    SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-                    SettingsStatus.Visibility = Visibility.Visible;
-                    return;
-                }
-
-                if (minutes < 0 || minutes > 60)
-                {
-                    SettingsStatus.Text = "❌ Value must be between 0 and 60 minutes.";
-                    SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-                    SettingsStatus.Visibility = Visibility.Visible;
-                    return;
-                }
-
-                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
-                bool success = settingsService.SetLateThresholdMinutes(minutes);
-
-                if (success)
-                {
-                    SettingsStatus.Text = $"✅ Late threshold updated to {minutes} minutes!";
-                    SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(5, 150, 105));
-                    SettingsStatus.Visibility = Visibility.Visible;
+                    filtered = availableEmployees
+                        .Where(emp => emp.employeeId.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                                     (emp.fullname?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                                     (emp.department?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false))
+                        .ToList();
                     
-                    LogHelper.Write($"✅ Late threshold updated to {minutes} minutes");
-                    
-                    // Close after 1.5 seconds
-                    var timer = new System.Windows.Threading.DispatcherTimer();
-                    timer.Interval = TimeSpan.FromSeconds(1.5);
-                    timer.Tick += (s, args) =>
+                    LogHelper.Write($"🔍 Filtered results for '{searchText}': {filtered.Count}");
+                }
+
+                // Convert to suggestions and limit results
+                var suggestions = filtered
+                    .Take(20) // Show more results for better UX
+                    .Select(emp => new EmployeeSuggestion
                     {
-                        timer.Stop();
-                        SettingsOverlay.Visibility = Visibility.Collapsed;
-                        SettingsStatus.Visibility = Visibility.Collapsed;
-                    };
-                    timer.Start();
+                        EmployeeId = emp.employeeId ?? "",
+                        FullName = emp.fullname ?? "Unknown",
+                        Department = emp.department ?? "Unknown"
+                    })
+                    .ToList();
+
+                foreach (var suggestion in suggestions)
+                {
+                    _employeeSuggestions.Add(suggestion);
+                }
+
+                LogHelper.Write($"📋 Added {suggestions.Count} suggestions to ComboBox");
+                
+                // Debug: Log first few suggestions
+                foreach (var suggestion in suggestions.Take(3))
+                {
+                    LogHelper.Write($"  Suggestion: {suggestion.EmployeeId} - {suggestion.FullName} ({suggestion.Department})");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error updating employee suggestions: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                
+                // Try to recover by reinitializing the collection
+                try
+                {
+                    _employeeSuggestions = new ObservableCollection<EmployeeSuggestion>();
+                    if (EmployeeIdInput != null)
+                        EmployeeIdInput.ItemsSource = _employeeSuggestions;
+                }
+                catch (Exception recoveryEx)
+                {
+                    LogHelper.Write($"💥 Failed to recover from UpdateEmployeeSuggestions error: {recoveryEx.Message}");
+                }
+            }
+        }
+
+        private void EmployeeIdInput_KeyUp(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            try
+            {
+                if (sender is not ComboBox comboBox || !comboBox.IsLoaded)
+                    return;
+
+                string searchText = comboBox.Text ?? "";
+                
+                // Update suggestions on UI thread with error handling
+                Dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        UpdateEmployeeSuggestions(searchText);
+                        
+                        // Always show dropdown when typing (even if empty search)
+                        if (!comboBox.IsDropDownOpen)
+                        {
+                            comboBox.IsDropDownOpen = true;
+                        }
+                        
+                        LogHelper.Write($"🔍 Search updated: '{searchText}' -> {_employeeSuggestions.Count} results");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"💥 Error updating suggestions: {ex.Message}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in EmployeeIdInput_KeyUp: {ex.Message}");
+            }
+        }
+
+        private void EmployeeIdInput_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (sender is not ComboBox comboBox || !comboBox.IsLoaded)
+                    return;
+                    
+                if (comboBox.SelectedItem is not EmployeeSuggestion selected)
+                    return;
+
+                // Temporarily disable events to prevent recursion
+                comboBox.SelectionChanged -= EmployeeIdInput_SelectionChanged;
+                
+                try
+                {
+                    // Set the text to just the employee ID when an item is selected
+                    comboBox.Text = selected.EmployeeId;
+                    LogHelper.Write($"📝 Selected employee: {selected.EmployeeId} - {selected.FullName}");
+                }
+                finally
+                {
+                    comboBox.SelectionChanged += EmployeeIdInput_SelectionChanged;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in EmployeeIdInput_SelectionChanged: {ex.Message}");
+            }
+        }
+
+        private void EmployeeIdInput_GotFocus(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is ComboBox comboBox && comboBox.IsLoaded)
+                {
+                    // Show available employees when the ComboBox gets focus
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        try
+                        {
+                            // If no employees loaded, try to load them
+                            if (_allEmployees == null || _allEmployees.Count == 0)
+                            {
+                                LogHelper.Write("🔍 No employees loaded, attempting to load...");
+                                Task.Run(async () => 
+                                {
+                                    await LoadEmployeeSuggestionsAsync();
+                                    Dispatcher.Invoke(() => UpdateEmployeeSuggestions(comboBox.Text ?? ""));
+                                });
+                            }
+                            else
+                            {
+                                UpdateEmployeeSuggestions(comboBox.Text ?? "");
+                            }
+                            
+                            if (_employeeSuggestions.Count > 0 && !comboBox.IsDropDownOpen)
+                            {
+                                comboBox.IsDropDownOpen = true;
+                            }
+                            else if (_employeeSuggestions.Count == 0)
+                            {
+                                LogHelper.Write("⚠️ No suggestions available to show in dropdown");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogHelper.Write($"💥 Error updating suggestions on focus: {ex.Message}");
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in EmployeeIdInput_GotFocus: {ex.Message}");
+            }
+        }
+
+        private void EmployeeIdInput_DropDownOpened(object sender, EventArgs e)
+        {
+            try
+            {
+                if (sender is not ComboBox comboBox || !comboBox.IsLoaded)
+                    return;
+
+                // Show all available employees (without fingerprints) when dropdown is opened
+                Dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        // Pass empty string to show all available employees
+                        UpdateEmployeeSuggestions("");
+                        LogHelper.Write($"📋 Dropdown opened: showing {_employeeSuggestions.Count} available employees");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"💥 Error updating suggestions on dropdown open: {ex.Message}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in EmployeeIdInput_DropDownOpened: {ex.Message}");
+            }
+        }
+
+        private async Task LoadEmployeeSuggestionsAsync()
+        {
+            try
+            {
+                using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(10);
+                string url = "http://localhost:5000/employees";
+                
+                LogHelper.Write($"🔍 Attempting to load employees from: {url}");
+                
+                var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
+                if (employees != null)
+                {
+                    _allEmployees = employees;
+                    LogHelper.Write($"✅ Loaded {employees.Count} employees from server");
+                    
+                    // Debug: Log first few employees
+                    foreach (var emp in employees.Take(3))
+                    {
+                        LogHelper.Write($"  Employee: {emp.employeeId} - {emp.fullname} ({emp.department})");
+                    }
                 }
                 else
                 {
-                    SettingsStatus.Text = "❌ Failed to save settings.";
-                    SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-                    SettingsStatus.Visibility = Visibility.Visible;
+                    LogHelper.Write("⚠️ Server returned null employee list");
+                    _allEmployees = new List<EmployeeDto>();
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                LogHelper.Write($"🌐 Network error loading employees: {ex.Message}");
+                _allEmployees = new List<EmployeeDto>();
+                
+                // Show user-friendly message
+                Dispatcher.Invoke(() => 
+                {
+                    StatusText.Text = "⚠️ Cannot connect to server. Check network connection.";
+                });
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Failed to load employee suggestions: {ex.Message}");
+                _allEmployees = new List<EmployeeDto>();
+                
+                // Show user-friendly message
+                Dispatcher.Invoke(() => 
+                {
+                    StatusText.Text = $"⚠️ Error loading employees: {ex.Message}";
+                });
+            }
+        }
+
+
+
+        // Helper method for safe status updates
+        private void UpdateStatusSafely(string message)
+        {
+            try
+            {
+                if (StatusText != null)
+                {
+                    if (Dispatcher.CheckAccess())
+                    {
+                        StatusText.Text = message;
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() => StatusText.Text = message);
+                    }
+                }
+                LogHelper.Write(message);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error updating status: {ex.Message}");
+            }
+        }
+
+        // Helper method for safe control enabling
+        private void SetControlsEnabledSafely(bool enabled)
+        {
+            try
+            {
+                if (Dispatcher.CheckAccess())
+                {
+                    SetControlsEnabled(enabled);
+                }
+                else
+                {
+                    Dispatcher.Invoke(() => SetControlsEnabled(enabled));
                 }
             }
             catch (Exception ex)
             {
-                SettingsStatus.Text = $"❌ Error: {ex.Message}";
-                SettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-                SettingsStatus.Visibility = Visibility.Visible;
-                LogHelper.Write($"💥 Error saving settings: {ex.Message}");
+                LogHelper.Write($"💥 Error setting controls enabled state: {ex.Message}");
             }
         }
 
         // ---------------- Main handlers ----------------
 
-        private void BackBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                LogHelper.Write("📤 Navigating back to attendance page");
-                // Navigate back to attendance page, which will restart continuous scanning
-                NavigationService?.Navigate(new AttendancePage(_zkService));
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"❌ Navigation error: {ex.Message}");
-                StatusText.Text = $"❌ Navigation error: {ex.Message}";
-            }
-        }
-
-        // removed ConnectBtn_Click entirely (no connect button on page any more)
-
         private async void EnrollBtn_Click(object sender, RoutedEventArgs e)
         {
-            string empId = EmployeeIdInput.Text.Trim();
-            if (string.IsNullOrEmpty(empId))
-            {
-                StatusText.Text = "⚠️ Please enter Employee ID first.";
-                return;
-            }
-
-            // -------- Step 1: Get employee info (fullname + department) --------
-            string name = string.Empty;
-            string department = string.Empty;
-
+            LogHelper.Write("🔥 EnrollBtn_Click started");
+            
+            // Simple test to confirm method is called
+            MessageBox.Show("Enrollment button clicked! Check logs for details.", "Debug", MessageBoxButton.OK, MessageBoxImage.Information);
+            
+            UpdateStatusSafely("🔄 Starting enrollment process...");
+            
             try
             {
-                using var client = new HttpClient();
-                string url = $"http://localhost:5000/employees/{empId}";
-                var response = await client.GetAsync(url);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    StatusText.Text = "❌ Employee does not exist in the system.";
-                    return;
-                }
-
+                LogHelper.Write("🔥 About to disable controls");
+                // Disable button immediately to prevent double-clicks
+                SetControlsEnabledSafely(false);
+                LogHelper.Write("🔥 Controls disabled");
+                
+                string empId = "";
+                
+                LogHelper.Write("🔥 About to get employee ID from ComboBox");
+                // Safely get the employee ID from ComboBox with proper null checks
                 try
                 {
-                    var emp = await response.Content.ReadFromJsonAsync<EmployeeDto?>();
-                    if (emp != null)
+                    if (EmployeeIdInput?.SelectedItem is EmployeeSuggestion selectedEmployee && 
+                        !string.IsNullOrEmpty(selectedEmployee.EmployeeId))
                     {
-                        name = emp.fullname ?? string.Empty;
-                        department = emp.department ?? string.Empty;
+                        empId = selectedEmployee.EmployeeId;
+                        LogHelper.Write($"🔥 Got employee ID from selected item: {empId}");
+                    }
+                    else if (!string.IsNullOrEmpty(EmployeeIdInput?.Text))
+                    {
+                        empId = EmployeeIdInput.Text.Trim();
+                        LogHelper.Write($"🔥 Got employee ID from text: {empId}");
+                    }
+                    else
+                    {
+                        LogHelper.Write("🔥 No employee ID found in ComboBox");
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogHelper.Write($"Could not parse employee JSON: {ex.Message}");
+                    LogHelper.Write($"💥 Error getting employee ID from ComboBox: {ex.Message}");
+                    empId = EmployeeIdInput?.Text?.Trim() ?? "";
+                }
+                
+                LogHelper.Write($"🔥 Final employee ID: '{empId}'");
+                
+                if (string.IsNullOrEmpty(empId))
+                {
+                    LogHelper.Write("🔥 Employee ID is empty, showing warning");
+                    UpdateStatusSafely("⚠️ Please enter Employee ID first.");
+                    return;
+                }
+
+                LogHelper.Write("🔥 About to validate services");
+                // Validate services are initialized with better error handling
+                if (_enrollmentScanner == null)
+                {
+                    LogHelper.Write("🔥 Enrollment scanner is null");
+                    UpdateStatusSafely("❌ Enrollment scanner not initialized.");
+                    return;
+                }
+
+                if (_dataService == null)
+                {
+                    LogHelper.Write("🔥 Data service is null");
+                    UpdateStatusSafely("❌ Data service not initialized.");
+                    return;
+                }
+
+                LogHelper.Write("🔥 About to ensure enrollment scanner is initialized");
+                // Ensure enrollment scanner is properly initialized
+                if (!_enrollmentScanner.EnsureInitialized())
+                {
+                    LogHelper.Write("🔥 Failed to ensure enrollment scanner initialization");
+                    UpdateStatusSafely("❌ Failed to initialize enrollment scanner.");
+                    return;
+                }
+
+                LogHelper.Write($"🔥 Starting enrollment for Employee ID: {empId}");
+
+                // -------- Step 1: Get employee info (fullname + department) --------
+                string name = string.Empty;
+                string department = string.Empty;
+
+                LogHelper.Write("🔥 About to fetch employee info from server");
+                UpdateStatusSafely("🔍 Looking up employee information...");
+
+                try
+                {
+                    using var client = new HttpClient();
+                    client.Timeout = TimeSpan.FromSeconds(10);
+                    string url = $"http://localhost:5000/employees/{empId}";
+                    LogHelper.Write($"🔥 Fetching from URL: {url}");
+                    
+                    var response = await client.GetAsync(url);
+                    LogHelper.Write($"🔥 Server response status: {response.StatusCode}");
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        LogHelper.Write($"🔥 Employee not found on server: {response.StatusCode}");
+                        UpdateStatusSafely("❌ Employee does not exist in the system.");
+                        return;
+                    }
+
+                    try
+                    {
+                        var emp = await response.Content.ReadFromJsonAsync<EmployeeDto?>();
+                        if (emp != null)
+                        {
+                            name = emp.fullname ?? string.Empty;
+                            department = emp.department ?? string.Empty;
+                            LogHelper.Write($"✅ Found employee: {name} ({department})");
+                            UpdateStatusSafely($"✅ Found employee: {name} ({department})");
+                        }
+                        else
+                        {
+                            LogHelper.Write("🔥 Employee data is null");
+                            UpdateStatusSafely("❌ Employee data not found.");
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"Could not parse employee JSON: {ex.Message}");
+                        UpdateStatusSafely($"❌ Error parsing employee data: {ex.Message}");
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Write($"💥 Server connection error: {ex.Message}");
+                    UpdateStatusSafely($"💥 Could not connect to server: {ex.Message}");
+                    return;
+                }
+
+                LogHelper.Write("🔥 About to check existing enrollments");
+                UpdateStatusSafely("🔍 Checking existing enrollments...");
+
+                LogHelper.Write("🔥 About to check existing enrollments");
+                UpdateStatusSafely("🔍 Checking existing enrollments...");
+
+                // -------- Step 2: Check if employee already has enrollment --------
+                var allEnrollments = _dataService.GetAllEnrollments();
+                LogHelper.Write($"🔥 Found {allEnrollments?.Count() ?? 0} total enrollments");
+                
+                var existingEnrollment = allEnrollments.FirstOrDefault(e => e.EmployeeId == empId);
+                bool hasExisting = !string.IsNullOrEmpty(existingEnrollment.EmployeeId);
+                
+                LogHelper.Write($"🔥 Employee {empId} has existing enrollment: {hasExisting}");
+                
+                if (hasExisting)
+                {
+                    LogHelper.Write("🔥 Showing re-enrollment confirmation dialog");
+                    UpdateStatusSafely("⚠️ Employee already enrolled. Asking for confirmation...");
+                    
+                    MessageBoxResult result = MessageBoxResult.No;
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        result = MessageBox.Show(
+                            $"Employee {empId} ({name}) already has a fingerprint enrolled.\n\n" +
+                            "Do you want to re-enroll and replace the existing fingerprint?",
+                            "Re-enrollment Confirmation",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+                    });
+
+                    if (result != MessageBoxResult.Yes)
+                    {
+                        LogHelper.Write("🔥 Re-enrollment cancelled by user");
+                        UpdateStatusSafely("❌ Re-enrollment cancelled.");
+                        return;
+                    }
+                    
+                    LogHelper.Write($"🔥 User confirmed re-enrollment for {empId}");
+                    UpdateStatusSafely("🔄 Re-enrolling fingerprint...");
+                    LogHelper.Write($"Re-enrolling fingerprint for {empId} (replacing existing enrollment)");
+                }
+                else
+                {
+                    LogHelper.Write($"🔥 New enrollment for {empId}");
+                    UpdateStatusSafely("🆕 New enrollment...");
+                    LogHelper.Write($"New enrollment for {empId}");
+                }
+
+                // -------- Step 3: Proceed with enrollment --------
+                Dispatcher.Invoke(() => 
+                {
+                    StatusText.Text = "🖐️ Please place your finger 3 times...";
+                    SetControlsEnabled(false);
+                });
+
+                try
+                {
+                    // Use dedicated enrollment scanner (async, non-blocking)
+                    string? template = await _enrollmentScanner.EnrollFingerprintAsync(empId);
+                    if (!string.IsNullOrEmpty(template))
+                    {
+                        // -------- Step 4: Confirmation dialog --------
+                        Dispatcher.Invoke(() => StatusText.Text = "✅ Fingerprint captured successfully!");
+                        
+                        var confirmResult = MessageBox.Show(
+                            $"Fingerprint captured successfully for Employee {empId} ({name}).\n\n" +
+                            "Do you want to save this enrollment?\n\n" +
+                            "Click 'Yes' to save or 'No' to cancel.",
+                            "Confirm Enrollment",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+
+                        if (confirmResult != MessageBoxResult.Yes)
+                        {
+                            Dispatcher.Invoke(() => StatusText.Text = "❌ Enrollment cancelled by user.");
+                            LogHelper.Write($"Enrollment cancelled by user for {empId}");
+                            return;
+                        }
+
+                        // -------- Step 5: Save enrollment --------
+                        Dispatcher.Invoke(() => StatusText.Text = "💾 Saving enrollment...");
+                        
+                        // If re-enrolling, delete the old enrollment first
+                        if (hasExisting)
+                        {
+                            try
+                            {
+                                _dataService.DeleteEnrollment(empId);
+                                LogHelper.Write($"Deleted old enrollment for {empId} before re-enrollment");
+                            }
+                            catch (Exception ex)
+                            {
+                                LogHelper.Write($"⚠️ Failed to delete old enrollment: {ex.Message}");
+                            }
+                        }
+
+                        // Save enrollment and get the inserted row id
+                        long rowId = _data_service_save_enrollment(empId, template, name, department);
+
+                        if (rowId > 0)
+                        {
+                            // Load the new template into the attendance scanner SDK (not enrollment scanner)
+                            try
+                            {
+                                var blob = Convert.FromBase64String(template);
+                                bool loaded = _zkService.AddTemplateToSdk((int)rowId, blob);
+                                if (!loaded)
+                                {
+                                    LogHelper.Write($"⚠️ Enrollment saved but AddTemplateToSdk returned false for row {rowId}.");
+                                }
+                                else
+                                {
+                                    LogHelper.Write($"✅ Template added to attendance scanner SDK for row {rowId}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogHelper.Write($"💥 Failed to add template to attendance scanner SDK for row {rowId}: {ex.Message}");
+                            }
+
+                            string action = hasExisting ? "Re-enrolled" : "Enrolled";
+                            Dispatcher.Invoke(() => StatusText.Text = $"✅ {action} successfully for {empId} (row {rowId})");
+                            LogHelper.Write($"{action} for {empId} ({name}, {department}) -> row {rowId}");
+                            
+                            // Refresh the enrollment records grid on UI thread
+                            Dispatcher.Invoke(() => RefreshEnrollmentRecords());
+                        }
+                        else
+                        {
+                            Dispatcher.Invoke(() => StatusText.Text = $"❌ Failed to save enrollment for {empId}");
+                            LogHelper.Write($"❌ SaveEnrollment returned {rowId} for {empId}");
+                        }
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() => StatusText.Text = $"❌ Enrollment failed for {empId}");
+                        LogHelper.Write($"❌ Fingerprint enrollment failed for {empId}");
+                    }
+                }
+                catch (Exception enrollEx)
+                {
+                    Dispatcher.Invoke(() => StatusText.Text = $"❌ Enrollment error: {enrollEx.Message}");
+                    LogHelper.Write($"💥 Enrollment process error for {empId}: {enrollEx.Message}");
+                }
+                finally
+                {
+                    Dispatcher.Invoke(() => SetControlsEnabled(true));
                 }
             }
             catch (Exception ex)
             {
-                StatusText.Text = $"💥 Could not connect to server: {ex.Message}";
-                return;
-            }
-
-            // -------- Step 2: Check if employee already has enrollment --------
-            var allEnrollments = _dataService.GetAllEnrollments();
-            var existingEnrollment = allEnrollments.FirstOrDefault(e => e.EmployeeId == empId);
-            bool hasExisting = !string.IsNullOrEmpty(existingEnrollment.EmployeeId);
-            
-            if (hasExisting)
-            {
-                var result = MessageBox.Show(
-                    $"Employee {empId} ({name}) already has a fingerprint enrolled.\n\n" +
-                    "Do you want to re-enroll and replace the existing fingerprint?",
-                    "Re-enrollment Confirmation",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-
-                if (result != MessageBoxResult.Yes)
-                {
-                    StatusText.Text = "❌ Re-enrollment cancelled.";
-                    return;
-                }
+                LogHelper.Write($"💥 Unexpected error in EnrollBtn_Click: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                UpdateStatusSafely($"❌ Unexpected error: {ex.Message}");
                 
-                StatusText.Text = "🔄 Re-enrolling fingerprint...";
-                LogHelper.Write($"Re-enrolling fingerprint for {empId} (replacing existing enrollment)");
-            }
-            else
-            {
-                StatusText.Text = "🆕 New enrollment...";
-                LogHelper.Write($"New enrollment for {empId}");
-            }
-
-            // -------- Step 3: Proceed with enrollment --------
-            StatusText.Text = "🖐️ Please place your finger 3 times...";
-            EnrollBtn.IsEnabled = false;
-
-            try
-            {
-                // perform enrollment (blocking on background thread)
-                string? template = await Task.Run(() => _zkService.EnrollFingerprint(empId));
-                if (!string.IsNullOrEmpty(template))
+                // Ensure controls are re-enabled even if there's an error
+                try
                 {
-                    // -------- Step 4: Confirmation dialog --------
-                    StatusText.Text = "✅ Fingerprint captured successfully!";
-                    
-                    var confirmResult = MessageBox.Show(
-                        $"Fingerprint captured successfully for Employee {empId} ({name}).\n\n" +
-                        "Do you want to save this enrollment?\n\n" +
-                        "Click 'Yes' to save or 'No' to cancel.",
-                        "Confirm Enrollment",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (confirmResult != MessageBoxResult.Yes)
-                    {
-                        StatusText.Text = "❌ Enrollment cancelled by user.";
-                        LogHelper.Write($"Enrollment cancelled by user for {empId}");
-                        EnrollBtn.IsEnabled = true;
-                        return;
-                    }
-
-                    // -------- Step 5: Save enrollment --------
-                    StatusText.Text = "💾 Saving enrollment...";
-                    
-                    // If re-enrolling, delete the old enrollment first
-                    if (hasExisting)
-                    {
-                        try
-                        {
-                            _dataService.DeleteEnrollment(empId);
-                            LogHelper.Write($"Deleted old enrollment for {empId} before re-enrollment");
-                        }
-                        catch (Exception ex)
-                        {
-                            LogHelper.Write($"⚠️ Failed to delete old enrollment: {ex.Message}");
-                        }
-                    }
-
-                    // Save enrollment and get the inserted row id
-                    long rowId = _data_service_save_enrollment(empId, template, name, department);
-
-                    if (rowId > 0)
-                    {
-                        // Load the new template into SDK using row id as fid
-                        try
-                        {
-                            var blob = Convert.FromBase64String(template);
-                            bool loaded = _zkService.AddTemplateToSdk((int)rowId, blob);
-                            if (!loaded)
-                            {
-                                LogHelper.Write($"⚠️ Enrollment saved but AddTemplateToSdk returned false for row {rowId}.");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            LogHelper.Write($"💥 Failed to add template to SDK for row {rowId}: {ex.Message}");
-                        }
-
-                        string action = hasExisting ? "Re-enrolled" : "Enrolled";
-                        StatusText.Text = $"✅ {action} successfully for {empId} (row {rowId})";
-                        LogHelper.Write($"{action} for {empId} ({name}, {department}) -> row {rowId}");
-                        
-                        // Refresh the enrollment records grid
-                        RefreshEnrollmentRecords();
-                    }
-                    else
-                    {
-                        StatusText.Text = $"❌ Failed to save enrollment for {empId}";
-                        LogHelper.Write($"❌ SaveEnrollment returned {rowId} for {empId}");
-                    }
+                    SetControlsEnabledSafely(true);
                 }
-                else
+                catch (Exception enableEx)
                 {
-                    StatusText.Text = $"❌ Enrollment failed for {empId}";
+                    LogHelper.Write($"💥 Error re-enabling controls: {enableEx.Message}");
                 }
             }
             finally
             {
-                EnrollBtn.IsEnabled = true;
+                LogHelper.Write("🔥 EnrollBtn_Click finally block");
+                // Always re-enable controls
+                SetControlsEnabledSafely(true);
+                LogHelper.Write("🔥 EnrollBtn_Click completed");
             }
         }
 
@@ -591,7 +1038,7 @@ namespace BiometricEnrollmentApp
                     var dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "biometric_local.db");
                     if (File.Exists(dbPath))
                     {
-                        var backupPath = dbPath + ".bak." + DateTime.Now.ToString("yyyyMMddHHmmss");
+                        var backupPath = dbPath + ".bak." + TimezoneHelper.Now.ToString("yyyyMMddHHmmss");
                         File.Copy(dbPath, backupPath);
                         LogHelper.Write($"🗄️ Backup created before sync: {backupPath}");
                     }
@@ -622,15 +1069,15 @@ namespace BiometricEnrollmentApp
                 {
                     LogHelper.Write($"✅ Sync complete: {deleted} enrollment(s) deleted from local database.");
                     
-                    // Reload templates into SDK after deletion
+                    // Reload templates into attendance scanner SDK after deletion
                     try
                     {
                         _zkService.LoadEnrollmentsToSdk(_dataService);
-                        LogHelper.Write("🔄 Templates reloaded into SDK after sync.");
+                        LogHelper.Write("🔄 Templates reloaded into attendance scanner SDK after sync.");
                     }
                     catch (Exception ex)
                     {
-                        LogHelper.Write($"⚠️ Failed to reload templates after sync: {ex.Message}");
+                        LogHelper.Write($"⚠️ Failed to reload templates into attendance scanner after sync: {ex.Message}");
                     }
                 }
             }
@@ -672,7 +1119,20 @@ namespace BiometricEnrollmentApp
         {
             try
             {
+                LogHelper.Write("🔥 RefreshEnrollmentRecords starting...");
+                
+                // Ensure we're on the UI thread
+                if (!Dispatcher.CheckAccess())
+                {
+                    LogHelper.Write("🔥 Not on UI thread, invoking...");
+                    Dispatcher.Invoke(() => RefreshEnrollmentRecords());
+                    return;
+                }
+
+                LogHelper.Write("🔥 Getting all enrollments from data service...");
                 var enrollments = _dataService.GetAllEnrollments();
+                LogHelper.Write($"🔥 Found {enrollments?.Count() ?? 0} enrollments");
+                
                 var rows = enrollments.Select(e => new
                 {
                     EmployeeId = e.EmployeeId,
@@ -681,17 +1141,52 @@ namespace BiometricEnrollmentApp
                     CreatedAt = "Enrolled"
                 }).ToList();
 
+                LogHelper.Write($"🔥 Created {rows.Count} display rows");
+
                 var grid = this.FindName("EnrollmentsGrid") as DataGrid;
                 if (grid != null)
                 {
+                    LogHelper.Write("🔥 Setting grid ItemsSource...");
                     grid.ItemsSource = rows;
                     LogHelper.Write($"📋 Loaded {rows.Count} enrollment records");
                 }
+                else
+                {
+                    LogHelper.Write("⚠️ EnrollmentsGrid not found");
+                }
+
+                LogHelper.Write("🔥 Updating employee suggestions...");
+                // Update employee suggestions to reflect current enrollment state
+                UpdateEmployeeSuggestions(EmployeeIdInput?.Text ?? "");
+                LogHelper.Write("🔥 RefreshEnrollmentRecords completed");
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"❌ Failed to load enrollment records: {ex.Message}");
-                StatusText.Text = $"Failed to load records: {ex.Message}";
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                
+                try
+                {
+                    if (Dispatcher.CheckAccess())
+                    {
+                        StatusText.Text = $"Failed to load records: {ex.Message}";
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() => StatusText.Text = $"Failed to load records: {ex.Message}");
+                    }
+                }
+                catch (Exception dispatcherEx)
+                {
+                    LogHelper.Write($"💥 Error updating status text: {dispatcherEx.Message}");
+                }
+                
+                // Show error to user
+                try
+                {
+                    MessageBox.Show($"Error loading enrollment records: {ex.Message}", "Data Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch { }
             }
         }
 
@@ -721,15 +1216,15 @@ namespace BiometricEnrollmentApp
                         _dataService.DeleteEnrollment(employeeId);
                         LogHelper.Write($"🗑️ Deleted enrollment for {employeeId}");
                         
-                        // Reload templates into SDK after deletion
+                        // Reload templates into attendance scanner SDK after deletion
                         try
                         {
                             _zkService.LoadEnrollmentsToSdk(_dataService);
-                            LogHelper.Write("🔄 Templates reloaded into SDK after deletion");
+                            LogHelper.Write("🔄 Templates reloaded into attendance scanner SDK after deletion");
                         }
                         catch (Exception ex)
                         {
-                            LogHelper.Write($"⚠️ Failed to reload templates: {ex.Message}");
+                            LogHelper.Write($"⚠️ Failed to reload templates into attendance scanner: {ex.Message}");
                         }
                         
                         // Refresh the grid

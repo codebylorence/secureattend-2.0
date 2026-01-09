@@ -48,52 +48,100 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
-        public async Task<bool> SendAttendanceAsync(string employeeId, DateTime? clockIn, DateTime? clockOut = null, string status = "IN")
+        public async Task<string?> GetEmployeePhotoAsync(string employeeId)
         {
             try
             {
-                var payload = new
-                {
-                    employee_id = employeeId,
-                    clock_in = clockIn?.ToString("yyyy-MM-ddTHH:mm:ss"),
-                    clock_out = clockOut?.ToString("yyyy-MM-ddTHH:mm:ss"),
-                    status = status
-                };
-
-                var options = new JsonSerializerOptions
-                {
-                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never,
-                    WriteIndented = false
-                };
-
-                var json = JsonSerializer.Serialize(payload, options);
-                LogHelper.Write($"📤 Sending to server: {json}");
-                
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync($"{_baseUrl}/api/attendances", content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    LogHelper.Write($"✅ Attendance sent successfully for {employeeId}");
-                    LogHelper.Write($"   Server response: {responseContent}");
-                    return true;
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    LogHelper.Write($"❌ Failed to send attendance: {response.StatusCode}");
-                    LogHelper.Write($"   Error details: {errorContent}");
-                    return false;
-                }
+                var employee = await GetEmployeeDetailsAsync(employeeId);
+                return employee?.Photo;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error sending attendance to server: {ex.Message}");
-                LogHelper.Write($"   Stack trace: {ex.StackTrace}");
-                return false;
+                LogHelper.Write($"💥 Error getting employee photo: {ex.Message}");
+                return null;
             }
+        }
+
+        public async Task<bool> SendAttendanceAsync(string employeeId, DateTime? clockIn, DateTime? clockOut = null, string status = "Present")
+        {
+            int maxRetries = 3;
+            int retryDelay = 1000; // Start with 1 second
+            
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    var payload = new
+                    {
+                        employee_id = employeeId,
+                        clock_in = clockIn.HasValue ? TimezoneHelper.FormatForApi(clockIn.Value) : null,
+                        clock_out = clockOut.HasValue ? TimezoneHelper.FormatForApi(clockOut.Value) : null,
+                        status = status
+                    };
+
+                    // Debug logging for timezone conversion
+                    if (clockIn.HasValue)
+                    {
+                        LogHelper.Write($"🕐 Philippines time: {clockIn.Value:yyyy-MM-dd HH:mm:ss}");
+                        LogHelper.Write($"🌍 UTC for API: {TimezoneHelper.FormatForApi(clockIn.Value)}");
+                    }
+
+                    var options = new JsonSerializerOptions
+                    {
+                        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+                        WriteIndented = false
+                    };
+
+                    var json = JsonSerializer.Serialize(payload, options);
+                    LogHelper.Write($"📤 Attempt {attempt}/{maxRetries} - Sending to server: {json}");
+                    
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    var response = await _httpClient.PostAsync($"{_baseUrl}/api/attendances", content);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var responseContent = await response.Content.ReadAsStringAsync();
+                        LogHelper.Write($"✅ Attendance sent successfully for {employeeId} on attempt {attempt}");
+                        LogHelper.Write($"   Server response: {responseContent}");
+                        return true;
+                    }
+                    else
+                    {
+                        var errorContent = await response.Content.ReadAsStringAsync();
+                        LogHelper.Write($"❌ Attempt {attempt}/{maxRetries} failed: {response.StatusCode}");
+                        LogHelper.Write($"   Error details: {errorContent}");
+                        
+                        // Don't retry on client errors (4xx), only server errors (5xx) and network issues
+                        if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                        {
+                            LogHelper.Write($"❌ Client error - not retrying");
+                            return false;
+                        }
+                        
+                        if (attempt < maxRetries)
+                        {
+                            LogHelper.Write($"⏳ Waiting {retryDelay}ms before retry...");
+                            await Task.Delay(retryDelay);
+                            retryDelay *= 2; // Exponential backoff
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Write($"❌ Attempt {attempt}/{maxRetries} failed with exception: {ex.Message}");
+                    
+                    if (attempt < maxRetries)
+                    {
+                        LogHelper.Write($"⏳ Waiting {retryDelay}ms before retry...");
+                        await Task.Delay(retryDelay);
+                        retryDelay *= 2; // Exponential backoff
+                    }
+                }
+            }
+            
+            LogHelper.Write($"❌ All {maxRetries} attempts failed for employee {employeeId}");
+            return false;
         }
 
         public async Task<List<EmployeeSchedule>?> GetPublishedSchedulesAsync()

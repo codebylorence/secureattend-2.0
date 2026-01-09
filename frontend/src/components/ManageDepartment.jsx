@@ -4,8 +4,9 @@ import { MdManageAccounts, MdDelete, MdClose } from "react-icons/md";
 import { fetchDepartments, deleteDepartment, updateDepartment } from "../api/DepartmentApi";
 import { fetchTeamLeaders } from "../api/UserApi";
 import axios from "axios";
+import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
-export default function ManageDepartment() {
+export default function ManageDepartment({ supervisorView = false, refreshTrigger }) {
   const [departments, setDepartments] = useState([]);
   const [teamLeaders, setTeamLeaders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +21,24 @@ export default function ManageDepartment() {
   useEffect(() => {
     loadDepartments();
     loadTeamLeaders();
+  }, []);
+
+  // Add effect to refresh team leaders when refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger) {
+      console.log('🔄 Refreshing team leaders due to trigger change');
+      loadTeamLeaders();
+    }
+  }, [refreshTrigger]);
+
+  // Subscribe to team leader updates
+  useEffect(() => {
+    const unsubscribe = teamLeaderEventManager.subscribe(() => {
+      console.log('🔄 ManageDepartment: Received team leader update event');
+      loadTeamLeaders();
+    });
+
+    return unsubscribe; // Cleanup subscription on unmount
   }, []);
 
   const loadTeamLeaders = async () => {
@@ -432,47 +451,59 @@ export default function ManageDepartment() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2">
-                          {editingId === dept.id ? (
-                            <>
-                              <button
-                                onClick={() => handleSaveEdit(dept.id)}
-                                className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
-                                title="Save changes"
-                              >
-                                <FaEdit size={12} />
-                              </button>
-                              <button
-                                onClick={handleCancelEdit}
-                                className="w-7 h-7 rounded-md bg-gray-500 hover:bg-gray-600 text-white flex items-center justify-center transition-colors"
-                                title="Cancel"
-                              >
-                                <MdClose size={14} />
-                              </button>
-                            </>
+                          {!supervisorView ? (
+                            // Admin view - full actions
+                            editingId === dept.id ? (
+                              <>
+                                <button
+                                  onClick={() => handleSaveEdit(dept.id)}
+                                  className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
+                                  title="Save changes"
+                                >
+                                  <FaEdit size={12} />
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="w-7 h-7 rounded-md bg-gray-500 hover:bg-gray-600 text-white flex items-center justify-center transition-colors"
+                                  title="Cancel"
+                                >
+                                  <MdClose size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleViewMembers(dept)}
+                                  className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
+                                  title="View Members"
+                                >
+                                  <FaEye size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleEdit(dept)}
+                                  className="w-7 h-7 rounded-md bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
+                                  title="Edit"
+                                >
+                                  <FaEdit size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(dept.id, dept.name, dept.employeeCount)}
+                                  className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                                  title="Delete"
+                                >
+                                  <MdDelete size={14} />
+                                </button>
+                              </>
+                            )
                           ) : (
-                            <>
-                              <button
-                                onClick={() => handleViewMembers(dept)}
-                                className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
-                                title="View Members"
-                              >
-                                <FaEye size={12} />
-                              </button>
-                              <button
-                                onClick={() => handleEdit(dept)}
-                                className="w-7 h-7 rounded-md bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
-                                title="Edit"
-                              >
-                                <FaEdit size={12} />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(dept.id, dept.name, dept.employeeCount)}
-                                className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
-                                title="Delete"
-                              >
-                                <MdDelete size={14} />
-                              </button>
-                            </>
+                            // Supervisor view - view only
+                            <button
+                              onClick={() => handleViewMembers(dept)}
+                              className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
+                              title="View Members"
+                            >
+                              <FaEye size={12} />
+                            </button>
                           )}
                         </div>
                       </td>

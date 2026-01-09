@@ -6,6 +6,8 @@ import TeamTodaysAttend from "../components/TeamTodaysAttend";
 
 export default function TeamDashboard() {
   const [department, setDepartment] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -27,12 +29,31 @@ export default function TeamDashboard() {
       <div className="flex justify-between my-6">
         <div className="flex items-center gap-4">
           <p className="text-[#374151] mr-5">Filter :</p>
-          <DropdownStatus />
+          <select 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700"
+          >
+            <option value="">All Status</option>
+            <option value="Present">Present</option>
+            <option value="Late">Late</option>
+            <option value="Absent">Absent</option>
+          </select>
         </div>
-        <SearchBar />
+        <input
+          type="text"
+          placeholder="Search employees..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700"
+        />
       </div>
 
-      <TeamTodaysAttend department={department} />
+      <TeamTodaysAttend 
+        department={department} 
+        statusFilter={statusFilter}
+        searchTerm={searchTerm}
+      />
     </div>
   );
 }

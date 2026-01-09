@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { MdWarning, MdInfo } from "react-icons/md";
 import { addEmployee, fetchEmployees } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
+import { toast } from 'react-toastify';
+import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
 export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   const [formData, setFormData] = useState({
@@ -12,17 +14,34 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     position: "",
     contact_number: "",
     email: "",
+    username: "",
+    password: "",
   });
 
   const [allDepartments, setAllDepartments] = useState([]);
   const [departmentsWithTeamLeader, setDepartmentsWithTeamLeader] = useState([]);
   const [positions, setPositions] = useState([]);
   const [positionsLoading, setPositionsLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (isOpen) {
       loadDepartments();
       loadPositions();
+      // Reset form when modal opens
+      setFormData({
+        employee_id: "",
+        firstname: "",
+        lastname: "",
+        department: "No Department",
+        position: "",
+        contact_number: "",
+        email: "",
+        username: "",
+        password: "",
+      });
+      setError("");
     }
   }, [isOpen]);
 
@@ -104,20 +123,42 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
+    
     try {
-      // Send firstname and lastname separately to backend
+      // Validate password length
+      if (formData.password.length < 6) {
+        throw new Error("Password must be at least 6 characters long");
+      }
+      
+      // Check if the new employee is a Team Leader
+      const isTeamLeader = formData.position === "Team Leader";
+      
+      // Send employee data including username and password to backend
       const employeeData = {
         ...formData,
         status: "Active" // Default status
       };
       
       await addEmployee(employeeData);
+      
+      // If a team leader was added, notify team leader update
+      if (isTeamLeader) {
+        console.log('🔄 New Team Leader added, notifying team leader update');
+        teamLeaderEventManager.notifyTeamLeaderUpdate();
+      }
+      
       onAdded(); // Refresh employee list
       onClose(); // Close modal
-      alert("Employee added successfully!");
+      toast.success("Employee and user account created successfully!");
     } catch (error) {
       console.error("Error adding employee:", error);
-      alert("Failed to add employee");
+      const errorMessage = error.response?.data?.message || error.message || "Failed to add employee";
+      toast.error(errorMessage);
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -125,8 +166,14 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative">
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-6 relative max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold mb-4 text-[#1E3A8A]">Add New Employee</h2>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded-md">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           {/* Employee ID */}
@@ -248,20 +295,53 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
             />
           </div>
 
+          {/* Username */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Username</label>
+            <input
+              type="text"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              required
+              className="w-full border border-gray-300 rounded-md p-2"
+              placeholder="Login username"
+            />
+            <p className="text-xs text-gray-500 mt-1">This will be used to log into the system</p>
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              minLength="6"
+              className="w-full border border-gray-300 rounded-md p-2"
+              placeholder="Minimum 6 characters"
+            />
+            <p className="text-xs text-gray-500 mt-1">Employee will use this password to log in</p>
+          </div>
+
           {/* Action Buttons */}
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400"
+              disabled={loading}
+              className="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md hover:bg-blue-900"
+              disabled={loading}
+              className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md hover:bg-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save
+              {loading ? "Creating..." : "Save"}
             </button>
           </div>
         </form>

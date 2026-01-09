@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { fetchEmployees } from "../api/EmployeeApi";
 import { getTodayAttendances } from "../api/AttendanceApi";
 import { getEmployeeSchedules } from "../api/ScheduleApi";
+import { isAuthenticated } from "../utils/auth";
 
 export default function AdminMetrics() {
   const [metrics, setMetrics] = useState({
@@ -14,18 +15,65 @@ export default function AdminMetrics() {
 
   useEffect(() => {
     fetchMetrics();
+    
+    // Auto-refresh every 30 seconds to sync with biometric app data
+    const interval = setInterval(() => {
+      fetchMetrics();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchMetrics = async () => {
     try {
+      // Check if user is authenticated before making requests
+      if (!isAuthenticated()) {
+        console.log('📊 AdminMetrics: User not authenticated, skipping metrics fetch');
+        return;
+      }
+      
+      // Get user role and department from localStorage
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const userRole = user.role;
+      const userDepartment = user.department;
+      const isSupervisor = userRole === "supervisor";
+
+      console.log('📊 Fetching metrics for:', { userRole, userDepartment, isSupervisor });
+
       const [employees, todayAttendances, schedules] = await Promise.all([
         fetchEmployees(),
         getTodayAttendances(),
         getEmployeeSchedules()
       ]);
 
+      console.log('📊 Raw data received:', {
+        employees: employees.length,
+        attendances: todayAttendances.length,
+        schedules: schedules.length
+      });
+
+      let filteredEmployees = employees;
+      let filteredAttendances = todayAttendances;
+      let filteredSchedules = schedules;
+
+      // For supervisors, show all employees (no department filtering)
+      // Only filter out inactive employees
+      if (isSupervisor) {
+        filteredEmployees = employees.filter(emp => emp.status === "Active");
+        // No need to filter attendances and schedules by department for supervisors
+        // They should see all attendance data
+      }
+
+      console.log('📊 Filtered data:', {
+        employees: filteredEmployees.length,
+        attendances: filteredAttendances.length,
+        schedules: filteredSchedules.length
+      });
+
       // Count total active employees
-      const totalEmployees = employees.filter(emp => emp.status === "Active").length;
+      const totalEmployees = isSupervisor 
+        ? filteredEmployees.length 
+        : employees.filter(emp => emp.status === "Active").length;
 
       // Get today's day name and date in local timezone
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -38,7 +86,7 @@ export default function AdminMetrics() {
 
       // Find employees scheduled for today
       const scheduledEmployeeIds = new Set();
-      schedules.forEach(schedule => {
+      filteredSchedules.forEach(schedule => {
         // Check if employee is scheduled today
         // First check schedule_dates object for today's date
         if (schedule.schedule_dates && schedule.schedule_dates[today]) {
@@ -56,17 +104,25 @@ export default function AdminMetrics() {
       const scheduled = scheduledEmployeeIds.size;
 
       // Count by status using the new status system
-      const present = todayAttendances.filter(att => 
+      const present = filteredAttendances.filter(att => 
         att.status === "Present" || att.status === "COMPLETED" // Include legacy
       ).length;
 
-      const late = todayAttendances.filter(att => 
+      const late = filteredAttendances.filter(att => 
         att.status === "Late"
       ).length;
 
       // Count absent - only count actual "Absent" status records
       // Stale records are automatically cleaned up when schedules are assigned
-      const absent = todayAttendances.filter(att => att.status === "Absent").length;
+      const absent = filteredAttendances.filter(att => att.status === "Absent").length;
+
+      console.log('📊 Final metrics calculated:', {
+        totalEmployees,
+        present,
+        absent,
+        late,
+        scheduled
+      });
 
       setMetrics({
         totalEmployees,
@@ -76,7 +132,7 @@ export default function AdminMetrics() {
         scheduled
       });
     } catch (error) {
-      console.error("Error fetching admin metrics:", error);
+      console.error("❌ Error fetching admin metrics:", error);
     }
   };
 

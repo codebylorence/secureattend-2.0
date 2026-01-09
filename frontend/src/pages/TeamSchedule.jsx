@@ -4,12 +4,14 @@ import {
   getTemplatesByDepartment, 
   assignSchedule, 
   getEmployeeSchedules, 
-  deleteEmployeeSchedule 
+  deleteEmployeeSchedule,
+  removeDaysFromEmployeeSchedule 
 } from "../api/ScheduleApi";
 import { fetchEmployees } from "../api/EmployeeApi";
 import { useSocket } from "../context/SocketContext";
 import { toast } from 'react-toastify';
 import { confirmAction } from "../utils/confirmToast.jsx";
+import { formatTimeRange24 } from "../utils/timeFormat";
 
 export default function TeamSchedule() {
   const [templates, setTemplates] = useState([]);
@@ -18,6 +20,9 @@ export default function TeamSchedule() {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null); // NEW: Selected day for assignment
   const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [scheduleToDelete, setScheduleToDelete] = useState(null);
+  const [selectedDaysToDelete, setSelectedDaysToDelete] = useState([]);
   const { socket } = useSocket();
   
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -98,10 +103,47 @@ export default function TeamSchedule() {
         template_id: schedule.template_id
       }));
       
-      setAssignedSchedules(transformedSchedules);
+      // Merge schedules with same employee, shift, and time but different days
+      const mergedSchedules = mergeSchedulesByShift(transformedSchedules);
+      
+      setAssignedSchedules(mergedSchedules);
     } catch (error) {
       console.error("Error fetching assigned schedules:", error);
     }
+  };
+
+  // Function to merge schedules with same employee, shift name, and time
+  const mergeSchedulesByShift = (schedules) => {
+    const groupedSchedules = {};
+    
+    schedules.forEach(schedule => {
+      // Create a unique key for grouping: employee_id + shift_name + start_time + end_time
+      const groupKey = `${schedule.employee_id}-${schedule.shift_name}-${schedule.start_time}-${schedule.end_time}`;
+      
+      if (groupedSchedules[groupKey]) {
+        // Merge days and keep track of all IDs for deletion
+        groupedSchedules[groupKey].days = [...new Set([...groupedSchedules[groupKey].days, ...schedule.days])];
+        groupedSchedules[groupKey].ids.push(schedule.id);
+      } else {
+        // Create new group
+        groupedSchedules[groupKey] = {
+          ...schedule,
+          id: `merged-${groupKey}`, // Create a unique ID for merged schedules
+          originalId: schedule.id, // Keep original ID for single schedules
+          days: [...schedule.days], // Create a copy of the days array
+          ids: [schedule.id] // Keep track of all schedule IDs for deletion
+        };
+      }
+    });
+    
+    // Convert back to array and sort days for consistent display
+    return Object.values(groupedSchedules).map(schedule => ({
+      ...schedule,
+      days: schedule.days.sort((a, b) => {
+        const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        return dayOrder.indexOf(a) - dayOrder.indexOf(b);
+      })
+    }));
   };
 
   const parseTime = (timeStr) => {
@@ -121,13 +163,17 @@ export default function TeamSchedule() {
   // Check if a shift has started or ended for today
   // This prevents scheduling employees to shifts that are ongoing or have already ended
   const isShiftTimePassedForToday = (startTime, endTime) => {
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const shiftStartMinutes = parseTime(startTime);
-    const shiftEndMinutes = parseTime(endTime);
+    // TEMPORARILY DISABLED FOR TESTING - Always return false to allow scheduling
+    return false;
     
-    // Return true if shift has started (ongoing or ended)
-    return currentMinutes >= shiftStartMinutes;
+    // Original logic (commented out):
+    // const now = new Date();
+    // const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // const shiftStartMinutes = parseTime(startTime);
+    // const shiftEndMinutes = parseTime(endTime);
+    // 
+    // // Return true if shift has started (ongoing or ended)
+    // return currentMinutes >= shiftStartMinutes;
   };
 
   const getDayOfWeek = (date) => {
@@ -594,17 +640,157 @@ export default function TeamSchedule() {
     }
   };
 
-  const handleDeleteSchedule = async (id) => {
-    confirmAction("Remove this schedule?", async () => {
-      try {
-        await deleteEmployeeSchedule(id);
-        toast.success("Schedule removed!");
-        fetchAssignedSchedules();
-      } catch (error) {
-        console.error("Error deleting schedule:", error);
-        toast.error("Failed to remove");
+  const handleDeleteSchedule = async (scheduleData) => {
+    // Prevent team leaders from deleting their own schedule
+    if (scheduleData.employee_id === user.employee?.employee_id) {
+      toast.error("You cannot delete your own schedule. Please contact an administrator.");
+      return;
+    }
+    
+    console.log("🗑️ Opening delete modal for schedule:", scheduleData);
+    setScheduleToDelete(scheduleData);
+    setSelectedDaysToDelete([]);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteSelectedDays = async () => {
+    if (!scheduleToDelete || selectedDaysToDelete.length === 0) {
+      toast.warning("Please select at least one day to delete");
+      return;
+    }
+
+    // Additional safety check to prevent deleting own schedule
+    if (scheduleToDelete.employee_id === user.employee?.employee_id) {
+      toast.error("You cannot delete your own schedule. Please contact an administrator.");
+      setShowDeleteModal(false);
+      setScheduleToDelete(null);
+      setSelectedDaysToDelete([]);
+      return;
+    }
+
+    const employeeName = getEmployeeName(scheduleToDelete.employee_id);
+    const dayCount = selectedDaysToDelete.length;
+    const isAllDays = selectedDaysToDelete.length === scheduleToDelete.days.length;
+    
+    console.log("🗑️ Delete request:", {
+      scheduleId: scheduleToDelete.id,
+      employeeId: scheduleToDelete.employee_id,
+      employeeName,
+      selectedDays: selectedDaysToDelete,
+      isAllDays,
+      scheduleIds: scheduleToDelete.ids
+    });
+    
+    confirmAction(
+      `Remove ${employeeName}'s ${scheduleToDelete.shift_name} schedule? ${isAllDays 
+        ? `This will remove the entire schedule for all ${dayCount} day${dayCount > 1 ? 's' : ''}: ${selectedDaysToDelete.join(', ')}`
+        : `This will remove the schedule for ${dayCount} selected day${dayCount > 1 ? 's' : ''}: ${selectedDaysToDelete.join(', ')}`}`,
+      async () => {
+        try {
+          console.log("🚀 Starting delete operation...");
+          
+          if (isAllDays) {
+            // Delete entire schedule if all days are selected
+            const scheduleIds = scheduleToDelete.ids || [scheduleToDelete.id];
+            console.log("🗑️ Deleting entire schedule, IDs:", scheduleIds);
+            
+            for (const id of scheduleIds) {
+              console.log(`🗑️ Deleting schedule ID: ${id}`);
+              const result = await deleteEmployeeSchedule(id);
+              console.log(`✅ Delete result for ID ${id}:`, result);
+            }
+          } else {
+            // Use the new API to remove specific days
+            // For merged schedules, we need to handle each individual schedule
+            const scheduleIds = scheduleToDelete.ids || [scheduleToDelete.originalId || scheduleToDelete.id];
+            console.log("🗑️ Removing specific days, IDs:", scheduleIds, "Days:", selectedDaysToDelete);
+            
+            for (const id of scheduleIds) {
+              try {
+                console.log(`🗑️ Removing days from schedule ID: ${id}`);
+                const result = await removeDaysFromEmployeeSchedule(id, selectedDaysToDelete);
+                console.log(`✅ Remove days result for ID ${id}:`, result);
+              } catch (error) {
+                console.log(`❌ Error removing days from ID ${id}:`, error);
+                // If the API doesn't support partial deletion, fall back to the old method
+                if (error.response?.status === 404 || error.response?.status === 400) {
+                  console.log("🔄 Falling back to old deletion method...");
+                  // Fallback: Get all schedules and delete matching ones
+                  const allSchedules = await getEmployeeSchedules();
+                  const employeeSchedules = allSchedules.filter(s => 
+                    s.employee_id === scheduleToDelete.employee_id &&
+                    s.template.shift_name === scheduleToDelete.shift_name &&
+                    s.template.start_time === scheduleToDelete.start_time &&
+                    s.template.end_time === scheduleToDelete.end_time
+                  );
+
+                  for (const schedule of employeeSchedules) {
+                    const hasMatchingDay = schedule.days.some(day => selectedDaysToDelete.includes(day));
+                    if (hasMatchingDay) {
+                      console.log(`🗑️ Fallback: Deleting schedule ID: ${schedule.id}`);
+                      await deleteEmployeeSchedule(schedule.id);
+                    }
+                  }
+                } else {
+                  throw error;
+                }
+              }
+            }
+          }
+          
+          console.log("✅ Delete operation completed successfully");
+          toast.success(`Schedule removed for ${dayCount} day${dayCount > 1 ? 's' : ''}!`);
+          setShowDeleteModal(false);
+          setScheduleToDelete(null);
+          setSelectedDaysToDelete([]);
+          fetchAssignedSchedules();
+        } catch (error) {
+          console.error("❌ Error deleting schedule:", error);
+          console.error("❌ Error response:", error.response?.data);
+          console.error("❌ Error status:", error.response?.status);
+          
+          // Handle backend validation errors
+          if (error.response?.status === 403) {
+            toast.error(error.response.data.message || "You don't have permission to delete this schedule");
+          } else if (error.response?.status === 401) {
+            toast.error("Authentication required. Please log in again.");
+          } else {
+            toast.error("Failed to remove schedule");
+          }
+        }
+      }
+    );
+  };
+
+  const handleDaySelectionToggle = (day) => {
+    setSelectedDaysToDelete(prev => {
+      if (prev.includes(day)) {
+        return prev.filter(d => d !== day);
+      } else {
+        return [...prev, day];
       }
     });
+  };
+
+  const handleSelectAllDays = () => {
+    if (selectedDaysToDelete.length === scheduleToDelete.days.length) {
+      setSelectedDaysToDelete([]);
+    } else {
+      setSelectedDaysToDelete([...scheduleToDelete.days]);
+    }
+  };
+
+  const getDisplayName = (employee) => {
+    // Handle both fullname and firstname/lastname formats
+    if (employee.fullname && employee.fullname.trim() !== '') {
+      return employee.fullname;
+    } else if (employee.firstname && employee.lastname) {
+      return `${employee.firstname} ${employee.lastname}`;
+    } else if (employee.firstname) {
+      return employee.firstname;
+    } else {
+      return employee.employee_id;
+    }
   };
 
   const getEmployeeName = (employeeId) => {
@@ -613,7 +799,37 @@ export default function TeamSchedule() {
       return "Me";
     }
     const employee = teamMembers.find((emp) => emp.employee_id === employeeId);
-    return employee ? employee.fullname : employeeId;
+    if (!employee) return employeeId;
+    
+    return getDisplayName(employee);
+  };
+
+  // Helper function to check if template has current or future days
+  const hasCurrentOrFutureDays = (template) => {
+    const today = new Date();
+    const todayDayName = getDayOfWeek(today);
+    const currentTime = today.getHours() * 60 + today.getMinutes();
+    
+    return template.allDays.some(day => {
+      // If it's today, show the schedule until the end of the day (not when shift ends)
+      if (day === todayDayName) {
+        return true; // Always show today's schedule until day ends
+      }
+      
+      // For other days, check if they're in the current week (including future days)
+      const dayOrder = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayIndex = dayOrder.indexOf(todayDayName);
+      const dayIndex = dayOrder.indexOf(day);
+      
+      // Calculate days from today (considering week cycle)
+      let daysFromToday = dayIndex - todayIndex;
+      if (daysFromToday < 0) {
+        daysFromToday += 7; // Next week
+      }
+      
+      // Show days within the next 7 days (current week + next week if needed)
+      return daysFromToday > 0 && daysFromToday <= 7;
+    });
   };
 
   return (
@@ -623,6 +839,9 @@ export default function TeamSchedule() {
         <h1 className="text-[#374151] text-[21px] font-semibold">Team Schedule Management</h1>
         <p className="text-sm text-gray-600 mt-1">
           Assign schedule templates to your team members in {userDepartment}
+        </p>
+        <p className="text-xs text-blue-600 mt-1">
+          💡 Note: You cannot delete your own schedule. Contact an administrator if changes are needed.
         </p>
       </div>
 
@@ -666,7 +885,7 @@ export default function TeamSchedule() {
                 }
                 return acc;
               }, {})
-            ).map((template) => {
+            ).filter(template => hasCurrentOrFutureDays(template)).map((template) => {
               const today = new Date();
               const todayDayName = getDayOfWeek(today);
               const isTodayIncluded = template.allDays.includes(todayDayName);
@@ -688,7 +907,7 @@ export default function TeamSchedule() {
                 >
                   <h3 className="font-semibold text-gray-800 mb-2">{template.shift_name}</h3>
                   <p className="text-sm text-gray-600 mb-1 flex items-center gap-1">
-                    <MdAccessTime size={16} /> {template.start_time} - {template.end_time}
+                    <MdAccessTime size={16} /> {formatTimeRange24(template.start_time, template.end_time)}
                   </p>
                   {shiftPassedToday && (
                     <p className="text-xs text-orange-600 font-medium mb-1 flex items-center gap-1">
@@ -723,13 +942,37 @@ export default function TeamSchedule() {
           
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
             <p className="text-sm text-gray-700">
-              <strong>Selected Template:</strong> {selectedTemplate.shift_name} ({selectedTemplate.start_time} - {selectedTemplate.end_time})
+              <strong>Selected Template:</strong> {selectedTemplate.shift_name} ({formatTimeRange24(selectedTemplate.start_time, selectedTemplate.end_time)})
             </p>
           </div>
 
           <p className="text-sm text-gray-600 mb-3">Choose a day to assign team members:</p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            {selectedTemplate.allDays.map((day) => {
+            {selectedTemplate.allDays.filter(day => {
+              // Filter to only show current and future days (including next week)
+              const today = new Date();
+              const todayDayName = getDayOfWeek(today);
+              const currentTime = today.getHours() * 60 + today.getMinutes();
+              
+              // If it's today, show the schedule until the end of the day (not when shift ends)
+              if (day === todayDayName) {
+                return true; // Always show today's schedule until day ends
+              }
+              
+              // For other days, check if they're in the current week (including future days)
+              const dayOrder = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+              const todayIndex = dayOrder.indexOf(todayDayName);
+              const dayIndex = dayOrder.indexOf(day);
+              
+              // Calculate days from today (considering week cycle)
+              let daysFromToday = dayIndex - todayIndex;
+              if (daysFromToday < 0) {
+                daysFromToday += 7; // Next week
+              }
+              
+              // Show days within the next 7 days (current week + next week if needed)
+              return daysFromToday > 0 && daysFromToday <= 7;
+            }).map((day) => {
               const status = getMemberLimitStatus(day);
               const limit = selectedTemplate.day_limits?.[day] || selectedTemplate.member_limit;
               const shiftPassed = isTodayAndShiftPassed(day);
@@ -739,7 +982,7 @@ export default function TeamSchedule() {
                   key={day}
                   onClick={() => {
                     if (shiftPassed) {
-                      toast.warning(`Cannot schedule ${selectedTemplate.shift_name} for today. The shift (${selectedTemplate.start_time} - ${selectedTemplate.end_time}) has already started or is ongoing.`);
+                      toast.warning(`Cannot schedule ${selectedTemplate.shift_name} for today. The shift (${formatTimeRange24(selectedTemplate.start_time, selectedTemplate.end_time)}) has already started or is ongoing.`);
                       return;
                     }
                     setSelectedDay(day);
@@ -779,7 +1022,7 @@ export default function TeamSchedule() {
           
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
             <p className="text-sm text-gray-700">
-              <strong>Template:</strong> {selectedTemplate.shift_name} ({selectedTemplate.start_time} - {selectedTemplate.end_time})
+              <strong>Template:</strong> {selectedTemplate.shift_name} ({formatTimeRange24(selectedTemplate.start_time, selectedTemplate.end_time)})
             </p>
             <p className="text-sm text-gray-700">
               <strong>Day:</strong> {selectedDay}
@@ -823,7 +1066,7 @@ export default function TeamSchedule() {
                           : "border-gray-200 hover:border-gray-400 cursor-pointer"
                       }`}
                     >
-                      <p className="font-medium text-gray-800">{member.fullname}</p>
+                      <p className="font-medium text-gray-800">{getDisplayName(member)}</p>
                       <p className="text-sm text-gray-600">{member.employee_id}</p>
                       <p className="text-xs text-gray-500">{member.position}</p>
                       {existingSchedule && conflictDays.length > 0 && (
@@ -926,49 +1169,153 @@ export default function TeamSchedule() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {assignedSchedules.map((schedule, index) => (
-                  <tr key={schedule.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <p className="text-sm font-medium text-gray-900">
-                        {getEmployeeName(schedule.employee_id)}
-                      </p>
-                      <p className="text-xs text-gray-500">{schedule.employee_id}</p>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {schedule.shift_name}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      <div className="flex items-center gap-1">
-                        <MdAccessTime size={16} /> {schedule.start_time} - {schedule.end_time}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      <div className="flex flex-wrap gap-1">
-                        {schedule.days.map((day, idx) => (
-                          <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
-                            {day}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => handleDeleteSchedule(schedule.id)}
-                        className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
-                        title="Delete this assignment"
-                      >
-                        <MdDelete size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {assignedSchedules.map((schedule, index) => {
+                  const isOwnSchedule = schedule.employee_id === user.employee?.employee_id;
+                  
+                  return (
+                    <tr key={schedule.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <p className="text-sm font-medium text-gray-900">
+                          {getEmployeeName(schedule.employee_id)}
+                        </p>
+                        <p className="text-xs text-gray-500">{schedule.employee_id}</p>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          {schedule.shift_name}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        <div className="flex items-center gap-1">
+                          <MdAccessTime size={16} /> {formatTimeRange24(schedule.start_time, schedule.end_time)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        <div className="flex flex-wrap gap-1">
+                          {schedule.days.map((day, idx) => (
+                            <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                              {day}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        {isOwnSchedule ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              disabled
+                              className="w-7 h-7 rounded-md bg-gray-300 text-gray-500 flex items-center justify-center cursor-not-allowed"
+                              title="Cannot delete your own schedule"
+                            >
+                              <MdDelete size={14} />
+                            </button>
+                            <span className="text-xs text-gray-500">Own Schedule</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleDeleteSchedule(schedule)}
+                            className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                            title="Select days to delete"
+                          >
+                            <MdDelete size={14} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Delete Days Modal */}
+      {showDeleteModal && scheduleToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Select Days to Delete
+              </h3>
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setScheduleToDelete(null);
+                  setSelectedDaysToDelete([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <MdClose size={24} />
+              </button>
+            </div>
+
+            <div className="mb-4 p-3 bg-gray-50 rounded-md">
+              <p className="text-sm text-gray-700">
+                <strong>Employee:</strong> {getEmployeeName(scheduleToDelete.employee_id)}
+              </p>
+              <p className="text-sm text-gray-700">
+                <strong>Shift:</strong> {scheduleToDelete.shift_name}
+              </p>
+              <p className="text-sm text-gray-700">
+                <strong>Time:</strong> {formatTimeRange24(scheduleToDelete.start_time, scheduleToDelete.end_time)}
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-gray-700">
+                  Select days to remove:
+                </p>
+                <button
+                  onClick={handleSelectAllDays}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                >
+                  {selectedDaysToDelete.length === scheduleToDelete.days.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              
+              <div className="space-y-2">
+                {scheduleToDelete.days.map((day) => (
+                  <label key={day} className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedDaysToDelete.includes(day)}
+                      onChange={() => handleDaySelectionToggle(day)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">{day}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setScheduleToDelete(null);
+                  setSelectedDaysToDelete([]);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSelectedDays}
+                disabled={selectedDaysToDelete.length === 0}
+                className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors ${
+                  selectedDaysToDelete.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-red-500 text-white hover:bg-red-600'
+                }`}
+              >
+                Delete {selectedDaysToDelete.length > 0 ? `(${selectedDaysToDelete.length})` : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,13 +6,15 @@ import {
   editEmployee,
   getEmployeeById,
   uploadPhoto,
-  getFingerprintStatus
+  getFingerprintStatus,
+  testUserCreation
 } from "../controllers/employeeController.js";
 
 const router = express.Router();
 
 router.get("/", getEmployees);
 router.get("/fingerprint-status", getFingerprintStatus);
+router.get("/test-user-creation", testUserCreation);
 router.post("/", addEmployee);
 router.put("/:id", editEmployee);
 router.put("/:id/photo", uploadPhoto);

@@ -10,7 +10,30 @@ import {
 export const getEmployees = async (req, res) => {
   try {
     const employees = await getAllEmployees();
-    res.status(200).json(employees);
+    
+    // Ensure fullname is populated for all employees (for biometric app compatibility)
+    const processedEmployees = employees.map(employee => {
+      const employeeData = employee.toJSON ? employee.toJSON() : employee;
+      
+      // Ensure fullname is populated
+      let fullname = employeeData.fullname;
+      if (!fullname || fullname.trim() === '' || fullname === 'null') {
+        if (employeeData.firstname && employeeData.lastname) {
+          fullname = `${employeeData.firstname} ${employeeData.lastname}`;
+        } else if (employeeData.firstname) {
+          fullname = employeeData.firstname;
+        } else {
+          fullname = `Employee ${employeeData.employee_id}`;
+        }
+      }
+      
+      return {
+        ...employeeData,
+        fullname: fullname
+      };
+    });
+    
+    res.status(200).json(processedEmployees);
   } catch (error) {
     console.error("Error fetching employees:", error);
     res.status(500).json({ message: "Error fetching employees" });
@@ -20,10 +43,50 @@ export const getEmployees = async (req, res) => {
 // POST /api/employees
 export const addEmployee = async (req, res) => {
   try {
+    console.log("📥 Received employee creation request:");
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    console.log("Username present:", !!req.body.username);
+    console.log("Password present:", !!req.body.password);
+    
     const result = await createEmployee(req.body);
+    
+    // Send notification to admins and supervisors about new employee
+    try {
+      const { notifyAdmins, notifySupervisors } = await import("../services/notificationService.js");
+      
+      const message = `New employee ${result.employee.first_name} ${result.employee.last_name} (${result.employee.employee_id}) has been added to ${result.employee.department}`;
+      
+      // Notify admins
+      await notifyAdmins(
+        "New Employee Added",
+        message,
+        "general",
+        result.employee.id,
+        "system"
+      );
+      
+      // Notify supervisors in the same department
+      if (result.employee.department) {
+        await notifySupervisors(
+          [result.employee.department],
+          "New Employee Added",
+          message,
+          "general",
+          result.employee.id,
+          "system"
+        );
+      }
+      
+      console.log("✅ Employee creation notifications sent");
+    } catch (notifyError) {
+      console.error("❌ Error sending employee creation notifications:", notifyError);
+      // Don't fail the creation if notifications fail
+    }
+    
+    console.log("✅ Employee creation successful");
     return res.status(201).json(result);
   } catch (error) {
-    console.error("Error creating employee:", error);
+    console.error("❌ Error creating employee:", error);
     return res.status(500).json({ message: "Error creating employee", error: error.message });
   }
 };
@@ -34,12 +97,50 @@ export const deleteEmployee = async (req, res) => {
     const { id } = req.params;
     console.log(`🗑️ Attempting to delete employee with ID: ${id}`);
     
+    // Get employee details before deletion for notifications
+    const employeeToDelete = await getEmployeeByEmployeeId(id);
+    
     // Use the service function which handles all the logic
     const deleted = await removeEmployee(id);
 
     if (!deleted) {
       console.log(`❌ Employee not found with ID: ${id}`);
       return res.status(404).json({ message: "Employee not found" });
+    }
+
+    // Send notification to admins and supervisors about employee deletion
+    if (employeeToDelete) {
+      try {
+        const { notifyAdmins, notifySupervisors } = await import("../services/notificationService.js");
+        
+        const message = `Employee ${employeeToDelete.first_name} ${employeeToDelete.last_name} (${employeeToDelete.employee_id}) has been removed from ${employeeToDelete.department}`;
+        
+        // Notify admins
+        await notifyAdmins(
+          "Employee Removed",
+          message,
+          "general",
+          null,
+          "admin"
+        );
+        
+        // Notify supervisors in the same department
+        if (employeeToDelete.department) {
+          await notifySupervisors(
+            [employeeToDelete.department],
+            "Employee Removed",
+            message,
+            "general",
+            null,
+            "admin"
+          );
+        }
+        
+        console.log("✅ Employee deletion notifications sent");
+      } catch (notifyError) {
+        console.error("❌ Error sending employee deletion notifications:", notifyError);
+        // Don't fail the deletion if notifications fail
+      }
     }
 
     console.log(`✅ Employee deleted successfully with ID: ${id}`);
@@ -168,5 +269,37 @@ export const getFingerprintStatus = async (req, res) => {
     console.error("Error details:", error.message);
     // Return empty object if database is not accessible
     res.status(200).json({});
+  }
+};
+
+// Test endpoint to verify user creation
+export const testUserCreation = async (req, res) => {
+  try {
+    console.log("🧪 Testing user creation...");
+    
+    // Import models
+    const User = (await import("../models/user.js")).default;
+    const Employee = (await import("../models/employee.js")).default;
+    
+    // Check if tables exist
+    const users = await User.findAll({ limit: 5 });
+    const employees = await Employee.findAll({ limit: 5 });
+    
+    console.log(`📊 Found ${users.length} users and ${employees.length} employees`);
+    
+    res.status(200).json({
+      message: "Database connection test successful",
+      userCount: users.length,
+      employeeCount: employees.length,
+      users: users.map(u => ({ id: u.id, username: u.username, role: u.role, employeeId: u.employeeId })),
+      employees: employees.map(e => ({ id: e.id, employee_id: e.employee_id, firstname: e.firstname, lastname: e.lastname }))
+    });
+  } catch (error) {
+    console.error("❌ Test failed:", error);
+    res.status(500).json({ 
+      message: "Test failed", 
+      error: error.message,
+      stack: error.stack 
+    });
   }
 };

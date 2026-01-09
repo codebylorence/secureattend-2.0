@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa6";
 import { getAttendances } from "../api/AttendanceApi";
-import { fetchEmployees } from "../api/EmployeeApi";
 
 export default function AttendRec() {
   const [attendances, setAttendances] = useState([]);
-  const [employees, setEmployees] = useState({});
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -23,18 +21,8 @@ export default function AttendRec() {
 
   const fetchData = async () => {
     try {
-      const [attendanceData, employeeData] = await Promise.all([
-        getAttendances(),
-        fetchEmployees()
-      ]);
-      
-      const employeeMap = {};
-      employeeData.forEach(emp => {
-        employeeMap[emp.employee_id] = emp;
-      });
-      
+      const attendanceData = await getAttendances();
       setAttendances(attendanceData);
-      setEmployees(employeeMap);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -50,7 +38,7 @@ export default function AttendRec() {
   const formatTime = (dateString) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
 
@@ -96,15 +84,13 @@ export default function AttendRec() {
                     const startIndex = (currentPage - 1) * itemsPerPage;
                     const endIndex = startIndex + itemsPerPage;
                     const paginatedAttendances = attendances.slice(startIndex, endIndex);
-                    return paginatedAttendances.map((attendance) => {
-                    const employee = employees[attendance.employee_id] || {};
-                    return (
+                    return paginatedAttendances.map((attendance) => (
                       <tr key={attendance.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(attendance.date)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{employee.fullname || attendance.employee_id}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{attendance.employee_name || employee.fullname || attendance.employee_id}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_in)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_out)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{employee.department || "-"}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{attendance.department || "-"}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {(() => {
                             const statusDisplay = {
@@ -123,8 +109,7 @@ export default function AttendRec() {
                           })()}
                       </td>
                     </tr>
-                    );
-                  })
+                    ));
                 })()
               )}
               </tbody>

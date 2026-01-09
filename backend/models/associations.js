@@ -5,6 +5,17 @@ import RegistrationRequest from "./registrationRequest.js";
 import User from "./user.js";
 import Attendance from "./attendance.js";
 
+// User-Employee associations
+User.belongsTo(Employee, { 
+  foreignKey: "employeeId", 
+  as: "employee" 
+});
+
+Employee.hasOne(User, { 
+  foreignKey: "employeeId", 
+  as: "user" 
+});
+
 // EmployeeSchedule associations
 EmployeeSchedule.belongsTo(ScheduleTemplate, {
   foreignKey: "template_id",
@@ -49,4 +60,4 @@ Employee.hasMany(Attendance, {
   as: "attendances",
 });
 
-export { Employee, ScheduleTemplate, EmployeeSchedule, RegistrationRequest, Attendance };
+export { Employee, ScheduleTemplate, EmployeeSchedule, RegistrationRequest, Attendance, User };

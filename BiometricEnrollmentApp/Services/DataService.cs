@@ -97,6 +97,26 @@ namespace BiometricEnrollmentApp.Services
             ";
             cmd.ExecuteNonQuery();
 
+            cmd.CommandText = @"
+                CREATE TABLE IF NOT EXISTS SyncQueue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id TEXT NOT NULL,
+                    attendance_session_id INTEGER NOT NULL,
+                    sync_type TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    retry_count INTEGER DEFAULT 0,
+                    last_attempt TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    status TEXT DEFAULT 'pending'
+                );
+            ";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = @"
+                CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON SyncQueue(status);
+            ";
+            cmd.ExecuteNonQuery();
+
             LogHelper.Write($"📂 Database initialized at {_dbPath}");
         }
 
@@ -266,7 +286,8 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                var ts = (recordedAt ?? DateTime.UtcNow).ToString("yyyy-MM-dd HH:mm:ss");
+                var philippinesTime = recordedAt ?? TimezoneHelper.Now;
+                var ts = TimezoneHelper.FormatForDatabase(philippinesTime);
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
                 conn.Open();
 
@@ -284,7 +305,7 @@ namespace BiometricEnrollmentApp.Services
 
                 cmd.ExecuteNonQuery();
 
-                LogHelper.Write($"✅ Attendance recorded: {employeeId} ({method}) at {ts}");
+                LogHelper.Write($"✅ Attendance recorded: {employeeId} ({method}) at {ts} (Philippines time)");
             }
             catch (Exception ex)
             {
@@ -298,8 +319,9 @@ namespace BiometricEnrollmentApp.Services
             using var conn = new SqliteConnection($"Data Source={_dbPath}");
             conn.Open();
 
-            var start = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, 0, 0, 0);
-            var end = start.AddDays(1).AddSeconds(-1);
+            var today = TimezoneHelper.Today;
+            var start = today;
+            var end = today.AddDays(1).AddSeconds(-1);
 
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
@@ -335,7 +357,9 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                var date = clockInLocal.ToString("yyyy-MM-dd");
+                // Determine the correct date for the attendance session
+                // For overnight shifts, use the shift start date, not the current date
+                var attendanceDate = DetermineAttendanceDate(employeeId, clockInLocal);
                 var ts = clockInLocal.ToString("yyyy-MM-dd HH:mm:ss");
 
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
@@ -347,7 +371,7 @@ namespace BiometricEnrollmentApp.Services
                     VALUES ($id, $date, $clock_in, $status);
                 ";
                 cmd.Parameters.AddWithValue("$id", employeeId);
-                cmd.Parameters.AddWithValue("$date", date);
+                cmd.Parameters.AddWithValue("$date", attendanceDate);
                 cmd.Parameters.AddWithValue("$clock_in", ts);
                 cmd.Parameters.AddWithValue("$status", status ?? "IN");
 
@@ -365,13 +389,80 @@ namespace BiometricEnrollmentApp.Services
                     else if (Int64.TryParse(obj.ToString(), out var parsed)) id = parsed;
                 }
 
-                LogHelper.Write($"🕘 Clock-in saved for {employeeId} (session {id}) at {ts}");
+                LogHelper.Write($"🕘 Clock-in saved for {employeeId} (session {id}) at {ts} with date {attendanceDate}");
                 return id;
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 SaveClockIn failed for {employeeId}: {ex.Message}");
                 return -1;
+            }
+        }
+
+        /// <summary>
+        /// Determine the correct date for attendance session
+        /// For overnight shifts, use the shift start date, not the current date
+        /// </summary>
+        private string DetermineAttendanceDate(string employeeId, DateTime clockInTime)
+        {
+            try
+            {
+                // Check if employee is scheduled today (this now includes overnight shift logic)
+                var scheduleCheck = IsEmployeeScheduledToday(employeeId);
+                
+                if (!scheduleCheck.IsScheduled)
+                {
+                    // No schedule found, use current date
+                    LogHelper.Write($"📅 No schedule found for {employeeId}, using current date: {clockInTime:yyyy-MM-dd}");
+                    return clockInTime.ToString("yyyy-MM-dd");
+                }
+                
+                // Check if this is an overnight shift
+                if (IsOvernightShift(scheduleCheck.StartTime, scheduleCheck.EndTime))
+                {
+                    // For overnight shifts, if we're clocking in after midnight (early morning hours)
+                    // and the shift started yesterday, use yesterday's date
+                    if (clockInTime.Hour >= 0 && clockInTime.Hour < 12) // Early morning hours
+                    {
+                        var yesterday = clockInTime.AddDays(-1);
+                        var yesterdayDayOfWeek = yesterday.DayOfWeek.ToString();
+                        
+                        // Check if the employee was scheduled yesterday
+                        using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                        conn.Open();
+                        
+                        using var cmd = conn.CreateCommand();
+                        cmd.CommandText = @"
+                            SELECT COUNT(1)
+                            FROM EmployeeSchedules
+                            WHERE employee_id = $emp_id AND days LIKE '%' || $yesterday || '%'
+                        ";
+                        cmd.Parameters.AddWithValue("$emp_id", employeeId);
+                        cmd.Parameters.AddWithValue("$yesterday", yesterdayDayOfWeek);
+                        
+                        var count = Convert.ToInt32(cmd.ExecuteScalar());
+                        
+                        if (count > 0)
+                        {
+                            // Employee was scheduled yesterday and this is an overnight shift
+                            // Use yesterday's date for the attendance session
+                            var attendanceDate = yesterday.ToString("yyyy-MM-dd");
+                            LogHelper.Write($"🌙 Overnight shift detected for {employeeId}, using shift start date: {attendanceDate}");
+                            return attendanceDate;
+                        }
+                    }
+                }
+                
+                // Default: use current date
+                var currentDate = clockInTime.ToString("yyyy-MM-dd");
+                LogHelper.Write($"📅 Using current date for {employeeId}: {currentDate}");
+                return currentDate;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error determining attendance date for {employeeId}: {ex.Message}");
+                // Fallback to current date
+                return clockInTime.ToString("yyyy-MM-dd");
             }
         }
 
@@ -441,6 +532,7 @@ namespace BiometricEnrollmentApp.Services
             using var conn = new SqliteConnection($"Data Source={_dbPath}");
             conn.Open();
 
+            // First, check for open sessions on the current date
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
                 SELECT id FROM AttendanceSessions
@@ -451,18 +543,58 @@ namespace BiometricEnrollmentApp.Services
             cmd.Parameters.AddWithValue("$date", date);
 
             var obj = cmd.ExecuteScalar();
-            if (obj == null || obj == DBNull.Value) return -1;
+            if (obj != null && obj != DBNull.Value)
+            {
+                if (obj is long l) return l;
+                if (obj is int i) return i;
+                if (Int64.TryParse(obj.ToString(), out var parsed)) return parsed;
+            }
 
-            if (obj is long l) return l;
-            if (obj is int i) return i;
-            if (Int64.TryParse(obj.ToString(), out var parsed)) return parsed;
+            // If no open session found for today, check yesterday for overnight shifts
+            // This handles cases where an employee clocked in yesterday for an overnight shift
+            // and is now trying to clock out after midnight
+            if (localDate.Hour >= 0 && localDate.Hour < 12) // Early morning hours
+            {
+                var yesterday = localDate.AddDays(-1).ToString("yyyy-MM-dd");
+                LogHelper.Write($"🌙 Checking yesterday ({yesterday}) for open overnight shift sessions for {employeeId}");
+                
+                cmd.CommandText = @"
+                    SELECT id FROM AttendanceSessions
+                    WHERE employee_id = $id AND date = $yesterday AND clock_out IS NULL
+                    ORDER BY id DESC LIMIT 1;
+                ";
+                cmd.Parameters.Clear();
+                cmd.Parameters.AddWithValue("$id", employeeId);
+                cmd.Parameters.AddWithValue("$yesterday", yesterday);
+
+                var obj2 = cmd.ExecuteScalar();
+                if (obj2 != null && obj2 != DBNull.Value)
+                {
+                    if (obj2 is long l2) 
+                    {
+                        LogHelper.Write($"🌙 Found open overnight session {l2} from {yesterday} for {employeeId}");
+                        return l2;
+                    }
+                    if (obj2 is int i2) 
+                    {
+                        LogHelper.Write($"🌙 Found open overnight session {i2} from {yesterday} for {employeeId}");
+                        return i2;
+                    }
+                    if (Int64.TryParse(obj2.ToString(), out var parsed2)) 
+                    {
+                        LogHelper.Write($"🌙 Found open overnight session {parsed2} from {yesterday} for {employeeId}");
+                        return parsed2;
+                    }
+                }
+            }
+
             return -1;
         }
 
         public List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> GetTodaySessions()
         {
             var list = new List<(long, string, string, string, string, double, string)>();
-            var now = DateTime.Now;
+            var now = TimezoneHelper.Now;
             var date = now.ToString("yyyy-MM-dd");
 
             using var conn = new SqliteConnection($"Data Source={_dbPath}");
@@ -526,7 +658,8 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                var cutoff = DateTime.UtcNow.AddDays(-retentionDays).ToString("yyyy-MM-dd HH:mm:ss");
+                var cutoffTime = TimezoneHelper.Now.AddDays(-retentionDays);
+                var cutoff = TimezoneHelper.FormatForDatabase(cutoffTime);
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
                 conn.Open();
 
@@ -535,7 +668,7 @@ namespace BiometricEnrollmentApp.Services
                 cmd.Parameters.AddWithValue("$cutoff", cutoff);
 
                 int rows = cmd.ExecuteNonQuery();
-                LogHelper.Write($"🗑️ Deleted {rows} attendance records older than {retentionDays} days.");
+                LogHelper.Write($"🗑️ Deleted {rows} attendance records older than {retentionDays} days (Philippines time).");
                 return rows;
             }
             catch (Exception ex)
@@ -608,7 +741,7 @@ namespace BiometricEnrollmentApp.Services
             var result = new List<(string, string, string, string, string)>();
             try
             {
-                var today = DateTime.Now.DayOfWeek.ToString();
+                var today = TimezoneHelper.Now.DayOfWeek.ToString();
                 LogHelper.Write($"📅 Getting schedules for {today}");
                 
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
@@ -654,11 +787,14 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                var today = DateTime.Now.DayOfWeek.ToString();
+                var now = TimezoneHelper.Now;
+                var today = now.DayOfWeek.ToString();
+                var yesterday = now.AddDays(-1).DayOfWeek.ToString();
                 
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
                 conn.Open();
 
+                // First, check for schedules on the current day
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = @"
                     SELECT shift_name, start_time, end_time
@@ -672,7 +808,49 @@ namespace BiometricEnrollmentApp.Services
                 using var reader = cmd.ExecuteReader();
                 if (reader.Read())
                 {
-                    return (true, reader.GetString(0), reader.GetString(1), reader.GetString(2));
+                    var shiftName = reader.GetString(0);
+                    var startTime = reader.GetString(1);
+                    var endTime = reader.GetString(2);
+                    LogHelper.Write($"📅 Found schedule for {employeeId} on {today}: {shiftName} ({startTime} - {endTime})");
+                    return (true, shiftName, startTime, endTime);
+                }
+                reader.Close();
+
+                // If no schedule found for today, check yesterday for overnight shifts
+                // This handles cases where it's past midnight and the shift started yesterday
+                if (now.Hour >= 0 && now.Hour < 12) // Check overnight shifts only in early hours (00:00-11:59)
+                {
+                    LogHelper.Write($"🌙 Checking yesterday ({yesterday}) for overnight shifts for {employeeId}");
+                    
+                    cmd.CommandText = @"
+                        SELECT shift_name, start_time, end_time
+                        FROM EmployeeSchedules
+                        WHERE employee_id = $emp_id AND days LIKE '%' || $yesterday || '%'
+                        LIMIT 1
+                    ";
+                    cmd.Parameters.Clear();
+                    cmd.Parameters.AddWithValue("$emp_id", employeeId);
+                    cmd.Parameters.AddWithValue("$yesterday", yesterday);
+
+                    using var reader2 = cmd.ExecuteReader();
+                    if (reader2.Read())
+                    {
+                        var shiftName = reader2.GetString(0);
+                        var startTime = reader2.GetString(1);
+                        var endTime = reader2.GetString(2);
+                        
+                        // Check if this is actually an overnight shift
+                        if (IsOvernightShift(startTime, endTime))
+                        {
+                            // Verify that the current time is within the shift window
+                            var currentTime = now.ToString("HH:mm");
+                            if (IsCurrentTimeWithinOvernightShift(startTime, endTime, currentTime))
+                            {
+                                LogHelper.Write($"🌙 Found overnight shift for {employeeId} from {yesterday}: {shiftName} ({startTime} - {endTime})");
+                                return (true, shiftName, startTime, endTime);
+                            }
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -686,7 +864,7 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                var now = DateTime.Now;
+                var now = TimezoneHelper.Now;
                 
                 // Parse shift start time
                 var startParts = shiftStartTime.Split(':');
@@ -712,23 +890,28 @@ namespace BiometricEnrollmentApp.Services
                     shiftEnd = shiftEnd.AddDays(1);
                 }
                 
-                // Allow clock-in 30 minutes before shift start (early arrival grace period)
-                var earlyClockInWindow = shiftStart.AddMinutes(-30);
+                // Get grace periods from settings
+                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
+                int clockInGracePeriod = settingsService.GetClockInGracePeriodMinutes();
+                int clockOutGracePeriod = settingsService.GetClockOutGracePeriodMinutes();
                 
-                // Check if current time is too early (more than 30 minutes before shift)
+                // Allow clock-in X minutes before shift start (early arrival grace period)
+                var earlyClockInWindow = shiftStart.AddMinutes(-clockInGracePeriod);
+                
+                // Check if current time is too early (more than grace period minutes before shift)
                 if (now < earlyClockInWindow)
                 {
                     var minutesUntilWindow = (earlyClockInWindow - now).TotalMinutes;
-                    return (false, $"Too early to clock in. You can clock in starting {earlyClockInWindow:HH:mm} (30 minutes before shift). Please wait {minutesUntilWindow:F0} more minutes.");
+                    return (false, $"Too early. Clock in starts at {earlyClockInWindow:HH:mm}. Wait {minutesUntilWindow:F0} min.");
                 }
                 
-                // Allow clock-in up to 30 minutes after shift end (late clock-in grace period)
-                var lateClockInWindow = shiftEnd.AddMinutes(30);
+                // Allow clock-in up to X minutes after shift end (late clock-in grace period)
+                var lateClockInWindow = shiftEnd.AddMinutes(clockOutGracePeriod);
                 
-                // Check if current time is too late (more than 30 minutes after shift end)
+                // Check if current time is too late (more than grace period minutes after shift end)
                 if (now > lateClockInWindow)
                 {
-                    return (false, $"Too late to clock in. Shift ended at {shiftEndTime} with 30-minute grace period until {lateClockInWindow:HH:mm}.");
+                    return (false, $"Too late to clock in. Shift ended at {shiftEndTime} with {clockOutGracePeriod}-minute grace period until {lateClockInWindow:HH:mm}.");
                 }
                 
                 return (true, "");
@@ -753,20 +936,38 @@ namespace BiometricEnrollmentApp.Services
                 
                 var shiftStart = new DateTime(clockInTime.Year, clockInTime.Month, clockInTime.Day, shiftHour, shiftMinute, 0);
                 
-                // Calculate minutes late
-                var minutesLate = (clockInTime - shiftStart).TotalMinutes;
+                // Calculate minutes difference (positive = late, negative = early)
+                var minutesDifference = (clockInTime - shiftStart).TotalMinutes;
                 
-                // Get late threshold from settings
+                // Get grace period from settings
                 var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
-                int lateThreshold = settingsService.GetLateThresholdMinutes();
+                int gracePeriod = settingsService.GetClockInGracePeriodMinutes();
                 
-                // If more than threshold minutes late, mark as Late
-                if (minutesLate > lateThreshold)
+                LogHelper.Write($"📊 Clock-in analysis: {minutesDifference:F1} minutes from shift start (Grace period: ±{gracePeriod} min)");
+                
+                // If within grace period (before or after shift start), mark as Present
+                if (Math.Abs(minutesDifference) <= gracePeriod)
                 {
-                    LogHelper.Write($"⏰ Employee is {minutesLate:F0} minutes late (threshold: {lateThreshold} min)");
+                    if (minutesDifference <= 0)
+                    {
+                        LogHelper.Write($"✅ Early clock-in within grace period ({minutesDifference:F1} min) - Status: Present");
+                    }
+                    else
+                    {
+                        LogHelper.Write($"✅ Late clock-in within grace period ({minutesDifference:F1} min) - Status: Present");
+                    }
+                    return "Present";
+                }
+                
+                // If beyond grace period and late, mark as Late
+                if (minutesDifference > gracePeriod)
+                {
+                    LogHelper.Write($"⏰ Beyond grace period ({minutesDifference:F1} > {gracePeriod} min) - Status: Late");
                     return "Late";
                 }
                 
+                // If too early (before grace period), still mark as Present but log it
+                LogHelper.Write($"⏰ Very early clock-in ({minutesDifference:F1} < -{gracePeriod} min) - Status: Present");
                 return "Present";
             }
             catch (Exception ex)
@@ -788,13 +989,13 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                var now = DateTime.Now;
+                var now = TimezoneHelper.Now;
                 var today = now.ToString("yyyy-MM-dd");
                 var dayOfWeek = now.DayOfWeek.ToString();
                 var currentTime = now.ToString("HH:mm");
                 
                 LogHelper.Write($"🔍 ========== ABSENT MARKING CHECK ==========");
-                LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} ({dayOfWeek})");
+                LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} ({dayOfWeek}) - Philippines time");
                 
                 // Get all schedules for today
                 var schedulesToday = GetTodaysSchedules();
@@ -828,6 +1029,10 @@ namespace BiometricEnrollmentApp.Services
                         continue;
                     }
                     
+                    // Detect if this is an overnight shift
+                    bool isOvernightShift = IsOvernightShift(schedule.StartTime, schedule.EndTime);
+                    LogHelper.Write($"  🌙 {schedule.EmployeeId} - Overnight shift: {isOvernightShift}");
+                    
                     // FIRST: Check if shift has started (must start before we can mark absent)
                     if (!HasShiftStarted(schedule.StartTime))
                     {
@@ -835,10 +1040,13 @@ namespace BiometricEnrollmentApp.Services
                         continue;
                     }
                     
-                    // SECOND: Check if shift has ended with grace period (30 minutes after shift end)
-                    if (!HasShiftEndedWithGracePeriod(schedule.EndTime, 30))
+                    // SECOND: Check if shift has ended with grace period (configurable minutes after shift end)
+                    var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
+                    int clockOutGracePeriod = settingsService.GetClockOutGracePeriodMinutes();
+                    
+                    if (!HasShiftEndedWithGracePeriod(schedule.EndTime, clockOutGracePeriod))
                     {
-                        LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet or within grace period ({schedule.EndTime})");
+                        LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet or within grace period ({schedule.EndTime} + {clockOutGracePeriod} min)");
                         continue;
                     }
                     
@@ -851,13 +1059,14 @@ namespace BiometricEnrollmentApp.Services
                             (s.Status == "Present" || s.Status == "Late" || s.Status == "IN"))
                         {
                             hasAttendance = true;
+                            LogHelper.Write($"  ✓ {schedule.EmployeeId} - Found attendance record: {s.Status} at {s.ClockIn}");
                             break;
                         }
                     }
                     
                     if (hasAttendance)
                     {
-                        LogHelper.Write($"  ✓ {schedule.EmployeeId} - Has attendance");
+                        LogHelper.Write($"  ✓ {schedule.EmployeeId} - Has attendance, not marking absent");
                         continue;
                     }
                     
@@ -878,27 +1087,33 @@ namespace BiometricEnrollmentApp.Services
                     
                     if (!exists)
                     {
-                        // Create absent record with empty string instead of NULL for clock_in
+                        // Create absent record with NULL values for clock_in and clock_out
                         using var insertCmd = conn.CreateCommand();
                         insertCmd.CommandText = @"
                             INSERT INTO AttendanceSessions (employee_id, date, clock_in, clock_out, total_hours, status)
-                            VALUES ($id, $date, '', '', 0, 'Absent')
+                            VALUES ($id, $date, NULL, NULL, 0, 'Absent')
                         ";
                         insertCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
                         insertCmd.Parameters.AddWithValue("$date", today);
                         insertCmd.ExecuteNonQuery();
                         
                         markedAbsent++;
-                        LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent (shift started, ended + grace period passed, no clock-in)");
+                        LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent (shift: {schedule.StartTime}-{schedule.EndTime}, overnight: {isOvernightShift})");
+                    }
+                    else
+                    {
+                        LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent");
                     }
                 }
                 
                 LogHelper.Write($"✅ Absent marking complete: {markedAbsent} employees marked absent");
+                LogHelper.Write($"🔍 ========== END ABSENT MARKING CHECK ==========");
                 return markedAbsent;
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Error marking absent employees: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
                 return 0;
             }
         }
@@ -957,7 +1172,7 @@ namespace BiometricEnrollmentApp.Services
                 }
                 
                 // Create DateTime objects for comparison
-                var now = DateTime.Now;
+                var now = TimezoneHelper.Now;
                 var today = now.Date;
                 var shiftEndTime = today.AddHours(hours).AddMinutes(minutes);
                 
@@ -986,6 +1201,7 @@ namespace BiometricEnrollmentApp.Services
         /// <summary>
         /// Check if shift start time has passed
         /// This ensures we only mark absent employees whose shift has actually started
+        /// Handles overnight shifts properly
         /// </summary>
         private bool HasShiftStarted(string startTime)
         {
@@ -1036,14 +1252,27 @@ namespace BiometricEnrollmentApp.Services
                 }
                 
                 // Create DateTime objects for comparison
-                var now = DateTime.Now;
+                var now = TimezoneHelper.Now;
                 var today = now.Date;
                 var shiftStartTime = today.AddHours(hours).AddMinutes(minutes);
+                
+                // For overnight shifts, if the start time is in the future but we're past midnight,
+                // the shift might have started yesterday
+                if (shiftStartTime > now && now.Hour < 6) // Before 6 AM
+                {
+                    // Check if shift started yesterday
+                    var yesterdayShiftStart = shiftStartTime.AddDays(-1);
+                    if (now >= yesterdayShiftStart)
+                    {
+                        shiftStartTime = yesterdayShiftStart;
+                        LogHelper.Write($"  🌙 Overnight shift - start time was yesterday: {shiftStartTime:yyyy-MM-dd HH:mm}");
+                    }
+                }
                 
                 // Check if current time is past the shift start time
                 bool started = now >= shiftStartTime;
                 
-                LogHelper.Write($"  🕐 Shift start: {startTime} ({shiftStartTime:HH:mm}), Current: {now:HH:mm}, Started: {started}");
+                LogHelper.Write($"  🕐 Shift start: {startTime} ({shiftStartTime:yyyy-MM-dd HH:mm}), Current: {now:yyyy-MM-dd HH:mm}, Started: {started}");
                 
                 return started;
             }
@@ -1055,8 +1284,144 @@ namespace BiometricEnrollmentApp.Services
         }
 
         /// <summary>
+        /// Check if the current time is within an overnight shift window
+        /// For example: shift 23:00-01:00, current time 00:30 should return true
+        /// </summary>
+        private bool IsCurrentTimeWithinOvernightShift(string startTime, string endTime, string currentTime)
+        {
+            try
+            {
+                var startHour = ParseTimeToHour(startTime);
+                var startMinute = ParseTimeToMinute(startTime);
+                var endHour = ParseTimeToHour(endTime);
+                var endMinute = ParseTimeToMinute(endTime);
+                var currentHour = ParseTimeToHour(currentTime);
+                var currentMinute = ParseTimeToMinute(currentTime);
+                
+                if (startHour == -1 || endHour == -1 || currentHour == -1) return false;
+                
+                // Convert times to minutes since midnight for easier comparison
+                var startMinutes = startHour * 60 + startMinute;
+                var endMinutes = endHour * 60 + endMinute;
+                var currentMinutes = currentHour * 60 + currentMinute;
+                
+                // For overnight shifts, end time is next day
+                if (endMinutes <= startMinutes)
+                {
+                    // Overnight shift: check if current time is after start OR before end
+                    // Example: 23:00-01:00, current 00:30
+                    // startMinutes = 1380 (23*60), endMinutes = 60 (1*60), currentMinutes = 30 (0*60+30)
+                    // Since currentMinutes (30) < endMinutes (60), employee is within shift
+                    bool withinShift = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+                    LogHelper.Write($"🌙 Overnight shift check: {startTime}-{endTime}, current {currentTime} -> within: {withinShift}");
+                    return withinShift;
+                }
+                else
+                {
+                    // Regular shift: check if current time is between start and end
+                    bool withinShift = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+                    LogHelper.Write($"☀️ Regular shift check: {startTime}-{endTime}, current {currentTime} -> within: {withinShift}");
+                    return withinShift;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 IsCurrentTimeWithinOvernightShift error: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Parse time string to minute component
+        /// </summary>
+        private int ParseTimeToMinute(string timeStr)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(timeStr)) return 0;
+                
+                var parts = timeStr.Split(' ');
+                string timePart = parts[0]; // Get time part (ignore AM/PM for minute parsing)
+                
+                var timeParts = timePart.Split(':');
+                if (timeParts.Length < 2) return 0;
+                
+                return int.Parse(timeParts[1]);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Determines if a shift is an overnight shift by comparing start and end times
+        /// </summary>
+        private bool IsOvernightShift(string startTime, string endTime)
+        {
+            try
+            {
+                var startHour = ParseTimeToHour(startTime);
+                var endHour = ParseTimeToHour(endTime);
+                
+                if (startHour == -1 || endHour == -1) return false;
+                
+                // If end time is earlier than start time, it's an overnight shift
+                // Example: 16:00 (4 PM) to 00:00 (12 AM) = overnight
+                return endHour < startHour || (endHour == 0 && startHour > 0);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// Parse time string to hour (24-hour format)
+        /// </summary>
+        private int ParseTimeToHour(string timeStr)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(timeStr)) return -1;
+                
+                int hours;
+                var parts = timeStr.Split(' ');
+                
+                if (parts.Length == 2)
+                {
+                    // 12-hour format: "05:00 PM"
+                    var timeParts = parts[0].Split(':');
+                    if (timeParts.Length != 2) return -1;
+                    
+                    hours = int.Parse(timeParts[0]);
+                    var period = parts[1].ToUpper();
+                    
+                    // Convert to 24-hour format
+                    if (period == "PM" && hours != 12)
+                        hours += 12;
+                    else if (period == "AM" && hours == 12)
+                        hours = 0;
+                }
+                else
+                {
+                    // 24-hour format: "17:00"
+                    var timeParts = timeStr.Split(':');
+                    if (timeParts.Length < 2) return -1;
+                    hours = int.Parse(timeParts[0]);
+                }
+                
+                return hours;
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        /// <summary>
         /// Check if shift end time has passed with a grace period for absent marking
-        /// This prevents marking employees absent too early
+        /// This prevents marking employees absent too early and handles overnight shifts properly
         /// </summary>
         private bool HasShiftEndedWithGracePeriod(string endTime, int gracePeriodMinutes)
         {
@@ -1107,9 +1472,32 @@ namespace BiometricEnrollmentApp.Services
                 }
                 
                 // Create DateTime objects for comparison
-                var now = DateTime.Now;
+                var now = TimezoneHelper.Now;
                 var today = now.Date;
                 var shiftEndTime = today.AddHours(hours).AddMinutes(minutes);
+                
+                // CRITICAL FIX: Handle overnight shifts properly
+                // If end time is early morning (00:00-06:00), it likely ends the next day
+                if (hours >= 0 && hours < 6)
+                {
+                    // Check if we're currently in the afternoon/evening (after 12 PM)
+                    // If so, the shift ends tomorrow
+                    if (now.Hour >= 12)
+                    {
+                        shiftEndTime = shiftEndTime.AddDays(1);
+                        LogHelper.Write($"  🌙 Overnight shift detected - end time is tomorrow: {shiftEndTime:yyyy-MM-dd HH:mm}");
+                    }
+                    // If we're in the early morning and past the end time, shift ended today
+                    else if (now >= shiftEndTime)
+                    {
+                        LogHelper.Write($"  🌅 Overnight shift ended today: {shiftEndTime:yyyy-MM-dd HH:mm}");
+                    }
+                    // If we're in early morning but before end time, shift ends later today
+                    else
+                    {
+                        LogHelper.Write($"  🌅 Overnight shift ends later today: {shiftEndTime:yyyy-MM-dd HH:mm}");
+                    }
+                }
                 
                 // Add grace period to shift end time
                 var shiftEndWithGrace = shiftEndTime.AddMinutes(gracePeriodMinutes);
@@ -1117,7 +1505,7 @@ namespace BiometricEnrollmentApp.Services
                 // Check if current time is past the shift end + grace period
                 bool ended = now >= shiftEndWithGrace;
                 
-                LogHelper.Write($"  🕐 Shift end: {endTime} ({shiftEndTime:HH:mm}), Grace end: {shiftEndWithGrace:HH:mm}, Current: {now:HH:mm}, Ended: {ended}");
+                LogHelper.Write($"  🕐 Shift end: {endTime} ({shiftEndTime:yyyy-MM-dd HH:mm}), Grace end: {shiftEndWithGrace:yyyy-MM-dd HH:mm}, Current: {now:yyyy-MM-dd HH:mm}, Ended: {ended}");
                 
                 return ended;
             }
@@ -1127,5 +1515,139 @@ namespace BiometricEnrollmentApp.Services
                 return false;
             }
         }
+
+        /// <summary>
+        /// Add attendance sync to queue for retry mechanism
+        /// </summary>
+        public void AddToSyncQueue(string employeeId, long attendanceSessionId, string syncType, string payload)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT INTO SyncQueue (employee_id, attendance_session_id, sync_type, payload)
+                    VALUES ($employeeId, $sessionId, $syncType, $payload)
+                ";
+                cmd.Parameters.AddWithValue("$employeeId", employeeId);
+                cmd.Parameters.AddWithValue("$sessionId", attendanceSessionId);
+                cmd.Parameters.AddWithValue("$syncType", syncType);
+                cmd.Parameters.AddWithValue("$payload", payload);
+                
+                cmd.ExecuteNonQuery();
+                LogHelper.Write($"📝 Added {syncType} sync to queue for {employeeId}");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Failed to add sync to queue: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get pending sync items from queue
+        /// </summary>
+        public List<SyncQueueItem> GetPendingSyncItems()
+        {
+            var items = new List<SyncQueueItem>();
+            
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT id, employee_id, attendance_session_id, sync_type, payload, retry_count, last_attempt
+                    FROM SyncQueue 
+                    WHERE status = 'pending' AND retry_count < 5
+                    ORDER BY created_at ASC
+                ";
+                
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    items.Add(new SyncQueueItem
+                    {
+                        Id = reader.GetInt64(0),
+                        EmployeeId = reader.GetString(1),
+                        AttendanceSessionId = reader.GetInt64(2),
+                        SyncType = reader.GetString(3),
+                        Payload = reader.GetString(4),
+                        RetryCount = reader.GetInt32(5),
+                        LastAttempt = reader.IsDBNull(6) ? null : reader.GetString(6)
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Failed to get pending sync items: {ex.Message}");
+            }
+            
+            return items;
+        }
+
+        /// <summary>
+        /// Mark sync item as completed
+        /// </summary>
+        public void MarkSyncCompleted(long syncId)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    UPDATE SyncQueue 
+                    SET status = 'completed', last_attempt = datetime('now')
+                    WHERE id = $id
+                ";
+                cmd.Parameters.AddWithValue("$id", syncId);
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Failed to mark sync completed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Mark sync item as failed and increment retry count
+        /// </summary>
+        public void MarkSyncFailed(long syncId)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    UPDATE SyncQueue 
+                    SET retry_count = retry_count + 1, last_attempt = datetime('now'),
+                        status = CASE WHEN retry_count >= 4 THEN 'failed' ELSE 'pending' END
+                    WHERE id = $id
+                ";
+                cmd.Parameters.AddWithValue("$id", syncId);
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Failed to mark sync failed: {ex.Message}");
+            }
+        }
+    }
+
+    public class SyncQueueItem
+    {
+        public long Id { get; set; }
+        public string EmployeeId { get; set; }
+        public long AttendanceSessionId { get; set; }
+        public string SyncType { get; set; }
+        public string Payload { get; set; }
+        public int RetryCount { get; set; }
+        public string LastAttempt { get; set; }
     }
 }

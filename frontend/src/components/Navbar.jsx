@@ -3,6 +3,7 @@ import { IoNotifications } from "react-icons/io5";
 import { FaUserCircle, FaSignOutAlt, FaUser, FaTimes } from "react-icons/fa";
 import { MdCheckCircle, MdDelete, MdEdit } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
+import { useSystemConfig } from "../contexts/SystemConfigContext";
 import { getUserNotifications, getUnreadCount, markAsRead, markAllAsRead, clearAllNotifications } from "../api/NotificationApi";
 
 export default function Navbar() {
@@ -12,6 +13,7 @@ export default function Navbar() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
+  const { systemConfig } = useSystemConfig();
 
   const username = localStorage.getItem("username") || "Admin";
   const role = localStorage.getItem("role") || "admin";
@@ -21,8 +23,8 @@ export default function Navbar() {
   useEffect(() => {
     setPhoto(user.employee?.photo);
     
-    // Fetch notifications for team leaders
-    if (role === "teamleader" && userId) {
+    // Fetch notifications for all roles that should receive notifications
+    if ((role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee") && userId) {
       fetchNotifications();
       fetchUnreadCount();
       
@@ -101,6 +103,7 @@ export default function Navbar() {
 
   const getProfileRoute = () => {
     if (role === "admin") return "/admin/profile";
+    if (role === "supervisor") return "/supervisor/profile";
     if (role === "teamleader") return "/team/profile";
     return "/employee/profile";
   };
@@ -123,12 +126,12 @@ export default function Navbar() {
   return (
     <div className="bg-[#1E3A8A] h-16 px-6 flex justify-between items-center fixed top-0 left-0 right-0 z-50">
       {/* Title */}
-      <h1 className="text-xl text-white font-bold">SecureAttend</h1>
+      <h1 className="text-xl text-white font-bold">{systemConfig.systemName}</h1>
 
       {/* Right Side */}
       <div className="flex items-center gap-6 relative">
-        {/* Notification Icon - Only show for team leaders */}
-        {role === "teamleader" && (
+        {/* Notification Icon - Show for all roles that receive notifications */}
+        {(role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee") && (
           <div className="relative">
             <IoNotifications 
               size={25} 
@@ -178,7 +181,7 @@ export default function Navbar() {
         </div>
 
         {/* Notifications Dropdown */}
-        {showNotifications && role === "teamleader" && (
+        {showNotifications && (role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee") && (
           <div className="absolute right-0 top-14 bg-white shadow-xl rounded-lg w-96 max-h-[500px] overflow-hidden z-50">
             {/* Header */}
             <div className="bg-[#1E3A8A] text-white p-4 flex justify-between items-center">

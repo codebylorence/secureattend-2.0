@@ -7,7 +7,7 @@ namespace BiometricEnrollmentApp.Services
     public static class LogHelper
     {
         private static readonly string LogDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
-        private static readonly string LogFile = Path.Combine(LogDir, $"ZKTecoLog_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
+        private static readonly string LogFile = Path.Combine(LogDir, $"ZKTecoLog_{TimezoneHelper.Now:yyyyMMdd_HHmmss}.txt");
 
         static LogHelper()
         {
@@ -29,7 +29,7 @@ namespace BiometricEnrollmentApp.Services
 
         public static void Write(string message)
         {
-            string line = $"[{DateTime.Now:HH:mm:ss}] {message}";
+            string line = $"[{TimezoneHelper.Now:HH:mm:ss}] {message}";
             Console.WriteLine(line);
             try
             {

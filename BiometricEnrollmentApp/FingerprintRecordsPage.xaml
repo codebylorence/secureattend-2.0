@@ -1,0 +1,274 @@
+<Page x:Class="BiometricEnrollmentApp.FingerprintRecordsPage" 
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Admin - Fingerprint Records"
+      Background="#F6F7F9">
+
+    <Page.Resources>
+        <!-- Button Styles -->
+        <Style TargetType="Button">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="MinWidth" Value="90"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Background" Value="#E5E7EB"/>
+            <Setter Property="Foreground" Value="#111827"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                SnapsToDevicePixels="True"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#D1D5DB"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#2563EB"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#DC2626"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Page.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Fingerprint Record Management" 
+                       FontSize="24" FontWeight="Bold" 
+                       Foreground="#1E3A8A"
+                       Margin="0,0,0,8"/>
+            <TextBlock Text="View and manage enrolled fingerprint records" 
+                       FontSize="14" 
+                       Foreground="#6B7280"/>
+        </StackPanel>
+
+        <!-- Controls -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,20">
+            <Button x:Name="RefreshBtn" Content="Refresh" 
+                    Click="RefreshBtn_Click" 
+                    Style="{StaticResource PrimaryButton}"
+                    Margin="0,0,10,0"/>
+            <Button x:Name="DeleteSelectedBtn" Content="Delete Selected" 
+                    Click="DeleteSelectedBtn_Click" 
+                    Style="{StaticResource DangerButton}"
+                    Margin="0,0,10,0"/>
+            <Button x:Name="CleanupBtn" Content="Cleanup Orphaned" 
+                    Click="CleanupBtn_Click" 
+                    Margin="0,0,10,0"/>
+        </StackPanel>
+
+        <!-- Enrollment Section -->
+        <Border Grid.Row="2" Background="White" 
+                CornerRadius="12" Padding="20"
+                BorderBrush="#E6E9EE" BorderThickness="1"
+                Margin="0,0,0,20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="250"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Enrollment Form -->
+                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                    <TextBlock Text="Enroll New Fingerprint" 
+                               FontSize="16" FontWeight="SemiBold" 
+                               Foreground="#1E3A8A"
+                               Margin="0,0,0,15"/>
+                    
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Text="Employee ID" FontSize="12" Foreground="#6B7280" Margin="0,0,0,5"/>
+                        <TextBox Grid.Row="0" x:Name="EmployeeIdTextBox" 
+                                 Padding="8" Margin="0,20,0,10" FontSize="14" Height="35"/>
+
+                        <TextBlock Grid.Row="1" Text="Full Name" FontSize="12" Foreground="#6B7280" Margin="0,0,0,5"/>
+                        <TextBox Grid.Row="1" x:Name="EmployeeNameTextBox" 
+                                 Padding="8" Margin="0,20,0,10" FontSize="14" Height="35"/>
+
+                        <TextBlock Grid.Row="2" Text="Department" FontSize="12" Foreground="#6B7280" Margin="0,0,0,5"/>
+                        <TextBox Grid.Row="2" x:Name="DepartmentTextBox" 
+                                 Padding="8" Margin="0,20,0,15" FontSize="14" Height="35"/>
+
+                        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button x:Name="StartEnrollmentBtn" Content="Start Enrollment" 
+                                    Click="StartEnrollmentBtn_Click" 
+                                    Style="{StaticResource PrimaryButton}"
+                                    Margin="0,0,10,0"/>
+                            <Button x:Name="ClearFormBtn" Content="Clear Form" 
+                                    Click="ClearFormBtn_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Enrollment Status -->
+                <Border Grid.Column="1" Background="#F8FAFC" 
+                        CornerRadius="8" Padding="15"
+                        BorderBrush="#E2E8F0" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="Enrollment Status" 
+                                   FontSize="14" FontWeight="SemiBold" 
+                                   Foreground="#1E3A8A"
+                                   Margin="0,0,0,10"/>
+                        
+                        <TextBlock x:Name="StatusText" 
+                                   Text="Ready to enroll new fingerprint" 
+                                   FontSize="12" 
+                                   Foreground="#6B7280"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,10"/>
+                        
+                        <Border Background="#FEF3C7" 
+                                CornerRadius="4" Padding="8"
+                                BorderBrush="#F59E0B" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Instructions" 
+                                           FontWeight="SemiBold" 
+                                           FontSize="11"
+                                           Foreground="#92400E"
+                                           Margin="0,0,0,3"/>
+                                <TextBlock Text="1. Fill in employee details" 
+                                           FontSize="10" 
+                                           Foreground="#92400E"/>
+                                <TextBlock Text="2. Click 'Start Enrollment'" 
+                                           FontSize="10" 
+                                           Foreground="#92400E"/>
+                                <TextBlock Text="3. Place finger on scanner" 
+                                           FontSize="10" 
+                                           Foreground="#92400E"/>
+                                <TextBlock Text="4. Follow on-screen prompts" 
+                                           FontSize="10" 
+                                           Foreground="#92400E"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Records Grid -->
+        <Border Grid.Row="3" Background="White" 
+                CornerRadius="12" Padding="20"
+                BorderBrush="#E6E9EE" BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Grid Header -->
+                <TextBlock Grid.Row="0" Text="Enrolled Fingerprint Records" 
+                           FontSize="18" FontWeight="SemiBold" 
+                           Foreground="#1E3A8A"
+                           Margin="0,0,0,16"/>
+
+                <!-- Data Grid -->
+                <DataGrid x:Name="RecordsGrid" Grid.Row="1" 
+                          AutoGenerateColumns="False" 
+                          IsReadOnly="True" 
+                          CanUserResizeRows="False"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="None"
+                          Background="White"
+                          BorderBrush="#e5e7eb"
+                          BorderThickness="1"
+                          RowHeight="40"
+                          ColumnHeaderHeight="44"
+                          AlternatingRowBackground="#f9fafb"
+                          SelectionMode="Single"
+                          SelectionUnit="FullRow">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Row ID" Binding="{Binding RowId}" Width="80"/>
+                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="120"/>
+                        <DataGridTextColumn Header="Employee Name" Binding="{Binding Name}" Width="200"/>
+                        <DataGridTextColumn Header="Department" Binding="{Binding Department}" Width="150"/>
+                        <DataGridTextColumn Header="Template Size" Binding="{Binding TemplateSize}" Width="120"/>
+                        <DataGridTextColumn Header="Enrolled Date" Binding="{Binding EnrolledDate}" Width="150"/>
+                    </DataGrid.Columns>
+                    
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#f1f5f9"/>
+                            <Setter Property="Foreground" Value="#1e293b"/>
+                            <Setter Property="FontSize" Value="13"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Padding" Value="12,8"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    
+                    <DataGrid.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="Padding" Value="12,6"/>
+                            <Setter Property="Foreground" Value="#1f2937"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="TextBlock.TextAlignment" Value="Center"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="DataGridCell">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#EBF4FF"/>
+                                    <Setter Property="Foreground" Value="#1f2937"/>
+                                    <Setter Property="BorderBrush" Value="#3B82F6"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.CellStyle>
+                    
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="SnapsToDevicePixels" Value="True"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#EBF4FF"/>
+                                    <Setter Property="BorderBrush" Value="#3B82F6"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                </DataGrid>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

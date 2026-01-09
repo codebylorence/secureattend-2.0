@@ -15,8 +15,9 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import cleanupRoutes from "./routes/cleanupRoutes.js";
 import registrationRoutes from "./routes/registrationRoutes.js";
 import positionRoutes from "./routes/positionRoutes.js";
+import backupRoutes from "./routes/backupRoutes.js";
+import systemConfigRoutes from "./routes/systemConfigRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
-import { seedPositions } from "./seeders/positionSeeder.js";
 // Import models first
 import "./models/employee.js";
 import "./models/user.js";
@@ -37,8 +38,12 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "DELETE"]
-  }
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  transports: ['websocket', 'polling']
 });
 
 // Make io accessible to routes
@@ -50,16 +55,26 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Socket.IO connection handling
 io.on("connection", (socket) => {
-  console.log(`🔌 Client connected: ${socket.id}`);
+  console.log(`🔌 Client connected: ${socket.id} from ${socket.handshake.address}`);
   
-  socket.on("disconnect", () => {
-    console.log(`🔌 Client disconnected: ${socket.id}`);
+  socket.on("disconnect", (reason) => {
+    console.log(`🔌 Client disconnected: ${socket.id}, reason: ${reason}`);
+  });
+
+  socket.on("connect_error", (error) => {
+    console.log(`❌ Connection error: ${error.message}`);
+  });
+
+  // Handle ping/pong for connection health
+  socket.on("ping", () => {
+    socket.emit("pong");
   });
 });
 
 // --- API ROUTES ---
 app.use("/api/employees", employeeRoutes);
 app.use("/api/auth", userRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/attendances", attendanceRoutes);
 app.use("/api/departments", departmentRoutes);
 app.use("/api/templates", scheduleTemplateRoutes);
@@ -68,12 +83,16 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/cleanup", cleanupRoutes);
 app.use("/api/registration", registrationRoutes);
 app.use("/api/positions", positionRoutes);
+app.use("/api/backup", backupRoutes);
+app.use("/api/system", systemConfigRoutes);
 app.use("/employees", employeeRoutes);
 
 
 // --- DATABASE SYNC ---
+// Note: Database sync is handled by syncDatabase() function called below
+// Using alter: false to prevent "Too many keys" MySQL error
 sequelize
-  .sync({ alter: true })
+  .sync({ alter: false })
   .then(() => console.log("Database synced successfully"))
   .catch((err) => console.error("Database connection failed:", err));
 
@@ -81,9 +100,6 @@ sequelize
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, async () => {
   await syncDatabase();
-  
-  // Seed default positions
-  await seedPositions();
   
   console.log(`✅ Node.js Server running on port ${PORT}`);
   console.log(`📡 Connected Biometric Service expected at http://localhost:5000`);

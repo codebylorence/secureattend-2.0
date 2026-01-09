@@ -147,6 +147,26 @@ router.post("/register", async (req, res) => {
 
     console.log(`✅ Registration request created with ID: ${registrationRequest.id}`);
 
+    // Send notification to admins about new registration request
+    try {
+      const { notifyAdmins } = await import("../services/notificationService.js");
+      
+      const message = `New registration request from ${firstname} ${lastname} (${employee_id}) for ${department} department`;
+      
+      await notifyAdmins(
+        "New Registration Request",
+        message,
+        "general",
+        registrationRequest.id,
+        "system"
+      );
+      
+      console.log("✅ Registration request notification sent to admins");
+    } catch (notifyError) {
+      console.error("❌ Error sending registration request notification:", notifyError);
+      // Don't fail the registration if notification fails
+    }
+
     // Emit real-time notification to admins
     const io = req.app.get('io');
     io.emit('new_registration_request', {
@@ -291,6 +311,27 @@ router.post("/approve/:id", authenticateToken, requireAdmin, async (req, res) =>
 
     console.log(`✅ Registration request marked as approved`);
 
+    // Send notification to supervisors in the employee's department about approval
+    try {
+      const { notifySupervisors } = await import("../services/notificationService.js");
+      
+      const message = `Registration approved: ${registrationRequest.firstname} ${registrationRequest.lastname} (${registrationRequest.employee_id}) has been added to ${registrationRequest.department}`;
+      
+      await notifySupervisors(
+        [registrationRequest.department],
+        "Registration Approved",
+        message,
+        "general",
+        employee.id,
+        "admin"
+      );
+      
+      console.log("✅ Registration approval notification sent to supervisors");
+    } catch (notifyError) {
+      console.error("❌ Error sending registration approval notification:", notifyError);
+      // Don't fail the approval if notification fails
+    }
+
     // Delete the registration request record since it's no longer needed
     // Note: We delete it immediately since the employee account is now created
     await registrationRequest.destroy();
@@ -347,6 +388,27 @@ router.post("/reject/:id", authenticateToken, requireAdmin, async (req, res) => 
       approved_by: adminId,
       approved_at: new Date()
     });
+
+    // Send notification to supervisors in the department about rejection
+    try {
+      const { notifySupervisors } = await import("../services/notificationService.js");
+      
+      const message = `Registration rejected: ${registrationRequest.firstname} ${registrationRequest.lastname} (${registrationRequest.employee_id}) for ${registrationRequest.department}. Reason: ${rejection_reason}`;
+      
+      await notifySupervisors(
+        [registrationRequest.department],
+        "Registration Rejected",
+        message,
+        "general",
+        registrationRequest.id,
+        "admin"
+      );
+      
+      console.log("✅ Registration rejection notification sent to supervisors");
+    } catch (notifyError) {
+      console.error("❌ Error sending registration rejection notification:", notifyError);
+      // Don't fail the rejection if notification fails
+    }
 
     // Emit real-time notification
     const io = req.app.get('io');

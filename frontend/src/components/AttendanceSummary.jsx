@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
-import { FaClock, FaEye } from "react-icons/fa";
+import { FaClock, FaEye, FaSync, FaExclamationTriangle } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { getAttendances } from "../api/AttendanceApi";
 
@@ -13,18 +13,32 @@ export default function AttendanceSummary() {
     { name: "Absent", value: 0 },
   ]);
   const [totalDays, setTotalDays] = useState(0);
+  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'syncing', 'error'
+  const [lastSyncTime, setLastSyncTime] = useState(null);
 
   useEffect(() => {
     fetchAttendanceSummary();
+    
+    // Auto-refresh every 30 seconds to sync with biometric app data
+    const interval = setInterval(() => {
+      fetchAttendanceSummary();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, [filter]);
 
   const fetchAttendanceSummary = async () => {
     try {
+      setSyncStatus('syncing');
+      
       // Get current user's employee_id from localStorage
       const user = JSON.parse(localStorage.getItem("user") || "{}");
       const employeeId = user.employee?.employee_id;
 
-      if (!employeeId) return;
+      if (!employeeId) {
+        setSyncStatus('error');
+        return;
+      }
 
       // Get employee's attendances
       const allAttendances = await getAttendances({ employee_id: employeeId });
@@ -90,8 +104,12 @@ export default function AttendanceSummary() {
         { name: "Late", value: late },
         { name: "Absent", value: absent },
       ]);
+      
+      setSyncStatus('synced');
+      setLastSyncTime(new Date());
     } catch (error) {
       console.error("Error fetching attendance summary:", error);
+      setSyncStatus('error');
     }
   };
 
@@ -132,14 +150,38 @@ export default function AttendanceSummary() {
           <FaClock />
           <h3 className="font-medium">Attendance Summary</h3>
         </div>
-        <button
-          onClick={handleViewAttendance}
-          className="flex items-center gap-1 text-sm hover:bg-blue-700 px-2 py-1 rounded transition-colors cursor-pointer"
-          title="View Full Attendance"
-        >
-          <FaEye size={12} />
-          View
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Sync Status Indicator */}
+          <div className="flex items-center space-x-1 text-xs">
+            {syncStatus === 'syncing' && (
+              <div className="flex items-center space-x-1 text-blue-200">
+                <FaSync className="animate-spin" size={12} />
+                <span>Syncing...</span>
+              </div>
+            )}
+            {syncStatus === 'synced' && lastSyncTime && (
+              <div className="flex items-center space-x-1 text-green-200">
+                <FaSync size={12} />
+                <span>{lastSyncTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+              </div>
+            )}
+            {syncStatus === 'error' && (
+              <div className="flex items-center space-x-1 text-red-200">
+                <FaExclamationTriangle size={12} />
+                <span>Error</span>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={handleViewAttendance}
+            className="flex items-center gap-1 text-sm hover:bg-blue-700 px-2 py-1 rounded transition-colors cursor-pointer"
+            title="View Full Attendance"
+          >
+            <FaEye size={12} />
+            View
+          </button>
+        </div>
       </div>
 
       <div className="p-4">

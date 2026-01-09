@@ -4,6 +4,8 @@ import { loginUser } from "../api/UserApi";
 import { useNavigate } from "react-router-dom";
 import { IoMdEye } from "react-icons/io";
 import { IoMdEyeOff } from "react-icons/io";
+import { useSystemConfig } from "../contexts/SystemConfigContext";
+import { toast } from 'react-toastify';
 
 export default function Login() {
   const [formData, setFormData] = useState({ username: "", password: "" });
@@ -11,6 +13,7 @@ export default function Login() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const { systemConfig } = useSystemConfig();
 
   const navigate = useNavigate();
 
@@ -30,12 +33,17 @@ export default function Login() {
       localStorage.setItem("username", data.user.username);
       localStorage.setItem("user", JSON.stringify(data.user));
 
+      // Show success toast
+      toast.success("Login successful! Welcome back.");
+
       // Redirect user based on role
       if (data.user.role === "admin") navigate("/admin/dashboard");
+      else if (data.user.role === "supervisor") navigate("/admin/dashboard");
       else if (data.user.role === "teamleader") navigate("/team/dashboard");
       else navigate("/employee/dashboard");
     } catch (err) {
-      alert(err);
+      // Show error toast
+      toast.error(err.message || "Invalid username or password. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -45,7 +53,7 @@ export default function Login() {
     e.preventDefault();
     console.log("Forgot password email sent to:", forgotEmail);
     setShowForgotModal(false);
-    alert("Password reset link has been sent to your email!");
+    toast.success("Password reset link has been sent to your email!");
   };
 
   return (
@@ -57,7 +65,7 @@ export default function Login() {
           <div className="bg-[#1E3A8A] p-4 rounded-full mb-3 shadow-md">
             <FaFingerprint size={35} color="white" />
           </div>
-          <h1 className="text-2xl font-bold text-[#1E3A8A]">SecureAttend</h1>
+          <h1 className="text-2xl font-bold text-[#1E3A8A]">{systemConfig.systemName}</h1>
           <p className="text-gray-500 text-sm mt-1">
             Attendance Management System
           </p>
@@ -77,7 +85,7 @@ export default function Login() {
               onChange={handleChange}
               required
               placeholder="Enter your username"
-              className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-[#1E3A8A] outline-none"
+              className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-[#1E3A8A] focus:border-[#1E3A8A] outline-none"
             />
           </div>
 
@@ -94,7 +102,7 @@ export default function Login() {
                 onChange={handleChange}
                 required
                 placeholder="Enter your password"
-                className="w-full border border-gray-300 rounded-md px-4 py-2 pr-10 focus:ring-2 focus:ring-[#1E3A8A] outline-none"
+                className="w-full border border-gray-300 rounded-md px-4 py-2 pr-10 focus:ring-2 focus:ring-[#1E3A8A] focus:border-[#1E3A8A] outline-none"
               />
               <button
                 type="button"

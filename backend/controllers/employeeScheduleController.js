@@ -7,8 +7,11 @@ import {
   deleteEmployeeSchedule,
   removeSpecificDays,
   regenerateWeeklySchedules,
+  getScheduleById,
 } from "../services/employeeScheduleService.js";
 import { getTodaysSchedule } from "../utils/scheduleDateGenerator.js";
+import User from "../models/user.js";
+import Employee from "../models/employee.js";
 
 // GET /api/employee-schedules
 export const getEmployeeSchedules = async (req, res) => {
@@ -84,15 +87,61 @@ export const editEmployeeSchedule = async (req, res) => {
 export const removeEmployeeSchedule = async (req, res) => {
   try {
     const { id } = req.params;
+    const currentUser = req.user;
+    
+    console.log(`🗑️ DELETE request for schedule ID: ${id} by user:`, currentUser);
+    
+    // Get the current user's employee information
+    const userRecord = await User.findByPk(currentUser.id, {
+      include: [{ model: Employee, as: "employee" }]
+    });
+    
+    console.log(`👤 User record found:`, userRecord ? {
+      id: userRecord.id,
+      username: userRecord.username,
+      role: userRecord.role,
+      employee: userRecord.employee ? {
+        employee_id: userRecord.employee.employee_id,
+        fullname: userRecord.employee.fullname
+      } : null
+    } : 'Not found');
+    
+    if (!userRecord || !userRecord.employee) {
+      console.log(`❌ User employee information not found for user ID: ${currentUser.id}`);
+      return res.status(400).json({ message: "User employee information not found" });
+    }
+    
+    // Get the schedule to check ownership
+    const schedule = await getScheduleById(id);
+    console.log(`📋 Schedule found:`, schedule ? {
+      id: schedule.id,
+      employee_id: schedule.employee_id,
+      shift_name: schedule.template?.shift_name
+    } : 'Not found');
+    
+    if (!schedule) {
+      return res.status(404).json({ message: "Schedule not found" });
+    }
+    
+    // Prevent team leaders from deleting their own schedules
+    if (currentUser.role === "teamleader" && schedule.employee_id === userRecord.employee.employee_id) {
+      console.log(`🚫 Team leader ${userRecord.employee.employee_id} attempted to delete their own schedule`);
+      return res.status(403).json({ 
+        message: "Team leaders cannot delete their own schedules. Please contact an administrator." 
+      });
+    }
+    
+    console.log(`✅ Permission check passed. Proceeding with deletion...`);
     const deleted = await deleteEmployeeSchedule(id);
     
     if (!deleted) {
       return res.status(404).json({ message: "Schedule not found" });
     }
     
+    console.log(`✅ Schedule ${id} deleted successfully by ${currentUser.role} user ${userRecord.employee.employee_id}`);
     res.status(200).json({ message: "Schedule deleted successfully" });
   } catch (error) {
-    console.error("Error deleting schedule:", error);
+    console.error("❌ Error deleting schedule:", error);
     res.status(500).json({ message: "Error deleting schedule" });
   }
 };
@@ -102,18 +151,43 @@ export const removeDaysFromSchedule = async (req, res) => {
   try {
     const { id } = req.params;
     const { days } = req.body;
+    const currentUser = req.user;
     
     if (!days || !Array.isArray(days)) {
       return res.status(400).json({ message: "Days array is required" });
     }
     
-    const schedule = await removeSpecificDays(id, days);
+    // Get the current user's employee information
+    const userRecord = await User.findByPk(currentUser.id, {
+      include: [{ model: Employee, as: "employee" }]
+    });
     
-    if (schedule === null) {
+    if (!userRecord || !userRecord.employee) {
+      return res.status(400).json({ message: "User employee information not found" });
+    }
+    
+    // Get the schedule to check ownership
+    const schedule = await getScheduleById(id);
+    if (!schedule) {
+      return res.status(404).json({ message: "Schedule not found" });
+    }
+    
+    // Prevent team leaders from deleting their own schedules
+    if (currentUser.role === "teamleader" && schedule.employee_id === userRecord.employee.employee_id) {
+      return res.status(403).json({ 
+        message: "Team leaders cannot modify their own schedules. Please contact an administrator." 
+      });
+    }
+    
+    const updatedSchedule = await removeSpecificDays(id, days);
+    
+    if (updatedSchedule === null) {
+      console.log(`✅ All days removed from schedule ${id}, schedule deleted by ${currentUser.role} user ${userRecord.employee.employee_id}`);
       return res.status(200).json({ message: "All days removed, schedule deleted" });
     }
     
-    res.status(200).json({ message: "Days removed successfully", schedule });
+    console.log(`✅ Days ${days.join(', ')} removed from schedule ${id} by ${currentUser.role} user ${userRecord.employee.employee_id}`);
+    res.status(200).json({ message: "Days removed successfully", schedule: updatedSchedule });
   } catch (error) {
     console.error("Error removing days:", error);
     res.status(500).json({ message: "Error removing days" });

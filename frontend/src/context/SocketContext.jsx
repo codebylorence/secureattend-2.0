@@ -17,7 +17,13 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     const newSocket = io('http://localhost:5000', {
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      timeout: 20000,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      maxReconnectionAttempts: 5,
+      forceNew: false
     });
 
     newSocket.on('connect', () => {
@@ -25,9 +31,29 @@ export const SocketProvider = ({ children }) => {
       setConnected(true);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('🔌 Disconnected from WebSocket server');
+    newSocket.on('disconnect', (reason) => {
+      console.log(`🔌 Disconnected from WebSocket server, reason: ${reason}`);
       setConnected(false);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ WebSocket connection error:', error.message);
+    });
+
+    newSocket.on('reconnect', (attemptNumber) => {
+      console.log(`🔄 Reconnected to WebSocket server (attempt ${attemptNumber})`);
+    });
+
+    newSocket.on('reconnect_attempt', (attemptNumber) => {
+      console.log(`🔄 Attempting to reconnect... (attempt ${attemptNumber})`);
+    });
+
+    newSocket.on('reconnect_error', (error) => {
+      console.error('❌ Reconnection error:', error.message);
+    });
+
+    newSocket.on('reconnect_failed', () => {
+      console.error('❌ Failed to reconnect to WebSocket server');
     });
 
     setSocket(newSocket);

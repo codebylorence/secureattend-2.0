@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { FaClock } from "react-icons/fa6";
+import { FaClock, FaSync, FaExclamationTriangle } from "react-icons/fa";
 import { getTodayAttendances } from "../api/AttendanceApi";
-import { fetchEmployees } from "../api/EmployeeApi";
+import { isAuthenticated } from "../utils/auth";
 
-export default function TodaysAttendance() {
+export default function TodaysAttendance({ statusFilter, zoneFilter, searchTerm, supervisorView = false }) {
   const [attendances, setAttendances] = useState([]);
-  const [employees, setEmployees] = useState({});
   const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'syncing', 'error'
+  const [lastSyncTime, setLastSyncTime] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -23,20 +24,52 @@ export default function TodaysAttendance() {
 
   const fetchData = async () => {
     try {
-      const [attendanceData, employeeData] = await Promise.all([
-        getTodayAttendances(),
-        fetchEmployees()
-      ]);
+      setSyncStatus('syncing');
       
-      const employeeMap = {};
-      employeeData.forEach(emp => {
-        employeeMap[emp.employee_id] = emp;
-      });
+      // Check if user is authenticated before making requests
+      if (!isAuthenticated()) {
+        console.log('📋 TodaysAttendance: User not authenticated, skipping attendance fetch');
+        setLoading(false);
+        setSyncStatus('error');
+        return;
+      }
       
-      setAttendances(attendanceData);
-      setEmployees(employeeMap);
+      // Get today's attendance using the backend's timezone-aware endpoint
+      // Add cache busting to ensure fresh data
+      console.log('📋 TodaysAttendance: Fetching attendance data...');
+      const attendanceData = await getTodayAttendances();
+      console.log('📋 Raw attendance data received:', attendanceData.length, 'records');
+      console.log('📋 Full attendance data:', attendanceData);
+      
+      // Log the actual status for debugging
+      if (attendanceData.length > 0) {
+        attendanceData.forEach(record => {
+          console.log(`📊 Record: ${record.employee_id} - Status: ${record.status} - Date: ${record.date} - Dept: ${record.department}`);
+        });
+      } else {
+        console.log('⚠️ No attendance records received from API');
+      }
+      
+      let filteredAttendanceData = attendanceData;
+
+      // For supervisor view, show all attendance records (no department filtering)
+      if (supervisorView) {
+        // Supervisors can see all attendance data across all departments
+        filteredAttendanceData = attendanceData;
+        console.log('📋 Supervisor view: showing all', filteredAttendanceData.length, 'records');
+      } else {
+        console.log('📋 Non-supervisor view: showing', filteredAttendanceData.length, 'records');
+      }
+      
+      setAttendances(filteredAttendanceData);
+      console.log('📋 Final attendances set:', filteredAttendanceData.length, 'records');
+      setSyncStatus('synced');
+      setLastSyncTime(new Date());
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("❌ Error fetching attendance data:", error);
+      console.error("❌ Error details:", error.response?.data);
+      console.error("❌ Error status:", error.response?.status);
+      setSyncStatus('error');
     } finally {
       setLoading(false);
     }
@@ -45,8 +78,45 @@ export default function TodaysAttendance() {
   const formatTime = (dateString) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
+
+  // Filter attendances based on props
+  const filteredAttendances = attendances.filter(attendance => {
+    // Status filter
+    if (statusFilter && attendance.status !== statusFilter) {
+      console.log(`📋 Filtered out ${attendance.employee_id} due to status: ${attendance.status} !== ${statusFilter}`);
+      return false;
+    }
+    
+    // Zone/Department filter
+    if (zoneFilter && attendance.department !== zoneFilter) {
+      console.log(`📋 Filtered out ${attendance.employee_id} due to department: ${attendance.department} !== ${zoneFilter}`);
+      return false;
+    }
+    
+    // Search term filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const nameMatch = attendance.employee_name?.toLowerCase().includes(searchLower);
+      const idMatch = attendance.employee_id?.toLowerCase().includes(searchLower);
+      if (!nameMatch && !idMatch) {
+        console.log(`📋 Filtered out ${attendance.employee_id} due to search: ${searchTerm}`);
+        return false;
+      }
+    }
+    
+    return true;
+  });
+
+  // Log final filtering results
+  console.log('📋 Filtering results:', {
+    originalCount: attendances.length,
+    filteredCount: filteredAttendances.length,
+    statusFilter,
+    zoneFilter,
+    searchTerm
+  });
 
 
 
@@ -59,8 +129,30 @@ export default function TodaysAttendance() {
             <FaClock size={20}/> 
             <h2 className="font-semibold text-white">Today's Attendance</h2>
           </div>
-
-
+          
+          {/* Sync Status Indicator */}
+          <div className="flex items-center space-x-2 text-sm">
+            <button
+              onClick={fetchData}
+              className="flex items-center space-x-1 text-blue-200 hover:text-white px-2 py-1 rounded transition-colors"
+              title="Refresh attendance data"
+            >
+              <FaSync className={syncStatus === 'syncing' ? 'animate-spin' : ''} size={14} />
+              <span>Refresh</span>
+            </button>
+            
+            {syncStatus === 'synced' && lastSyncTime && (
+              <div className="flex items-center space-x-1 text-green-200">
+                <span>Last sync: {lastSyncTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+              </div>
+            )}
+            {syncStatus === 'error' && (
+              <div className="flex items-center space-x-1 text-red-200">
+                <FaExclamationTriangle size={14} />
+                <span>Sync error</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Table Section */}
@@ -81,23 +173,21 @@ export default function TodaysAttendance() {
                   <tr>
                     <td colSpan="5" className="px-6 py-4 text-center text-gray-500">Loading...</td>
                   </tr>
-                ) : attendances.length === 0 ? (
+                ) : filteredAttendances.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">No attendance records for today</td>
+                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">No attendance records match your filters</td>
                   </tr>
                 ) : (
                   (() => {
                     const startIndex = (currentPage - 1) * itemsPerPage;
                     const endIndex = startIndex + itemsPerPage;
-                    const paginatedAttendances = attendances.slice(startIndex, endIndex);
-                    return paginatedAttendances.map((attendance) => {
-                    const employee = employees[attendance.employee_id] || {};
-                    return (
+                    const paginatedAttendances = filteredAttendances.slice(startIndex, endIndex);
+                    return paginatedAttendances.map((attendance) => (
                       <tr key={attendance.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{employee.fullname || attendance.employee_id}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{attendance.employee_name || attendance.employee_id}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_in)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_out)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{employee.department || "-"}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{attendance.department || "-"}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {(() => {
                             const statusDisplay = {
@@ -116,8 +206,7 @@ export default function TodaysAttendance() {
                           })()}
                         </td>
                       </tr>
-                    );
-                  })
+                    ));
                 })()
                 )}
               </tbody>
@@ -125,7 +214,7 @@ export default function TodaysAttendance() {
           </div>
           
           {/* Pagination */}
-          {attendances.length > itemsPerPage && (
+          {filteredAttendances.length > itemsPerPage && (
             <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-700">Show</span>
@@ -147,8 +236,8 @@ export default function TodaysAttendance() {
               
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-700">
-                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, attendances.length)} to{' '}
-                  {Math.min(currentPage * itemsPerPage, attendances.length)} of {attendances.length} entries
+                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, filteredAttendances.length)} to{' '}
+                  {Math.min(currentPage * itemsPerPage, filteredAttendances.length)} of {filteredAttendances.length} entries
                 </span>
                 
                 <div className="flex gap-1">
@@ -161,7 +250,7 @@ export default function TodaysAttendance() {
                   </button>
                   
                   {(() => {
-                    const totalPages = Math.ceil(attendances.length / itemsPerPage);
+                    const totalPages = Math.ceil(filteredAttendances.length / itemsPerPage);
                     const pages = [];
                     const startPage = Math.max(1, currentPage - 2);
                     const endPage = Math.min(totalPages, startPage + 4);
@@ -185,8 +274,8 @@ export default function TodaysAttendance() {
                   })()}
                   
                   <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(attendances.length / itemsPerPage)))}
-                    disabled={currentPage === Math.ceil(attendances.length / itemsPerPage)}
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredAttendances.length / itemsPerPage)))}
+                    disabled={currentPage === Math.ceil(filteredAttendances.length / itemsPerPage)}
                     className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next

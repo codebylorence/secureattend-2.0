@@ -1,0 +1,148 @@
+<Page x:Class="BiometricEnrollmentApp.EmployeeAttendancePage" 
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Employee Attendance"
+      Background="#F3F4F6"
+      FontFamily="Segoe UI">
+
+    <Page.Resources>
+        <SolidColorBrush x:Key="PrimaryColor" Color="#106EBE"/>
+        <SolidColorBrush x:Key="SuccessColor" Color="#107C10"/>
+        <SolidColorBrush x:Key="TextDark" Color="#212121"/>
+        <SolidColorBrush x:Key="TextLight" Color="#616161"/>
+        <DropShadowEffect x:Key="CardShadow" BlurRadius="25" ShadowDepth="5" Direction="270" Color="#DDDDDD" Opacity="0.7"/>
+    </Page.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>    <RowDefinition Height="Auto"/> </Grid.RowDefinitions>
+
+        <Border Grid.Row="0">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#106EBE" Offset="0.0"/>
+                    <GradientStop Color="#2B88D8" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Grid Margin="5,15">
+                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,30,0">
+                    <TextBlock x:Name="HeaderTimeText" 
+                               Text="12:34 PM" 
+                               Foreground="White" 
+                               FontWeight="Bold" 
+                               FontSize="36" 
+                               HorizontalAlignment="Right"/>
+                    
+                    <TextBlock x:Name="HeaderDateText" 
+                               Text="Wednesday, Jan 08" 
+                               Foreground="#E0E0E0" 
+                               FontSize="16" 
+                               HorizontalAlignment="Right"
+                               Margin="0,-5,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto" MinWidth="350" MaxWidth="700"/> <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="1" 
+                    Background="White" 
+                    CornerRadius="20" 
+                    Margin="20"
+                    VerticalAlignment="Center"
+                    Padding="30" 
+                    Effect="{StaticResource CardShadow}">
+                
+                <StackPanel>
+<Viewbox MaxHeight="240" MaxWidth="240" Margin="0,0,0,20" HorizontalAlignment="Center">
+    <Grid Height="240" Width="240">
+        <Border CornerRadius="120" BorderBrush="{StaticResource PrimaryColor}" BorderThickness="4">
+            <Border.Background>
+                <SolidColorBrush Color="#FAFAFA"/>
+            </Border.Background>
+            
+            <Grid>
+                <Viewbox x:Name="DefaultUserIcon" 
+                         Width="110" Height="110" 
+                         HorizontalAlignment="Center" 
+                         VerticalAlignment="Center" 
+                         Visibility="Visible">
+                    <Path Fill="#CCCCCC" Data="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </Viewbox>
+
+                <Border CornerRadius="120" ClipToBounds="True">
+                    <Image x:Name="EmployeePhoto" 
+                           Visibility="Collapsed"
+                           Stretch="UniformToFill"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Border x:Name="StatusBadge" 
+                Width="50" Height="50" CornerRadius="25" 
+                Background="{StaticResource SuccessColor}"
+                HorizontalAlignment="Right" 
+                VerticalAlignment="Bottom" 
+                Margin="0,0,15,15" 
+                Visibility="Collapsed">
+             <Path Data="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" 
+                   Fill="White" Stretch="Uniform" Margin="10"/>
+        </Border>
+    </Grid>
+</Viewbox>
+
+                    <StackPanel Margin="0,10,0,30">
+                        <TextBlock x:Name="EmployeeNameText" 
+                                   Text="Waiting for Input..." 
+                                   FontSize="28" 
+                                   FontWeight="Bold" 
+                                   Foreground="{StaticResource TextDark}" 
+                                   HorizontalAlignment="Center"
+                                   TextWrapping="Wrap" 
+                                   TextAlignment="Center"/>
+                        
+                        <TextBlock x:Name="StatusMessage" 
+                                   Text="Please place your finger on the scanner" 
+                                   FontSize="16" 
+                                   Foreground="{StaticResource TextLight}" 
+                                   HorizontalAlignment="Center" 
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"/>
+                    </StackPanel>
+
+                    <Rectangle Height="1" Fill="#F0F0F0" Margin="0,0,0,25"/>
+
+                    <StackPanel HorizontalAlignment="Center">
+                        <Path Data="M17.81,4.47 C17.73,4.47 17.65,4.45 17.58,4.41 C15.66,3.42 14,3 12,3 C10,3 8.33,3.41 6.42,4.4 C6.15,4.54 5.82,4.43 5.68,4.16 C5.54,3.89 5.65,3.56 5.91,3.42 C8.04,2.33 9.92,1.86 12,1.86 C14.09,1.86 15.96,2.33 18.09,3.42 C18.36,3.56 18.47,3.89 18.33,4.16 C18.23,4.36 18.03,4.47 17.81,4.47 Z M12,5.8 C13.1,5.8 14.16,5.92 15.17,6.17 C15.46,6.24 15.64,6.54 15.56,6.83 C15.49,7.12 15.19,7.3 14.9,7.23 C14.03,7.01 13.06,6.9 12,6.9 C9.66,6.9 7.46,7.49 5.25,8.64 C4.99,8.78 4.66,8.68 4.52,8.41 C4.39,8.14 4.49,7.82 4.75,7.68 C7.2,6.41 9.61,5.8 12,5.8 Z M12,9.75 C12.87,9.75 13.72,9.85 14.54,10.05 C14.83,10.12 15.01,10.41 14.94,10.7 C14.87,10.99 14.58,11.17 14.28,11.1 C13.59,10.93 12.83,10.84 12,10.84 C9.66,10.84 7.64,11.5 6.1,12.78 C5.87,12.97 5.53,12.94 5.34,12.71 C5.15,12.48 5.18,12.14 5.41,11.95 C7.13,10.51 9.39,9.75 12,9.75 Z" 
+                              Fill="{StaticResource PrimaryColor}" 
+                              Height="40" Width="40" Stretch="Uniform" Opacity="0.8" Margin="0,0,0,10"/>
+                        
+                        <TextBlock x:Name="InstructionText"
+                                   Text="Ready to scan..." 
+                                   Foreground="{StaticResource PrimaryColor}" 
+                                   FontWeight="SemiBold" 
+                                   FontSize="14"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    
+                    <TextBlock x:Name="CurrentTimeText" Visibility="Collapsed"/>
+                    <TextBlock x:Name="CurrentDateText" Visibility="Collapsed"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <TextBlock Grid.Row="2" 
+                   Text="v1.0" 
+                   FontSize="11" 
+                   Foreground="#9E9E9E" 
+                   HorizontalAlignment="Center" 
+                   Margin="0,0,0,10"/>
+    </Grid>
+</Page>

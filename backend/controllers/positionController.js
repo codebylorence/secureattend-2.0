@@ -56,7 +56,7 @@ export const getAllPositions = async (req, res) => {
 
 export const addPosition = async (req, res) => {
   try {
-    const { name, description, level } = req.body;
+    const { name, description } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: "Position name is required" });
@@ -64,8 +64,7 @@ export const addPosition = async (req, res) => {
 
     const position = await Position.create({
       name,
-      description,
-      level: level || "Entry"
+      description
     });
 
     res.status(201).json(position);
@@ -81,7 +80,7 @@ export const addPosition = async (req, res) => {
 export const updatePosition = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, level, status } = req.body;
+    const { name, description, status } = req.body;
 
     const position = await Position.findByPk(id);
     if (!position) {
@@ -93,7 +92,6 @@ export const updatePosition = async (req, res) => {
     await position.update({
       name: name || position.name,
       description: description !== undefined ? description : position.description,
-      level: level || position.level,
       status: status || position.status
     });
 

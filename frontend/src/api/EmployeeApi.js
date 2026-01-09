@@ -41,3 +41,9 @@ export const getFingerprintStatus = async () => {
   const response = await api.get("/employees/fingerprint-status");
   return response.data;
 };
+
+// Update user credentials (username and password)
+export const updateUserCredentials = async (userId, credentials) => {
+  const response = await api.put(`/users/${userId}/credentials`, credentials);
+  return response.data;
+};

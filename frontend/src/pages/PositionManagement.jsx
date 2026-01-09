@@ -17,11 +17,11 @@ export default function PositionManagement() {
   const [editingPosition, setEditingPosition] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
-    level: 'Entry'
+    description: ''
   });
 
-  const levels = ['Entry', 'Junior', 'Senior', 'Lead', 'Manager', 'Director', 'Executive'];
+  // Debug logging
+  console.log('PositionManagement render - showAddModal:', showAddModal, 'editingPosition:', editingPosition);
 
   useEffect(() => {
     fetchPositions();
@@ -30,22 +30,41 @@ export default function PositionManagement() {
   const fetchPositions = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/positions/all', {
+      console.log('🔍 Fetching positions with token:', token ? 'Token exists' : 'No token');
+      
+      // Try admin endpoint first
+      let response = await fetch('http://localhost:5000/api/positions/all', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
 
+      console.log('📊 Admin endpoint response status:', response.status);
+
+      // If admin endpoint fails due to auth, try public endpoint
+      if (!response.ok && (response.status === 401 || response.status === 403)) {
+        console.log('⚠️ Admin access denied, trying public endpoint...');
+        response = await fetch('http://localhost:5000/api/positions', {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        console.log('📊 Public endpoint response status:', response.status);
+      }
+
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Positions fetched:', data.length, 'positions');
         setPositions(data);
       } else {
-        toast.error('Failed to fetch positions');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ Failed to fetch positions:', response.status, errorData);
+        toast.error(errorData.message || errorData.error || 'Failed to fetch positions');
       }
     } catch (error) {
-      console.error('Error fetching positions:', error);
-      toast.error('Error loading positions');
+      console.error('💥 Error fetching positions:', error);
+      toast.error('Error loading positions: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -82,11 +101,15 @@ export default function PositionManagement() {
         const newPosition = await response.json();
         setPositions(prev => [...prev, { ...newPosition, employeeCount: 0 }]);
         setShowAddModal(false);
-        setFormData({ name: '', description: '', level: 'Entry' });
+        setFormData({ name: '', description: '' });
         toast.success('Position added successfully!');
       } else {
         const data = await response.json();
-        toast.error(data.error || 'Failed to add position');
+        if (response.status === 401 || response.status === 403) {
+          toast.error('You need admin access to add positions');
+        } else {
+          toast.error(data.message || data.error || 'Failed to add position');
+        }
       }
     } catch (error) {
       console.error('Error adding position:', error);
@@ -121,7 +144,7 @@ export default function PositionManagement() {
             : pos
         ));
         setEditingPosition(null);
-        setFormData({ name: '', description: '', level: 'Entry' });
+        setFormData({ name: '', description: '' });
         toast.success('Position updated successfully!');
       } else {
         const data = await response.json();
@@ -170,34 +193,20 @@ export default function PositionManagement() {
     setEditingPosition(position);
     setFormData({
       name: position.name,
-      description: position.description || '',
-      level: position.level
+      description: position.description || ''
     });
   };
 
   const closeModals = () => {
     setShowAddModal(false);
     setEditingPosition(null);
-    setFormData({ name: '', description: '', level: 'Entry' });
+    setFormData({ name: '', description: '' });
   };
 
   const getStatusBadge = (status) => {
     return status === 'Active' 
       ? 'bg-green-100 text-green-800' 
       : 'bg-red-100 text-red-800';
-  };
-
-  const getLevelBadge = (level) => {
-    const colors = {
-      'Entry': 'bg-gray-100 text-gray-800',
-      'Junior': 'bg-blue-100 text-blue-800',
-      'Senior': 'bg-purple-100 text-purple-800',
-      'Lead': 'bg-yellow-100 text-yellow-800',
-      'Manager': 'bg-orange-100 text-orange-800',
-      'Director': 'bg-red-100 text-red-800',
-      'Executive': 'bg-indigo-100 text-indigo-800'
-    };
-    return colors[level] || 'bg-gray-100 text-gray-800';
   };
 
   if (loading) {
@@ -226,10 +235,13 @@ export default function PositionManagement() {
             <h1 className="text-[#374151] text-[21px] font-semibold flex items-center gap-2">
               Positions
             </h1>
-            <p className="text-gray-600 text-sm mt-1">Manage company positions and job levels</p>
+            <p className="text-gray-600 text-sm mt-1">Manage company positions</p>
           </div>
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              console.log('Add Position button clicked');
+              setShowAddModal(true);
+            }}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2"
           >
             <FaPlus />
@@ -260,9 +272,6 @@ export default function PositionManagement() {
                     Position
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Level
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -287,11 +296,6 @@ export default function PositionManagement() {
                           </div>
                         )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelBadge(position.level)}`}>
-                        {position.level}
-                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(position.status)}`}>
@@ -333,8 +337,15 @@ export default function PositionManagement() {
 
       {/* Add Position Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closeModals();
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 relative">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Position</h3>
             
             <form onSubmit={handleAddPosition} className="space-y-4">
@@ -351,22 +362,6 @@ export default function PositionManagement() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter position name"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Level
-                </label>
-                <select
-                  name="level"
-                  value={formData.level}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {levels.map(level => (
-                    <option key={level} value={level}>{level}</option>
-                  ))}
-                </select>
               </div>
 
               <div>
@@ -407,8 +402,15 @@ export default function PositionManagement() {
 
       {/* Edit Position Modal */}
       {editingPosition && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closeModals();
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 relative">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Position</h3>
             
             <form onSubmit={handleEditPosition} className="space-y-4">
@@ -425,22 +427,6 @@ export default function PositionManagement() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter position name"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Level
-                </label>
-                <select
-                  name="level"
-                  value={formData.level}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {levels.map(level => (
-                    <option key={level} value={level}>{level}</option>
-                  ))}
-                </select>
               </div>
 
               <div>

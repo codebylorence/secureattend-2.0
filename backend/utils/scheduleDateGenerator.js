@@ -1,11 +1,13 @@
+import { getCurrentDateInTimezone, getDateInTimezone, getConfiguredTimezone } from "./timezone.js";
+
 /**
- * Generate specific dates for schedule assignments
+ * Generate specific dates for schedule assignments (Rolling/Recurring)
  * @param {Array} days - Array of day names (e.g., ['Monday', 'Wednesday'])
- * @param {Date} startDate - Start date for the schedule
- * @param {Date} endDate - End date for the schedule (optional, defaults to 3 months)
+ * @param {Date} startDate - Start date for the schedule (optional, defaults to today)
+ * @param {Date} endDate - End date for the schedule (optional, defaults to 7 days from start)
  * @returns {Object} - Object with day names as keys and arrays of dates as values
  */
-export function generateScheduleDates(days, startDate, endDate = null) {
+export function generateScheduleDates(days, startDate = null, endDate = null) {
   try {
     const dayNameToNumber = {
       'Sunday': 0,
@@ -23,26 +25,39 @@ export function generateScheduleDates(days, startDate, endDate = null) {
       return {};
     }
 
-    // Helper function to create date in local timezone without UTC conversion
-    const createLocalDate = (dateInput) => {
+    const timezone = getConfiguredTimezone();
+
+    // Helper function to create date in configured timezone
+    const createTimezoneDate = (dateInput) => {
       if (dateInput instanceof Date) {
-        return new Date(dateInput.getFullYear(), dateInput.getMonth(), dateInput.getDate());
+        // Convert to timezone-aware date
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+        const dateStr = formatter.format(dateInput);
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
       }
       // If string, parse as local date (YYYY-MM-DD)
       const [year, month, day] = dateInput.split('-').map(Number);
       return new Date(year, month - 1, day);
     };
 
-    // Ensure startDate is a Date object in local timezone
-    const start = createLocalDate(startDate);
+    // Use current date in configured timezone as start for rolling schedules
+    const start = startDate ? createTimezoneDate(startDate) : (() => {
+      const todayStr = getCurrentDateInTimezone();
+      const [year, month, day] = todayStr.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    })();
+    start.setHours(0, 0, 0, 0);
     
-    // Generate only for the current week (7 days from start date)
-    let end = endDate;
-    if (!end) {
-      end = new Date(start);
+    // Generate for the next 7 days (current week rolling window)
+    const end = endDate ? createTimezoneDate(endDate) : new Date(start);
+    if (!endDate) {
       end.setDate(end.getDate() + 6); // 7 days total (today + 6)
-    } else {
-      end = createLocalDate(endDate);
     }
 
     const scheduleDates = {};
@@ -64,7 +79,7 @@ export function generateScheduleDates(days, startDate, endDate = null) {
 
       // If this day is in the schedule, add the date
       if (days.includes(dayName)) {
-        // Format date as YYYY-MM-DD using local timezone
+        // Format date as YYYY-MM-DD using configured timezone
         const year = currentDate.getFullYear();
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
         const day = String(currentDate.getDate()).padStart(2, '0');
@@ -77,12 +92,32 @@ export function generateScheduleDates(days, startDate, endDate = null) {
       iterations++;
     }
 
-    console.log(`Generated ${Object.values(scheduleDates).flat().length} dates for current week (${days.length} days)`);
+    console.log(`Generated ${Object.values(scheduleDates).flat().length} dates for current week (${days.length} days) in ${timezone}`);
     return scheduleDates;
   } catch (error) {
     console.error("Error generating schedule dates:", error);
     return {};
   }
+}
+
+/**
+ * Generate rolling schedule dates dynamically based on current date
+ * This ensures schedules always show current and upcoming dates
+ * @param {Array} days - Array of day names (e.g., ['Monday', 'Wednesday'])
+ * @returns {Object} - Object with day names as keys and arrays of current week dates as values
+ */
+export function generateRollingScheduleDates(days) {
+  // Use timezone-aware current date
+  const todayStr = getCurrentDateInTimezone();
+  const [year, month, day] = todayStr.split('-').map(Number);
+  const today = new Date(year, month - 1, day);
+  today.setHours(0, 0, 0, 0);
+  
+  // Generate for the next 7 days from today
+  const endDate = new Date(today);
+  endDate.setDate(today.getDate() + 6);
+  
+  return generateScheduleDates(days, today, endDate);
 }
 
 /**
@@ -95,15 +130,17 @@ export function getTodaysSchedule(employeeSchedule) {
     return null;
   }
 
-  // Get today's date in local timezone (YYYY-MM-DD)
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const today = `${year}-${month}-${day}`;
+  // Get today's date in configured timezone (YYYY-MM-DD)
+  const today = getCurrentDateInTimezone();
   
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const todayDayName = dayNames[now.getDay()];
+  // Get today's day name in configured timezone
+  const timezone = getConfiguredTimezone();
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long'
+  });
+  const todayDayName = formatter.format(now);
 
   // Check if today's date is in the schedule
   const todaysDates = employeeSchedule.schedule_dates[todayDayName];

@@ -13,5 +13,5 @@ export default function TeamLeaderLayout() {
         </main>
       </div>
     </div>
-  )
+  );
 }

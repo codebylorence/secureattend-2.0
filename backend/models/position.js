@@ -16,10 +16,6 @@ const Position = sequelize.define("Position", {
     type: DataTypes.TEXT,
     allowNull: true,
   },
-  level: {
-    type: DataTypes.ENUM("Entry", "Junior", "Senior", "Lead", "Manager", "Director", "Executive"),
-    defaultValue: "Entry",
-  },
   status: {
     type: DataTypes.ENUM("Active", "Inactive"),
     defaultValue: "Active",

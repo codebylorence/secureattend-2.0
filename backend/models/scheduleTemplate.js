@@ -78,6 +78,31 @@ const ScheduleTemplate = sequelize.define("ScheduleTemplate", {
     defaultValue: null,
     comment: "Days marked for deletion: ['Monday', 'Tuesday', ...]"
   },
+  is_edited: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+    comment: "True when this draft is an edit of an existing published schedule"
+  },
+  original_template_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: "ID of the original published template that this draft is editing",
+    references: {
+      model: 'schedule_templates',
+      key: 'id'
+    }
+  },
+  edited_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: "Timestamp when the schedule was last edited"
+  },
+  edited_by: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: "Employee ID who last edited the schedule"
+  },
 }, {
   tableName: "schedule_templates",
   timestamps: true,

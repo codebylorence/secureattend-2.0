@@ -1,0 +1,278 @@
+<Page x:Class="BiometricEnrollmentApp.AdminSettingsPage" 
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Admin - Settings"
+      Background="#F6F7F9">
+
+    <Page.Resources>
+        <!-- Button Styles -->
+        <Style TargetType="Button">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="MinWidth" Value="90"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Background" Value="#E5E7EB"/>
+            <Setter Property="Foreground" Value="#111827"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                SnapsToDevicePixels="True"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#D1D5DB"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#2563EB"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,30">
+                <TextBlock Text="System Settings" 
+                           FontSize="24" FontWeight="Bold" 
+                           Foreground="#1E3A8A"
+                           Margin="0,0,0,8"/>
+                <TextBlock Text="Configure system settings and preferences" 
+                           FontSize="14" 
+                           Foreground="#6B7280"/>
+            </StackPanel>
+
+            <!-- Settings Content -->
+            <StackPanel Grid.Row="1">
+                
+                <!-- Device Settings -->
+                <Border Background="White" CornerRadius="12" Padding="20" BorderBrush="#E6E9EE" BorderThickness="1" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="Device Settings" 
+                                   FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1E3A8A" Margin="0,0,0,15"/>
+                        
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Fingerprint Scanner Status" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <TextBlock x:Name="DeviceStatusText" Text="Checking..." Foreground="#6B7280"/>
+                            </StackPanel>
+                            
+                            <Button Grid.Column="1" x:Name="TestDeviceBtn" Content="Test Device" 
+                                    Click="TestDeviceBtn_Click" Style="{StaticResource PrimaryButton}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Server Settings -->
+                <Border Background="White" CornerRadius="12" Padding="20" BorderBrush="#E6E9EE" BorderThickness="1" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="Server Settings" 
+                                   FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1E3A8A" Margin="0,0,0,15"/>
+                        
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Server URL:" VerticalAlignment="Center" Margin="0,0,10,10"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="ServerUrlTextBox" Text="http://localhost:5000" 
+                                     Padding="8" Margin="0,0,10,10"/>
+                            <Button Grid.Row="0" Grid.Column="2" x:Name="TestConnectionBtn" Content="Test Connection" 
+                                    Click="TestConnectionBtn_Click" Style="{StaticResource PrimaryButton}" Margin="0,0,0,10"/>
+                            
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Connection Status:" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="ConnectionStatusText" Text="Not tested" 
+                                       Foreground="#6B7280" VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Database Settings -->
+                <Border Background="White" CornerRadius="12" Padding="20" BorderBrush="#E6E9EE" BorderThickness="1" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="Database Settings" 
+                                   FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1E3A8A" Margin="0,0,0,15"/>
+                        
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="0">
+                                <TextBlock Text="Local Database" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <TextBlock x:Name="DatabaseInfoText" Text="Loading..." Foreground="#6B7280"/>
+                            </StackPanel>
+                            
+                            <Button Grid.Row="0" Grid.Column="1" x:Name="BackupDbBtn" Content="Backup" 
+                                    Click="BackupDbBtn_Click" Margin="0,0,10,0"/>
+                            <Button Grid.Row="0" Grid.Column="2" x:Name="CleanupDbBtn" Content="Cleanup" 
+                                    Click="CleanupDbBtn_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Attendance Settings -->
+                <Border Background="White" CornerRadius="12" Padding="20" BorderBrush="#E6E9EE" BorderThickness="1" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="Attendance Settings" 
+                                   FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1E3A8A" Margin="0,0,0,15"/>
+                        
+                        <!-- Late Threshold -->
+                        <Grid Margin="0,0,0,20">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Late Threshold (minutes):" 
+                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="LateThresholdInput" 
+                                     Padding="8" Margin="0,0,10,0" Text="15"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="(Currently not used - Grace Period controls Present/Late status)" 
+                                       Foreground="#9CA3AF" VerticalAlignment="Center" FontStyle="Italic"/>
+                            
+                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" 
+                                       Text="Note: This setting is preserved for future use but currently the Grace Period setting determines when employees are marked as Late."
+                                       FontSize="12" Foreground="#9CA3AF" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        </Grid>
+                        
+                        <!-- Clock-In Grace Period -->
+                        <Grid Margin="0,0,0,20">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Clock-In Grace Period:" 
+                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="ClockInGraceInput" 
+                                     Padding="8" Margin="0,0,10,0" Text="10"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Minutes before/after scheduled time to still mark as 'Present'" 
+                                       Foreground="#6B7280" VerticalAlignment="Center"/>
+                            
+                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" 
+                                       Text="Example: If set to 10 minutes, employees clocking in between 7:50 AM - 8:10 AM for an 8:00 AM schedule will be marked as 'Present'. After 8:10 AM they will be marked as 'Late'."
+                                       FontSize="12" Foreground="#9CA3AF" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        </Grid>
+                        
+                        <!-- Clock-Out Grace Period -->
+                        <Grid Margin="0,0,0,20">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Clock-Out Grace Period:" 
+                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="ClockOutGraceInput" 
+                                     Padding="8" Margin="0,0,10,0" Text="10"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Minutes after scheduled end time employees can clock out" 
+                                       Foreground="#6B7280" VerticalAlignment="Center"/>
+                            
+                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" 
+                                       Text="Example: If set to 10 minutes, employees can clock out until 5:10 PM for a 5:00 PM end schedule."
+                                       FontSize="12" Foreground="#9CA3AF" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        </Grid>
+                        
+                        <!-- Save Button -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="SaveAttendanceSettingsBtn" Content="💾 Save Attendance Settings" 
+                                    Click="SaveAttendanceSettingsBtn_Click" Style="{StaticResource PrimaryButton}"
+                                    Padding="15,8" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- System Information -->
+                <Border Background="White" CornerRadius="12" Padding="20" BorderBrush="#E6E9EE" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="System Information" 
+                                   FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1E3A8A" Margin="0,0,0,15"/>
+                        
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Application:" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="SecureAttend v1.0" Foreground="#6B7280"/>
+                            
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Build Date:" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="BuildDateText" Text="Loading..." Foreground="#6B7280"/>
+                            
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Database Path:" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DatabasePathText" Text="Loading..." Foreground="#6B7280"/>
+                            
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Last Sync:" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="LastSyncText" Text="Never" Foreground="#6B7280"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

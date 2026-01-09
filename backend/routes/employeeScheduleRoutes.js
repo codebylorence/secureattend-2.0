@@ -11,6 +11,7 @@ import {
   regenerateWeekly,
   getPublishedSchedules,
 } from "../controllers/employeeScheduleController.js";
+import { authenticateToken, requireAdminOrTeamLeader } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -19,10 +20,10 @@ router.get("/published", getPublishedSchedules); // For biometric app
 router.get("/employee/:employee_id", getEmployeeSchedule);
 router.get("/today/:employee_id", getTodaysEmployeeSchedule);
 router.get("/department/:department", getDepartmentSchedules);
-router.post("/assign", assignSchedule);
-router.post("/regenerate-weekly", regenerateWeekly);
-router.put("/:id", editEmployeeSchedule);
-router.delete("/:id/days", removeDaysFromSchedule);
-router.delete("/:id", removeEmployeeSchedule);
+router.post("/assign", authenticateToken, requireAdminOrTeamLeader, assignSchedule);
+router.post("/regenerate-weekly", authenticateToken, requireAdminOrTeamLeader, regenerateWeekly);
+router.put("/:id", authenticateToken, requireAdminOrTeamLeader, editEmployeeSchedule);
+router.delete("/:id/days", authenticateToken, requireAdminOrTeamLeader, removeDaysFromSchedule);
+router.delete("/:id", authenticateToken, requireAdminOrTeamLeader, removeEmployeeSchedule);
 
 export default router;

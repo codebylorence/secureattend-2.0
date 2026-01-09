@@ -5,6 +5,8 @@ import { MdDelete } from "react-icons/md";
 import { FaFingerprint } from "react-icons/fa";
 import { deleteEmployee } from "../api/EmployeeApi";
 import EditEmployeeModal from "./EditEmployeeModal";
+import { toast } from 'react-toastify';
+import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
 export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -13,14 +15,25 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
     if (window.confirm("Are you sure you want to delete this employee?")) {
       try {
         console.log(`Attempting to delete employee with ID: ${id}`);
+        
+        // Check if the employee being deleted is a Team Leader
+        const isTeamLeader = employee.position === "Team Leader";
+        
         const result = await deleteEmployee(id);
         console.log("Delete result:", result);
-        alert("Employee deleted successfully!");
+        toast.success("Employee deleted successfully!");
+        
+        // If a team leader was deleted, notify team leader update
+        if (isTeamLeader) {
+          console.log('🔄 Team Leader deleted, notifying team leader update');
+          teamLeaderEventManager.notifyTeamLeaderUpdate();
+        }
+        
         onDeleted();
       } catch (error) {
         console.error("Error deleting employee:", error);
         console.error("Error details:", error.response?.data || error.message);
-        alert(`Failed to delete employee: ${error.response?.data?.message || error.message}`);
+        toast.error(`Failed to delete employee: ${error.response?.data?.message || error.message}`);
       }
     }
   };

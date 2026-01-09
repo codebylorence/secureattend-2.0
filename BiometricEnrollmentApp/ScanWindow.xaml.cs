@@ -41,16 +41,16 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                var now = DateTime.Now;
+                var now = TimezoneHelper.Now;
                 if (ClockText != null)
                 {
-                    ClockText.Text = now.ToString("hh:mm:ss tt");
+                    ClockText.Text = now.ToString("HH:mm:ss");
                 }
                 if (DateText != null)
                 {
                     DateText.Text = now.ToString("MMMM dd, yyyy");
                 }
-                LogHelper.Write($"🕐 Clock updated: {now:hh:mm:ss tt}");
+                LogHelper.Write($"🕐 Clock updated: {now:HH:mm:ss}");
             }
             catch (Exception ex)
             {

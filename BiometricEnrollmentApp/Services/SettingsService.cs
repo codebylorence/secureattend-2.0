@@ -36,6 +36,19 @@ namespace BiometricEnrollmentApp.Services
                     VALUES ('late_threshold_minutes', '15');
                 ";
                 cmd.ExecuteNonQuery();
+
+                // Set default grace periods if not exists
+                cmd.CommandText = @"
+                    INSERT OR IGNORE INTO Settings (key, value)
+                    VALUES ('clock_in_grace_period_minutes', '10');
+                ";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = @"
+                    INSERT OR IGNORE INTO Settings (key, value)
+                    VALUES ('clock_out_grace_period_minutes', '10');
+                ";
+                cmd.ExecuteNonQuery();
             }
             catch (Exception ex)
             {
@@ -87,6 +100,102 @@ namespace BiometricEnrollmentApp.Services
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Error setting late threshold: {ex.Message}");
+                return false;
+            }
+        }
+
+        public int GetClockInGracePeriodMinutes()
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT value FROM Settings WHERE key = 'clock_in_grace_period_minutes'";
+                
+                var result = cmd.ExecuteScalar();
+                if (result != null && int.TryParse(result.ToString(), out int minutes))
+                {
+                    return minutes;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting clock-in grace period: {ex.Message}");
+            }
+
+            return 10; // Default to 10 minutes
+        }
+
+        public bool SetClockInGracePeriodMinutes(int minutes)
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT OR REPLACE INTO Settings (key, value)
+                    VALUES ('clock_in_grace_period_minutes', $value);
+                ";
+                cmd.Parameters.AddWithValue("$value", minutes.ToString());
+                
+                cmd.ExecuteNonQuery();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error setting clock-in grace period: {ex.Message}");
+                return false;
+            }
+        }
+
+        public int GetClockOutGracePeriodMinutes()
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT value FROM Settings WHERE key = 'clock_out_grace_period_minutes'";
+                
+                var result = cmd.ExecuteScalar();
+                if (result != null && int.TryParse(result.ToString(), out int minutes))
+                {
+                    return minutes;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting clock-out grace period: {ex.Message}");
+            }
+
+            return 10; // Default to 10 minutes
+        }
+
+        public bool SetClockOutGracePeriodMinutes(int minutes)
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT OR REPLACE INTO Settings (key, value)
+                    VALUES ('clock_out_grace_period_minutes', $value);
+                ";
+                cmd.Parameters.AddWithValue("$value", minutes.ToString());
+                
+                cmd.ExecuteNonQuery();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error setting clock-out grace period: {ex.Message}");
                 return false;
             }
         }

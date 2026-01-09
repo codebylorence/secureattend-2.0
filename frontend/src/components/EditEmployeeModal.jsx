@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { updateEmployee } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
+import { toast } from 'react-toastify';
+import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
 export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated }) {
   const [formData, setFormData] = useState({
@@ -104,13 +106,26 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Check if position is changing to/from Team Leader
+      const oldPosition = employee.position;
+      const newPosition = formData.position;
+      const isTeamLeaderChange = (oldPosition === "Team Leader" && newPosition !== "Team Leader") ||
+                                (oldPosition !== "Team Leader" && newPosition === "Team Leader");
+
       await updateEmployee(employee.id, formData);
-      alert("Employee updated successfully!");
+      toast.success("Employee updated successfully!");
+      
+      // If position changed to/from Team Leader, notify team leader update
+      if (isTeamLeaderChange) {
+        console.log('🔄 Position changed to/from Team Leader, notifying team leader update');
+        teamLeaderEventManager.notifyTeamLeaderUpdate();
+      }
+      
       onUpdated();
       onClose();
     } catch (error) {
       console.error("Error updating employee:", error);
-      alert("Failed to update employee");
+      toast.error("Failed to update employee");
     }
   };
 

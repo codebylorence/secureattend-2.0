@@ -5,6 +5,11 @@ import AddDeptButton from "../components/AddDeptButton";
 
 export default function Departments() {
   const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Get user role from localStorage
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = user.role;
+  const isSupervisor = userRole === "supervisor";
 
   const handleDepartmentAdded = () => {
     setRefreshKey(prev => prev + 1);
@@ -15,7 +20,7 @@ export default function Departments() {
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
         <h1 className="text-[#374151] text-[21px] font-semibold">
-          Departments
+          {isSupervisor ? "Departments (View Only)" : "Departments"}
         </h1>
       </div>
 
@@ -25,12 +30,15 @@ export default function Departments() {
           <DropdownZone />
         </div>
 
-        <div className="flex">
-          <AddDeptButton onDepartmentAdded={handleDepartmentAdded} />
-        </div>
+        {/* Only show Add button for admin */}
+        {!isSupervisor && (
+          <div className="flex">
+            <AddDeptButton onDepartmentAdded={handleDepartmentAdded} />
+          </div>
+        )}
       </div>
 
-      <ManageDepartment key={refreshKey} />
+      <ManageDepartment key={refreshKey} supervisorView={isSupervisor} refreshTrigger={refreshKey} />
     </div>
   );
 }

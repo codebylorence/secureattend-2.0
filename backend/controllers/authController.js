@@ -20,14 +20,14 @@ export const loginUser = async (req, res) => {
 
 export const updateCredentials = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, currentPassword } = req.body;
     const { id } = req.params;
 
-    const result = await changeUserCredentials(id, username, password);
+    const result = await changeUserCredentials(id, username, password, currentPassword);
     res.json(result);
   } catch (error) {
     console.error("Error updating credentials:", error);
-    res.status(500).json({ message: "Error updating credentials" });
+    res.status(400).json({ message: error.message || "Error updating credentials" });
   }
 };
 

@@ -1,15 +1,43 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { fetchDepartments } from "../api/DepartmentApi";
 
 export default function DropdownZone() {
+  const [departments, setDepartments] = useState([]);
+  const [selectedZone, setSelectedZone] = useState("All Zone");
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        // Check if user is authenticated before making the request
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.log('🏢 DropdownZone: No token found, skipping department fetch');
+          return;
+        }
+        
+        const data = await fetchDepartments();
+        setDepartments(data);
+      } catch (error) {
+        console.error("Error fetching departments:", error);
+      }
+    };
+
+    loadDepartments();
+  }, []);
+
   return (
     <div className="inline-flex items-center border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700">
       <select
         className="bg-transparent focus:outline-none appearance-none pr-6"
-        defaultValue="Zone A"
+        value={selectedZone}
+        onChange={(e) => setSelectedZone(e.target.value)}
       >
-        <option>Zone A</option>
-        <option>Zone B</option>
-        <option>Zone C</option>
+        <option value="All Zone">All Zone</option>
+        {departments.map((dept) => (
+          <option key={dept.id} value={dept.name}>
+            {dept.name}
+          </option>
+        ))}
       </select>
 
       {/* Down arrow icon */}

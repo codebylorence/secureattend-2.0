@@ -1,4 +1,6 @@
 import Attendance from "../models/attendance.js";
+import EmployeeSchedule from "../models/employeeSchedule.js";
+import Employee from "../models/employee.js";
 import { Op } from "sequelize";
 
 /**
@@ -71,6 +73,75 @@ export const cleanupAllAbsences = async (req, res) => {
     console.error("Error cleaning up all absences:", error);
     res.status(500).json({
       message: "Failed to cleanup absences",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * POST /api/cleanup/orphaned-data
+ * Remove orphaned attendance records and schedules from deleted employees
+ */
+export const cleanupOrphanedData = async (req, res) => {
+  try {
+    // Get all existing employee IDs
+    const existingEmployees = await Employee.findAll({
+      attributes: ['employee_id']
+    });
+    const existingEmployeeIds = existingEmployees.map(emp => emp.employee_id);
+    
+    console.log(`🔍 Found ${existingEmployeeIds.length} existing employees`);
+    
+    // Find orphaned attendance records
+    const orphanedAttendance = await Attendance.findAll({
+      where: {
+        employee_id: {
+          [Op.notIn]: existingEmployeeIds
+        }
+      }
+    });
+    
+    // Find orphaned schedules
+    const orphanedSchedules = await EmployeeSchedule.findAll({
+      where: {
+        employee_id: {
+          [Op.notIn]: existingEmployeeIds
+        }
+      }
+    });
+    
+    console.log(`🔍 Found ${orphanedAttendance.length} orphaned attendance records`);
+    console.log(`🔍 Found ${orphanedSchedules.length} orphaned schedule records`);
+    
+    // Delete orphaned data
+    const deletedAttendance = await Attendance.destroy({
+      where: {
+        employee_id: {
+          [Op.notIn]: existingEmployeeIds
+        }
+      }
+    });
+    
+    const deletedSchedules = await EmployeeSchedule.destroy({
+      where: {
+        employee_id: {
+          [Op.notIn]: existingEmployeeIds
+        }
+      }
+    });
+    
+    console.log(`🗑️ Deleted ${deletedAttendance} orphaned attendance records`);
+    console.log(`🗑️ Deleted ${deletedSchedules} orphaned schedule records`);
+    
+    res.status(200).json({
+      message: `Cleaned ${deletedAttendance} attendance records and ${deletedSchedules} schedule records`,
+      deletedAttendance,
+      deletedSchedules
+    });
+  } catch (error) {
+    console.error("Error cleaning up orphaned data:", error);
+    res.status(500).json({
+      message: "Failed to cleanup orphaned data",
       error: error.message
     });
   }

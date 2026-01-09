@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa6";
-import { getTodayAttendances } from "../api/AttendanceApi";
-import { fetchEmployees } from "../api/EmployeeApi";
+import { getTodayAttendances, getAttendances } from "../api/AttendanceApi";
 
-export default function TeamTodaysAttend({ department }) {
+export default function TeamTodaysAttend({ department, statusFilter, searchTerm }) {
   const [attendances, setAttendances] = useState([]);
-  const [employees, setEmployees] = useState({});
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -27,27 +25,20 @@ export default function TeamTodaysAttend({ department }) {
 
   const fetchData = async () => {
     try {
-      const [attendanceData, employeeData] = await Promise.all([
-        getTodayAttendances(),
-        fetchEmployees()
-      ]);
-      
-      // Filter employees by department
-      const departmentEmployees = employeeData.filter(emp => emp.department === department);
-      const departmentEmployeeIds = new Set(departmentEmployees.map(emp => emp.employee_id));
+      // Use getTodayAttendances for more reliable today's data
+      const attendanceData = await getTodayAttendances();
       
       // Filter attendances to only show employees from this department
+      // Include team leaders in the attendance list
       const filteredAttendances = attendanceData.filter(att => 
-        departmentEmployeeIds.has(att.employee_id)
+        att.department === department
       );
       
-      const employeeMap = {};
-      departmentEmployees.forEach(emp => {
-        employeeMap[emp.employee_id] = emp;
-      });
+      console.log(`📊 Team Dashboard - Department: ${department}`);
+      console.log(`📊 Total attendances today: ${attendanceData.length}`);
+      console.log(`📊 Filtered attendances: ${filteredAttendances.length}`);
       
       setAttendances(filteredAttendances);
-      setEmployees(employeeMap);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -58,8 +49,28 @@ export default function TeamTodaysAttend({ department }) {
   const formatTime = (dateString) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
+
+  // Apply additional filters (status and search)
+  const filteredAttendances = attendances.filter(attendance => {
+    // Status filter
+    if (statusFilter && attendance.status !== statusFilter) {
+      return false;
+    }
+    
+    // Search term filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const nameMatch = attendance.employee_name?.toLowerCase().includes(searchLower);
+      const idMatch = attendance.employee_id?.toLowerCase().includes(searchLower);
+      if (!nameMatch && !idMatch) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
 
 
 
@@ -94,7 +105,7 @@ export default function TeamTodaysAttend({ department }) {
                   <tr>
                     <td colSpan="5" className="px-6 py-4 text-center text-gray-500">Loading...</td>
                   </tr>
-                ) : attendances.length === 0 ? (
+                ) : filteredAttendances.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="px-6 py-4 text-center text-gray-500">No attendance records for today</td>
                   </tr>
@@ -102,12 +113,10 @@ export default function TeamTodaysAttend({ department }) {
                   (() => {
                     const startIndex = (currentPage - 1) * itemsPerPage;
                     const endIndex = startIndex + itemsPerPage;
-                    const paginatedAttendances = attendances.slice(startIndex, endIndex);
-                    return paginatedAttendances.map((attendance) => {
-                    const employee = employees[attendance.employee_id] || {};
-                    return (
+                    const paginatedAttendances = filteredAttendances.slice(startIndex, endIndex);
+                    return paginatedAttendances.map((attendance) => (
                       <tr key={attendance.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{employee.fullname || attendance.employee_id}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{attendance.employee_name || attendance.employee_id}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_in)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_out)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -131,8 +140,7 @@ export default function TeamTodaysAttend({ department }) {
                           })()}
                         </td>
                       </tr>
-                    );
-                  })
+                    ));
                 })()
                 )}
               </tbody>
@@ -140,7 +148,7 @@ export default function TeamTodaysAttend({ department }) {
           </div>
           
           {/* Pagination */}
-          {attendances.length > itemsPerPage && (
+          {filteredAttendances.length > itemsPerPage && (
             <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-700">Show</span>
@@ -162,8 +170,8 @@ export default function TeamTodaysAttend({ department }) {
               
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-700">
-                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, attendances.length)} to{' '}
-                  {Math.min(currentPage * itemsPerPage, attendances.length)} of {attendances.length} entries
+                  Showing {Math.min((currentPage - 1) * itemsPerPage + 1, filteredAttendances.length)} to{' '}
+                  {Math.min(currentPage * itemsPerPage, filteredAttendances.length)} of {filteredAttendances.length} entries
                 </span>
                 
                 <div className="flex gap-1">
@@ -176,7 +184,7 @@ export default function TeamTodaysAttend({ department }) {
                   </button>
                   
                   {(() => {
-                    const totalPages = Math.ceil(attendances.length / itemsPerPage);
+                    const totalPages = Math.ceil(filteredAttendances.length / itemsPerPage);
                     const pages = [];
                     const startPage = Math.max(1, currentPage - 2);
                     const endPage = Math.min(totalPages, startPage + 4);
@@ -200,8 +208,8 @@ export default function TeamTodaysAttend({ department }) {
                   })()}
                   
                   <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(attendances.length / itemsPerPage)))}
-                    disabled={currentPage === Math.ceil(attendances.length / itemsPerPage)}
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredAttendances.length / itemsPerPage)))}
+                    disabled={currentPage === Math.ceil(filteredAttendances.length / itemsPerPage)}
                     className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next

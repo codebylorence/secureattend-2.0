@@ -1,10 +1,32 @@
 import EmployeeSchedule from "../models/employeeSchedule.js";
 import ScheduleTemplate from "../models/scheduleTemplate.js";
 import Employee from "../models/employee.js";
-import { generateScheduleDates } from "../utils/scheduleDateGenerator.js";
+import { generateScheduleDates, generateRollingScheduleDates } from "../utils/scheduleDateGenerator.js";
+
+export const getScheduleById = async (id) => {
+  const schedule = await EmployeeSchedule.findByPk(id, {
+    include: [
+      {
+        model: ScheduleTemplate,
+        as: "template",
+      },
+      {
+        model: Employee,
+        as: "employee",
+      },
+    ],
+  });
+
+  if (!schedule) return null;
+
+  return {
+    ...schedule.toJSON(),
+    schedule_dates: generateRollingScheduleDates(schedule.days)
+  };
+};
 
 export const getAllEmployeeSchedules = async () => {
-  return await EmployeeSchedule.findAll({
+  const schedules = await EmployeeSchedule.findAll({
     include: [
       {
         model: ScheduleTemplate,
@@ -17,10 +39,16 @@ export const getAllEmployeeSchedules = async () => {
     ],
     order: [["createdAt", "DESC"]],
   });
+
+  // Generate rolling schedule dates for each schedule
+  return schedules.map(schedule => ({
+    ...schedule.toJSON(),
+    schedule_dates: generateRollingScheduleDates(schedule.days)
+  }));
 };
 
 export const getSchedulesByEmployeeId = async (employee_id) => {
-  return await EmployeeSchedule.findAll({
+  const schedules = await EmployeeSchedule.findAll({
     where: { employee_id },
     include: [
       {
@@ -29,10 +57,16 @@ export const getSchedulesByEmployeeId = async (employee_id) => {
       },
     ],
   });
+
+  // Generate rolling schedule dates for each schedule
+  return schedules.map(schedule => ({
+    ...schedule.toJSON(),
+    schedule_dates: generateRollingScheduleDates(schedule.days)
+  }));
 };
 
 export const getSchedulesByDepartment = async (department) => {
-  return await EmployeeSchedule.findAll({
+  const schedules = await EmployeeSchedule.findAll({
     include: [
       {
         model: ScheduleTemplate,
@@ -45,21 +79,30 @@ export const getSchedulesByDepartment = async (department) => {
       },
     ],
   });
+
+  // Generate rolling schedule dates for each schedule
+  return schedules.map(schedule => ({
+    ...schedule.toJSON(),
+    schedule_dates: generateRollingScheduleDates(schedule.days)
+  }));
 };
 
 export const assignScheduleToEmployee = async (scheduleData) => {
   const { employee_id, template_id, days, start_date, end_date } = scheduleData;
 
-  // Generate schedule dates
-  const scheduleDates = generateScheduleDates(
-    days,
-    new Date(start_date),
-    new Date(end_date)
-  );
+  // For new assignments, use rolling schedule dates (current week)
+  // This ensures schedules are always current and don't rely on static dates
+  const scheduleDates = generateRollingScheduleDates(days);
+
+  // Set start_date to today and end_date to null (ongoing/rolling)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   return await EmployeeSchedule.create({
     ...scheduleData,
     schedule_dates: scheduleDates,
+    start_date: today,
+    end_date: null, // Rolling schedules are ongoing
   });
 };
 
@@ -67,18 +110,18 @@ export const updateEmployeeSchedule = async (id, updates) => {
   const schedule = await EmployeeSchedule.findByPk(id);
   if (!schedule) return null;
 
-  // Regenerate schedule dates if days or date range changed
-  if (updates.days || updates.start_date || updates.end_date) {
-    const days = updates.days || schedule.days;
-    const start_date = updates.start_date || schedule.start_date;
-    const end_date = updates.end_date || schedule.end_date;
-
-    updates.schedule_dates = generateScheduleDates(
-      days,
-      new Date(start_date),
-      new Date(end_date)
-    );
+  // For rolling schedules, always regenerate current week dates
+  if (updates.days) {
+    updates.schedule_dates = generateRollingScheduleDates(updates.days);
+  } else {
+    // If days didn't change, still regenerate to ensure current dates
+    updates.schedule_dates = generateRollingScheduleDates(schedule.days);
   }
+
+  // Keep rolling schedule properties
+  updates.start_date = new Date();
+  updates.start_date.setHours(0, 0, 0, 0);
+  updates.end_date = null; // Rolling schedules are ongoing
 
   await schedule.update(updates);
   return schedule;
@@ -105,16 +148,14 @@ export const removeSpecificDays = async (id, daysToRemove) => {
     return null;
   }
 
-  // Update with remaining days
-  const scheduleDates = generateScheduleDates(
-    remainingDays,
-    new Date(schedule.start_date),
-    new Date(schedule.end_date)
-  );
+  // Update with remaining days using rolling schedule dates
+  const scheduleDates = generateRollingScheduleDates(remainingDays);
 
   await schedule.update({
     days: remainingDays,
     schedule_dates: scheduleDates,
+    start_date: new Date(),
+    end_date: null, // Rolling schedules are ongoing
   });
 
   return schedule;
@@ -125,17 +166,15 @@ export const regenerateWeeklySchedules = async () => {
 
   let count = 0;
   for (const schedule of schedules) {
+    // Regenerate rolling schedule dates for current week
+    const scheduleDates = generateRollingScheduleDates(schedule.days);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const nextWeek = new Date(today);
-    nextWeek.setDate(today.getDate() + 6);
-
-    const scheduleDates = generateScheduleDates(schedule.days, today, nextWeek);
 
     await schedule.update({
       schedule_dates: scheduleDates,
       start_date: today,
-      end_date: nextWeek,
+      end_date: null, // Rolling schedules are ongoing
     });
 
     count++;

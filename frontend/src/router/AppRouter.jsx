@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "../components/PrivateRoute";
 import AdminLayout from "../layouts/AdminLayout";
-import AdminDashboard from "../pages/adminDashboard";
+import AdminDashboard from "../pages/AdminDashboard";
+import SupervisorDashboard from "../pages/SupervisorDashboard";
 import Login from "../pages/Login";
 import Employees from "../pages/Employees";
 import EmployeeLayout from "../layouts/EmployeeLayout";
@@ -22,13 +23,27 @@ import EmployeeRegistration from "../pages/EmployeeRegistration";
 import RegistrationStatus from "../pages/RegistrationStatus";
 import RegistrationManagement from "../pages/RegistrationManagement";
 import CheckRegistrationStatus from "../pages/CheckRegistrationStatus";
-import PositionManagement from "../pages/PositionManagement";
+import PositionManagement from "../pages/PositionManagementNew";
 import AttendanceReports from "../pages/AttendanceReports";
 
 // Component to redirect logged-in users away from login page
 function LoginRedirect() {
   const token = localStorage.getItem("token");
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userStr = localStorage.getItem("user");
+  
+  // Check if we have valid authentication data
+  let user = {};
+  try {
+    user = userStr ? JSON.parse(userStr) : {};
+  } catch (error) {
+    console.error("Error parsing user data:", error);
+    // Clear corrupted data
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+    localStorage.removeItem("username");
+  }
+  
   const isAuthenticated = !!token && !!user.role;
 
   if (isAuthenticated) {
@@ -36,11 +51,18 @@ function LoginRedirect() {
     switch (user.role) {
       case "admin":
         return <Navigate to="/admin/dashboard" replace />;
+      case "supervisor":
+        return <Navigate to="/admin/dashboard" replace />;
       case "teamleader":
         return <Navigate to="/team/dashboard" replace />;
       case "employee":
         return <Navigate to="/employee/dashboard" replace />;
       default:
+        // Invalid role, clear data and show login
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        localStorage.removeItem("role");
+        localStorage.removeItem("username");
         return <Login />;
     }
   }
@@ -54,24 +76,35 @@ export default function AppRouter() {
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<LoginRedirect />} />
+        <Route path="/login" element={<LoginRedirect />} />
         <Route path="/register" element={<EmployeeRegistration />} />
         <Route path="/check-status" element={<CheckRegistrationStatus />} />
         <Route path="/registration-status/:employee_id" element={<RegistrationStatus />} />
 
-        {/* Admin Routes - Protected */}
-        <Route element={<PrivateRoute allowedRole="admin" />}>
+        {/* Admin Routes - Protected (Admin and Supervisor) */}
+        <Route element={<PrivateRoute allowedRole={["admin", "supervisor"]} />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/employees" element={<Employees />} />
             <Route path="/admin/schedule" element={<ManageSchedule />} />
             <Route path="/admin/view-schedules" element={<ViewSchedules />} />
             <Route path="/admin/attendance" element={<EmployeeAttendance />} />
-
-            <Route path="/admin/attendance-reports" element={<AttendanceReports />} />
             <Route path="/admin/departments" element={<Departments />} />
-            <Route path="/admin/positions" element={<PositionManagement />} />
-            <Route path="/admin/registrations" element={<RegistrationManagement />} />
-            <Route path="/admin/settings" element={<Settings />} />
+            
+            {/* Supervisor personal routes within AdminLayout */}
+            <Route path="/supervisor/mydashboard" element={<SupervisorDashboard />} />
+            <Route path="/supervisor/myattendance" element={<MyAttendance />} />
+            <Route path="/supervisor/myschedule" element={<MySchedule />} />
+            <Route path="/supervisor/profile" element={<Profile />} />
+            
+            {/* Admin-only routes */}
+            <Route element={<PrivateRoute allowedRole="admin" />}>
+              <Route path="/admin/attendance-reports" element={<AttendanceReports />} />
+              <Route path="/admin/positions" element={<PositionManagement />} />
+              <Route path="/admin/registrations" element={<RegistrationManagement />} />
+              <Route path="/admin/settings" element={<Settings />} />
+            </Route>
+            
             <Route path="/admin/profile" element={<Profile />} />
           </Route>
         </Route>

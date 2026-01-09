@@ -26,7 +26,8 @@ const EmployeeScheduleCalendar = () => {
       // Fetch employee schedules (includes template data via join)
       const employeeSchedules = await getEmployeeScheduleById(employeeId);
       
-      // Show only the employee's assigned schedules (no templates)
+      // Show all assigned schedules - they will be filtered dynamically in generateCalendarEvents
+      // This allows for recurring schedules that continue to update as weeks progress
       setSchedules(employeeSchedules);
       generateCalendarEvents(employeeSchedules);
     } catch (error) {
@@ -39,7 +40,7 @@ const EmployeeScheduleCalendar = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Set to start of today
     
-    // Calculate 7 days from today
+    // Calculate 7 days from today for the rolling window
     const sevenDaysLater = new Date(today);
     sevenDaysLater.setDate(today.getDate() + 6); // +6 because today counts as day 1
     
@@ -53,6 +54,42 @@ const EmployeeScheduleCalendar = () => {
     const endMonth = String(sevenDaysLater.getMonth() + 1).padStart(2, '0');
     const endDay = String(sevenDaysLater.getDate()).padStart(2, '0');
     const sevenDaysStr = `${endYear}-${endMonth}-${endDay}`;
+
+    // Helper function to check if a shift should be displayed
+    const isCurrentOrFutureShift = (dateStr, startTime, endTime) => {
+      const currentDate = new Date();
+      const shiftDate = new Date(dateStr);
+      
+      // Exclude any dates from previous years
+      if (shiftDate.getFullYear() < currentDate.getFullYear()) {
+        return false;
+      }
+      
+      // If it's a future date, always include
+      if (shiftDate > currentDate) return true;
+      
+      // If it's today, show the schedule until the end of the day (not when shift ends)
+      if (dateStr === todayStr) {
+        return true; // Always show today's schedule until day ends
+      }
+      
+      // For past dates, don't show them (only show today and future)
+      return false;
+    };
+
+    // Helper function to parse time (same as in TeamSchedule.jsx)
+    const parseTime = (timeStr) => {
+      const [time, period] = timeStr.split(" ");
+      let [hours, minutes] = time.split(":").map(Number);
+      
+      if (period === "PM" && hours !== 12) {
+        hours += 12;
+      } else if (period === "AM" && hours === 12) {
+        hours = 0;
+      }
+      
+      return hours * 60 + minutes;
+    };
     
     scheduleData.forEach((schedule) => {
       // Skip if no template (shouldn't happen with new structure)
@@ -60,70 +97,43 @@ const EmployeeScheduleCalendar = () => {
       
       const template = schedule.template;
       
-      // Use schedule_dates if available (new structure)
-      if (schedule.schedule_dates) {
-        // Iterate through each day and its dates
-        Object.entries(schedule.schedule_dates).forEach(([dayName, dates]) => {
-          dates.forEach(dateStr => {
-            // Only show dates within the next 7 days (today to today+6)
-            if (dateStr < todayStr || dateStr > sevenDaysStr) return;
-            
-            const startTime = convertTo24Hour(template.start_time);
-            const endTime = convertTo24Hour(template.end_time);
-            
-            calendarEvents.push({
-              title: template.shift_name,
-              start: `${dateStr}T${startTime}`,
-              end: `${dateStr}T${endTime}`,
-              backgroundColor: getShiftColor(template.shift_name),
-              borderColor: getShiftColor(template.shift_name),
-              textColor: "white",
-              extendedProps: {
-                shiftName: template.shift_name,
-                startTime: template.start_time,
-                endTime: template.end_time,
-                department: template.department,
-                dayName: dayName,
-                scheduleDate: dateStr
-              }
-            });
-          });
-        });
-      } else {
-        // Fallback: generate for next 7 days based on days array
-        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      // Always generate recurring dates based on the days array for rolling schedules
+      // This ensures schedules continue to update as weeks progress
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      
+      for (let dayOffset = 0; dayOffset <= 6; dayOffset++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + dayOffset);
         
-        for (let dayOffset = 0; dayOffset <= 6; dayOffset++) {
-          const date = new Date(today);
-          date.setDate(today.getDate() + dayOffset);
+        const dayName = dayNames[date.getDay()];
+        
+        if (schedule.days.includes(dayName)) {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const dateStr = `${year}-${month}-${day}`;
           
-          const dayName = dayNames[date.getDay()];
+          // Only show current/future shifts
+          if (!isCurrentOrFutureShift(dateStr, template.start_time, template.end_time)) return;
           
-          if (schedule.days.includes(dayName)) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const dateStr = `${year}-${month}-${day}`;
-            
-            const startTime = convertTo24Hour(template.start_time);
-            const endTime = convertTo24Hour(template.end_time);
-            
-            calendarEvents.push({
-              title: template.shift_name,
-              start: `${dateStr}T${startTime}`,
-              end: `${dateStr}T${endTime}`,
-              backgroundColor: getShiftColor(template.shift_name),
-              borderColor: getShiftColor(template.shift_name),
-              textColor: "white",
-              extendedProps: {
-                shiftName: template.shift_name,
-                startTime: template.start_time,
-                endTime: template.end_time,
-                department: template.department,
-                dayName: dayName
-              }
-            });
-          }
+          const startTime = convertTo24Hour(template.start_time);
+          const endTime = convertTo24Hour(template.end_time);
+          
+          calendarEvents.push({
+            title: template.shift_name,
+            start: `${dateStr}T${startTime}`,
+            end: `${dateStr}T${endTime}`,
+            backgroundColor: getShiftColor(template.shift_name),
+            borderColor: getShiftColor(template.shift_name),
+            textColor: "white",
+            extendedProps: {
+              shiftName: template.shift_name,
+              startTime: template.start_time,
+              endTime: template.end_time,
+              department: template.department,
+              dayName: dayName
+            }
+          });
         }
       }
     });
@@ -251,6 +261,45 @@ const EmployeeScheduleCalendar = () => {
               {schedules.map((schedule, index) => {
                 const displayData = schedule.template;
                 
+                // Generate current week dates for display
+                const today = new Date();
+                const currentWeekDates = [];
+                
+                // Find the next occurrence of each scheduled day
+                const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                
+                schedule.days.forEach(dayName => {
+                  const dayIndex = dayNames.indexOf(dayName);
+                  const todayIndex = today.getDay();
+                  
+                  // Calculate days until next occurrence
+                  let daysUntil = dayIndex - todayIndex;
+                  if (daysUntil < 0) {
+                    daysUntil += 7; // Next week
+                  }
+                  
+                  const nextDate = new Date(today);
+                  nextDate.setDate(today.getDate() + daysUntil);
+                  
+                  currentWeekDates.push({
+                    day: dayName,
+                    date: nextDate.toLocaleDateString('en-GB', { 
+                      day: '2-digit', 
+                      month: '2-digit', 
+                      year: 'numeric' 
+                    })
+                  });
+                });
+                
+                // Sort by day order
+                currentWeekDates.sort((a, b) => {
+                  return dayNames.indexOf(a.day) - dayNames.indexOf(b.day);
+                });
+                
+                const dateRange = currentWeekDates.length > 0 
+                  ? `${currentWeekDates[0].date} - ${currentWeekDates[currentWeekDates.length - 1].date}`
+                  : 'Ongoing';
+                
                 return (
                   <div key={index} className="rounded-md px-3 py-2 text-sm bg-green-100 border border-green-300">
                     <span className="font-medium">{displayData.shift_name}</span>
@@ -260,11 +309,9 @@ const EmployeeScheduleCalendar = () => {
                     <span className="text-gray-500 ml-2">
                       ({schedule.days.join(', ')})
                     </span>
-                    {schedule.start_date && (
-                      <span className="text-purple-600 ml-2 text-xs">
-                        [{new Date(schedule.start_date).toLocaleDateString()} - {schedule.end_date ? new Date(schedule.end_date).toLocaleDateString() : 'Ongoing'}]
-                      </span>
-                    )}
+                    <span className="text-purple-600 ml-2 text-xs">
+                      [{dateRange}]
+                    </span>
                   </div>
                 );
               })}
@@ -285,9 +332,9 @@ const EmployeeScheduleCalendar = () => {
               eventDisplay="block"
               displayEventTime={true}
               eventTimeFormat={{
-                hour: 'numeric',
+                hour: '2-digit',
                 minute: '2-digit',
-                meridiem: 'short'
+                hour12: false
               }}
               slotMinTime="06:00:00"
               slotMaxTime="24:00:00"

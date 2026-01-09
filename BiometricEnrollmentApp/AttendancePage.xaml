@@ -2,7 +2,7 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Title="Attendance"
-      Background="#F6F7F9">
+      Background="#F0F0F0">
 
     <Page.Resources>
         <!-- Palette -->
@@ -28,14 +28,22 @@
         </Style>
 
         <Style x:Key="TitleText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontSize" Value="24"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
         </Style>
 
         <Style x:Key="StatusTextStyle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="InstructionTextStyle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Foreground" Value="#333333"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
         </Style>
 
         <!-- Button base: rounded, padding, hover -->
@@ -93,254 +101,345 @@
             <Setter Property="Foreground" Value="#111827"/>
         </Style>
 
-        <!-- Separator style -->
-        <Style TargetType="Separator">
-            <Setter Property="Height" Value="1"/>
-            <Setter Property="Margin" Value="0,8"/>
-            <Setter Property="Background" Value="#E6E9EE"/>
-        </Style>
-
-        <!-- DataGrid styles -->
-        <Style TargetType="DataGrid">
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="RowHeight" Value="36"/>
-            <Setter Property="ColumnHeaderHeight" Value="40"/>
-            <Setter Property="HeadersVisibility" Value="Column"/>
-            <Setter Property="GridLinesVisibility" Value="None"/>
-            <Setter Property="Background" Value="{StaticResource CardBgBrush}"/>
-            <Setter Property="BorderBrush" Value="#E6E9EE"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="HorizontalGridLinesBrush" Value="#F1F5F9"/>
-            <Setter Property="VerticalGridLinesBrush" Value="#F1F5F9"/>
-            <Setter Property="AlternatingRowBackground" Value="{StaticResource RowAltBrush}"/>
-            <Setter Property="SelectionMode" Value="Single"/>
-            <Setter Property="SelectionUnit" Value="FullRow"/>
-            <Setter Property="Margin" Value="0,6,0,0"/>
-        </Style>
-
-        <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="{StaticResource GridHeaderBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="BorderThickness" Value="0"/>
-        </Style>
-
-        <Style TargetType="DataGridCell">
-            <Setter Property="Padding" Value="10,4"/>
-            <Setter Property="Foreground" Value="#111827"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Style.Triggers>
-                <!-- Remove blue highlight on cell selection -->
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="Foreground" Value="#111827"/>
-                    <Setter Property="BorderBrush" Value="Transparent"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style TargetType="DataGridRow">
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Style.Triggers>
-                <!-- Remove blue highlight on row selection -->
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="BorderBrush" Value="Transparent"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
     </Page.Resources>
 
-    <Grid Margin="12" x:Name="RootGrid">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="400"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+    <Grid x:Name="RootGrid">
+        <!-- Main Attendance Display -->
+        <Grid x:Name="MainAttendanceDisplay" Visibility="Visible">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-        <!-- LEFT PANEL: Scanner Section -->
-        <Border Grid.Column="0" Background="{StaticResource CardBgBrush}" 
-                CornerRadius="12" Padding="20" Margin="0,0,12,0"
-                BorderBrush="#E6E9EE" BorderThickness="1">
-            <Grid>
+            <!-- Header -->
+            <Border Grid.Row="0" Background="#333333" Padding="20">
+                <TextBlock Text="SecureAttend: Biometric Attendance" 
+                           Style="{StaticResource TitleText}"
+                           HorizontalAlignment="Center"/>
+            </Border>
+
+            <!-- Main Content -->
+            <Grid Grid.Row="1" Background="#D0D0D0">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
+                <!-- Employee Photo and Info -->
+                <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,40,0,20">
+                    <!-- Photo Container -->
+                    <Border Background="White" 
+                            Width="200" Height="200" 
+                            CornerRadius="10"
+                            BorderBrush="#CCCCCC" 
+                            BorderThickness="2"
+                            Margin="0,0,0,20">
+                        <Grid>
+                            <!-- Default User Icon -->
+                            <Viewbox x:Name="DefaultUserIcon" Width="120" Height="120" Visibility="Visible">
+                                <Canvas Width="24" Height="24">
+                                    <Path Fill="#666666" Data="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                                </Canvas>
+                            </Viewbox>
+                            
+                            <!-- Employee Photo -->
+                            <Image x:Name="EmployeePhoto" 
+                                   Visibility="Collapsed"
+                                   Stretch="UniformToFill"/>
+                            
+                            <!-- Camera Icon -->
+                            <Border Background="#F0F0F0" 
+                                    Width="30" Height="30" 
+                                    CornerRadius="15"
+                                    HorizontalAlignment="Right" 
+                                    VerticalAlignment="Top"
+                                    Margin="0,-10,-10,0">
+                                <Viewbox Width="16" Height="16">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Fill="#666666" Data="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Border>
+                        </Grid>
+                    </Border>
 
-                <!-- Status -->
-                <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" 
-                        CornerRadius="8" Padding="16" Margin="0,0,0,16">
-                    <TextBlock x:Name="StatusTextBlock" Text="Ready to scan..." 
-                               TextWrapping="Wrap"
-                               FontSize="14" 
-                               Foreground="{StaticResource MutedBrush}"/>
-                </Border>
+                    <!-- Employee ID Input (for manual entry) -->
+                    <Border Background="White" 
+                            Width="300" Height="40" 
+                            CornerRadius="5"
+                            BorderBrush="#CCCCCC" 
+                            BorderThickness="1"
+                            Margin="0,0,0,20"
+                            x:Name="EmployeeIdBorder"
+                            Visibility="Collapsed">
+                        <TextBox x:Name="EmployeeIdTextBox" 
+                                 Text="Enter Employee ID"
+                                 FontSize="14"
+                                 Foreground="#999999"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 VerticalAlignment="Center"
+                                 HorizontalAlignment="Center"
+                                 TextAlignment="Center"/>
+                    </Border>
 
-                 <!-- Title and Clock -->
-                <Grid Grid.Row="0" Margin="0,0,0,16">
-                    <TextBlock Text=" Fingerprint Scanner" 
-                               FontSize="20" FontWeight="Bold" 
-                               Foreground="{StaticResource PrimaryBrush}"
-                               VerticalAlignment="Center"/>
-                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <TextBlock x:Name="ClockTextBlock" Text="00:00:00" 
-                                   FontSize="24" FontWeight="Bold" 
+                    <!-- Employee Name -->
+                    <TextBlock x:Name="EmployeeNameText" 
+                               Text=""
+                               FontSize="20"
+                               FontWeight="Bold"
+                               Foreground="#333333"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,10"
+                               Visibility="Collapsed"/>
+
+                    <!-- Status Message -->
+                    <TextBlock x:Name="StatusMessage" 
+                               Text="Clock-in successful at 8:05 AM"
+                               Style="{StaticResource StatusTextStyle}"
+                               Foreground="#4CAF50"
+                               Margin="0,0,0,20"
+                               Visibility="Collapsed"/>
+                </StackPanel>
+
+                <!-- Current Time Display -->
+                <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,0,0,20">
+                    <TextBlock x:Name="CurrentTimeText" 
+                               Text="12:34:56 PM"
+                               FontSize="24"
+                               FontWeight="Bold"
+                               Foreground="#333333"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="CurrentDateText" 
+                               Text="Monday, January 8, 2025"
+                               FontSize="14"
+                               Foreground="#666666"
+                               HorizontalAlignment="Center"
+                               Margin="0,5,0,0"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Footer Instruction -->
+            <Border Grid.Row="2" Background="#F5F5F5" Padding="20">
+                <TextBlock x:Name="InstructionText"
+                           Text="Place your finger to Clock-In/Clock-Out."
+                           Style="{StaticResource InstructionTextStyle}"/>
+            </Border>
+        </Grid>
+
+        <!-- Admin Panel (Hidden by default) -->
+        <Grid x:Name="AdminPanel" Visibility="Collapsed" Background="#F6F7F9" Margin="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="400"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- LEFT PANEL: Scanner Section -->
+            <Border Grid.Column="0" Background="{StaticResource CardBgBrush}" 
+                    CornerRadius="12" Padding="20" Margin="0,0,12,0"
+                    BorderBrush="#E6E9EE" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Title and Clock -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <TextBlock Text="👆 Fingerprint Scanner" 
+                                   FontSize="20" FontWeight="Bold" 
                                    Foreground="{StaticResource PrimaryBrush}"
-                                   HorizontalAlignment="Right"/>
-                        <TextBlock x:Name="DateTextBlock" Text="January 1, 2024" 
-                                   FontSize="12" 
+                                   VerticalAlignment="Center"/>
+                        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock x:Name="ClockTextBlock" Text="00:00:00" 
+                                       FontSize="24" FontWeight="Bold" 
+                                       Foreground="{StaticResource PrimaryBrush}"
+                                       HorizontalAlignment="Right"/>
+                            <TextBlock x:Name="DateTextBlock" Text="January 1, 2024" 
+                                       FontSize="12" 
+                                       Foreground="{StaticResource MutedBrush}"
+                                       HorizontalAlignment="Right"
+                                       Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Status -->
+                    <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" 
+                            CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <TextBlock x:Name="StatusTextBlock" Text="Ready to scan..." 
+                                   TextWrapping="Wrap"
+                                   FontSize="14" 
+                                   Foreground="{StaticResource MutedBrush}"/>
+                    </Border>
+
+                    <!-- Fingerprint Image Placeholder -->
+                    <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" 
+                            CornerRadius="12" Padding="20"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Width="300" Height="300">
+                        <Viewbox>
+                            <TextBlock Text="👆" FontSize="120" 
+                                       HorizontalAlignment="Center" 
+                                       VerticalAlignment="Center"
+                                       Opacity="0.3"/>
+                        </Viewbox>
+                    </Border>
+
+                    <!-- Buttons -->
+                    <StackPanel Grid.Row="3" Margin="0,16,0,0">
+                        <TextBlock Text="Place your finger on the scanner" 
+                                   FontSize="13" 
                                    Foreground="{StaticResource MutedBrush}"
-                                   HorizontalAlignment="Right"
-                                   Margin="0,2,0,0"/>
+                                   TextAlignment="Center"
+                                   Margin="0,0,0,12"/>
+                        <Button x:Name="GoEnrollBtn" Content="📝 Go to Enrollment" 
+                                Click="GoEnrollBtn_Click" 
+                                Style="{StaticResource PrimaryButton}" 
+                                HorizontalAlignment="Stretch"
+                                Margin="0,0,0,8"/>
+                        <Button x:Name="RefreshBtn" Content="🔄 Refresh List" 
+                                Click="RefreshBtn_Click" 
+                                Style="{StaticResource NeutralButton}"
+                                HorizontalAlignment="Stretch"/>
+                        <Button x:Name="ToggleViewBtn" Content="👁️ Toggle View" 
+                                Click="ToggleViewBtn_Click" 
+                                Style="{StaticResource PrimaryButton}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,8,0,0"/>
                     </StackPanel>
                 </Grid>
+            </Border>
 
-                <!-- Fingerprint Image Placeholder -->
-                <Border Grid.Row="2" Background="{StaticResource SurfaceBrush}" 
-                        CornerRadius="12" Padding="20"
-                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Width="300" Height="300">
-                    <Viewbox>
-                        <TextBlock Text="👆" FontSize="120" 
-                                   HorizontalAlignment="Center" 
-                                   VerticalAlignment="Center"
-                                   Opacity="0.3"/>
-                    </Viewbox>
-                </Border>
+            <!-- RIGHT PANEL: Attendance Log -->
+            <Border Grid.Column="1" Background="{StaticResource CardBgBrush}" 
+                    CornerRadius="12" Padding="20"
+                    BorderBrush="#E6E9EE" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
 
-                <!-- Buttons -->
-                <StackPanel Grid.Row="3" Margin="0,16,0,0">
-                    <TextBlock Text="Place your finger on the scanner" 
-                               FontSize="13" 
-                               Foreground="{StaticResource MutedBrush}"
-                               TextAlignment="Center"
-                               Margin="0,0,0,12"/>
-                    <Button x:Name="GoEnrollBtn" Content="📝 Go to Enrollment" 
-                            Click="GoEnrollBtn_Click" 
-                            Style="{StaticResource PrimaryButton}" 
-                            HorizontalAlignment="Stretch"
-                            Margin="0,0,0,8"/>
-                    <Button x:Name="RefreshBtn" Content="🔄 Refresh List" 
-                            Click="RefreshBtn_Click" 
-                            Style="{StaticResource NeutralButton}"
-                            HorizontalAlignment="Stretch"/>
-                    <Button x:Name="UpdateScheduleBtn" Content="📅 Update Attendance Schedule" 
-                            Click="UpdateScheduleBtn_Click" 
-                            Style="{StaticResource PrimaryButton}"
-                            HorizontalAlignment="Stretch"
-                            Margin="0,8,0,0"/>
-                </StackPanel>
-            </Grid>
-        </Border>
+                    <!-- Header -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                        <TextBlock Text="📋 Today's Attendance Log" 
+                                   FontSize="20" FontWeight="Bold" 
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   Margin="0,0,0,8"/>
+                        <TextBlock Text="Real-time attendance records" 
+                                   FontSize="13" 
+                                   Foreground="{StaticResource MutedBrush}"/>
+                    </StackPanel>
 
-        <!-- RIGHT PANEL: Attendance Log -->
-        <Border Grid.Column="1" Background="{StaticResource CardBgBrush}" 
-                CornerRadius="12" Padding="20"
-                BorderBrush="#E6E9EE" BorderThickness="1">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+                    <!-- Data Grid -->
+                    <DataGrid x:Name="SessionsGrid" Grid.Row="1" 
+                              AutoGenerateColumns="False" 
+                              IsReadOnly="True" 
+                              CanUserResizeRows="False"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="None"
+                              Background="White"
+                              BorderBrush="#e5e7eb"
+                              BorderThickness="1"
+                              RowHeight="40"
+                              ColumnHeaderHeight="44"
+                              AlternatingRowBackground="#f9fafb"
+                              SelectionMode="Single"
+                              SelectionUnit="FullRow">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="60"/>
+                            <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="120"/>
+                            <DataGridTextColumn Header="Employee Name" Binding="{Binding EmployeeName}" Width="1*"/>
+                            <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="1*"/>
+                            <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="1*"/>
+                            <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="1*"/>
+                            <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="1*"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1*"/>
+                        </DataGrid.Columns>
+                        
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="#f1f5f9"/>
+                                <Setter Property="Foreground" Value="#1e293b"/>
+                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="Padding" Value="12,8"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
+                        
+                        <DataGrid.CellStyle>
+                            <Style TargetType="DataGridCell">
+                                <Setter Property="Padding" Value="12,6"/>
+                                <Setter Property="Foreground" Value="#1f2937"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="TextBlock.TextAlignment" Value="Center"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="DataGridCell">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="#1f2937"/>
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.CellStyle>
+                        
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="SnapsToDevicePixels" Value="True"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
 
-                <!-- Header -->
-                <StackPanel Grid.Row="0" Margin="0,0,0,16">
-                    <TextBlock Text="📋 Today's Attendance Log" 
-                               FontSize="20" FontWeight="Bold" 
-                               Foreground="{StaticResource PrimaryBrush}"
-                               Margin="0,0,0,8"/>
-                    <TextBlock Text="Real-time attendance records" 
-                               FontSize="13" 
-                               Foreground="{StaticResource MutedBrush}"/>
-                </StackPanel>
-
-                <!-- Data Grid -->
-                <DataGrid x:Name="SessionsGrid" Grid.Row="1" 
-                          AutoGenerateColumns="False" 
-                          IsReadOnly="True" 
-                          CanUserResizeRows="False"
-                          HeadersVisibility="Column"
-                          GridLinesVisibility="None"
-                          Background="White"
-                          BorderBrush="#e5e7eb"
-                          BorderThickness="1"
-                          RowHeight="40"
-                          ColumnHeaderHeight="44"
-                          AlternatingRowBackground="#f9fafb"
-                          SelectionMode="Single"
-                          SelectionUnit="FullRow">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="60"/>
-                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="120"/>
-                        <DataGridTextColumn Header="Employee Name" Binding="{Binding EmployeeName}" Width="1*"/>
-                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="1*"/>
-                        <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="1*"/>
-                        <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="1*"/>
-                        <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="1*"/>
-                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1*"/>
-                    </DataGrid.Columns>
-                    
-                    <DataGrid.ColumnHeaderStyle>
-                        <Style TargetType="DataGridColumnHeader">
-                            <Setter Property="Background" Value="#f1f5f9"/>
-                            <Setter Property="Foreground" Value="#1e293b"/>
-                            <Setter Property="FontSize" Value="13"/>
-                            <Setter Property="FontWeight" Value="SemiBold"/>
-                            <Setter Property="Padding" Value="12,8"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                        </Style>
-                    </DataGrid.ColumnHeaderStyle>
-                    
-                    <DataGrid.CellStyle>
-                        <Style TargetType="DataGridCell">
-                            <Setter Property="Padding" Value="12,6"/>
-                            <Setter Property="Foreground" Value="#1f2937"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="TextBlock.TextAlignment" Value="Center"/>
-                            <Setter Property="VerticalContentAlignment" Value="Center"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="DataGridCell">
-                                        <Border Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="Transparent"/>
-                                    <Setter Property="Foreground" Value="#1f2937"/>
-                                    <Setter Property="BorderBrush" Value="Transparent"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </DataGrid.CellStyle>
-                    
-                    <DataGrid.RowStyle>
-                        <Style TargetType="DataGridRow">
-                            <Setter Property="SnapsToDevicePixels" Value="True"/>
-                            <Style.Triggers>
-                                <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="Transparent"/>
-                                    <Setter Property="BorderBrush" Value="Transparent"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </DataGrid.RowStyle>
-                </DataGrid>
-            </Grid>
-        </Border>
-
+        <!-- Toggle Button (Always visible) -->
+        <Button x:Name="AdminToggleBtn" 
+                Content="⚙️"
+                Width="40" Height="40"
+                Background="#333333"
+                Foreground="White"
+                BorderThickness="0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="20"
+                Click="AdminToggleBtn_Click"
+                ToolTip="Toggle Admin Panel">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="20"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
     </Grid>
 </Page>

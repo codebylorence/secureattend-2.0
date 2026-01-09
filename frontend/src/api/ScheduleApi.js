@@ -1,136 +1,79 @@
-import axios from "axios";
+import api from "./axiosConfig.js";
 
-const API_URL = "http://localhost:5000/api/schedules";
-const TEMPLATE_API_URL = "http://localhost:5000/api/templates";
-const EMPLOYEE_SCHEDULE_API_URL = "http://localhost:5000/api/employee-schedules";
+const TEMPLATE_API_URL = "/templates";
+const EMPLOYEE_SCHEDULE_API_URL = "/employee-schedules";
 
 // ============================================
-// NEW API - Templates (Phase 2)
+// Templates API
 // ============================================
 
 export const getTemplates = async () => {
-  const response = await axios.get(TEMPLATE_API_URL);
-  return response.data;
-};
-
-export const getPublishedTemplates = async () => {
-  const response = await axios.get(`${TEMPLATE_API_URL}/published`);
+  // Add cache-busting parameter to ensure fresh data
+  const timestamp = new Date().getTime();
+  const response = await api.get(`${TEMPLATE_API_URL}?_t=${timestamp}`);
   return response.data;
 };
 
 export const getTemplatesByDepartment = async (department) => {
-  const response = await axios.get(`${TEMPLATE_API_URL}/department/${department}`);
-  return response.data;
-};
-
-export const getTemplateById = async (id) => {
-  const response = await axios.get(`${TEMPLATE_API_URL}/${id}`);
+  const response = await api.get(`${TEMPLATE_API_URL}/department/${department}`);
   return response.data;
 };
 
 export const createTemplate = async (templateData) => {
-  const response = await axios.post(TEMPLATE_API_URL, templateData);
+  const response = await api.post(TEMPLATE_API_URL, templateData);
   return response.data;
 };
 
 export const updateTemplate = async (id, templateData) => {
-  const response = await axios.put(`${TEMPLATE_API_URL}/${id}`, templateData);
+  const response = await api.put(`${TEMPLATE_API_URL}/${id}`, templateData);
   return response.data;
 };
 
 export const deleteTemplate = async (id) => {
-  const response = await axios.delete(`${TEMPLATE_API_URL}/${id}`);
+  const response = await api.delete(`${TEMPLATE_API_URL}/${id}`);
   return response.data;
 };
 
 export const publishSchedules = async (publishedBy) => {
-  const response = await axios.post(`${TEMPLATE_API_URL}/publish`, { published_by: publishedBy });
+  const response = await api.post(`${TEMPLATE_API_URL}/publish`, { published_by: publishedBy });
   return response.data;
 };
 
 // ============================================
-// NEW API - Employee Schedules (Phase 2)
+// Employee Schedules API
 // ============================================
 
 export const getEmployeeSchedules = async () => {
-  const response = await axios.get(EMPLOYEE_SCHEDULE_API_URL);
+  const response = await api.get(EMPLOYEE_SCHEDULE_API_URL);
   return response.data;
 };
 
 export const getEmployeeScheduleById = async (employeeId) => {
-  const response = await axios.get(`${EMPLOYEE_SCHEDULE_API_URL}/employee/${employeeId}`);
-  return response.data;
-};
-
-export const getDepartmentSchedules = async (department) => {
-  const response = await axios.get(`${EMPLOYEE_SCHEDULE_API_URL}/department/${department}`);
+  const response = await api.get(`${EMPLOYEE_SCHEDULE_API_URL}/employee/${employeeId}`);
   return response.data;
 };
 
 export const assignSchedule = async (assignmentData) => {
-  const response = await axios.post(`${EMPLOYEE_SCHEDULE_API_URL}/assign`, assignmentData);
-  return response.data;
-};
-
-export const updateEmployeeSchedule = async (id, scheduleData) => {
-  const response = await axios.put(`${EMPLOYEE_SCHEDULE_API_URL}/${id}`, scheduleData);
+  const response = await api.post(`${EMPLOYEE_SCHEDULE_API_URL}/assign`, assignmentData);
   return response.data;
 };
 
 export const deleteEmployeeSchedule = async (id) => {
-  const response = await axios.delete(`${EMPLOYEE_SCHEDULE_API_URL}/${id}`);
+  console.log(`🌐 API: Deleting schedule ID: ${id}`);
+  
+  const response = await api.delete(`${EMPLOYEE_SCHEDULE_API_URL}/${id}`);
+  
+  console.log(`✅ API: Delete response:`, response.data);
   return response.data;
 };
 
-export const removeDaysFromSchedule = async (id, days) => {
-  const response = await axios.delete(`${EMPLOYEE_SCHEDULE_API_URL}/${id}/days`, {
+export const removeDaysFromEmployeeSchedule = async (id, days) => {
+  console.log(`🌐 API: Removing days from schedule ID: ${id}, days:`, days);
+  
+  const response = await api.delete(`${EMPLOYEE_SCHEDULE_API_URL}/${id}/days`, {
     data: { days }
   });
-  return response.data;
-};
-
-// ============================================
-// OLD API - Keep for backward compatibility
-// ============================================
-
-export const getAllSchedules = async () => {
-  const response = await axios.get(API_URL);
-  return response.data;
-};
-
-export const getAllTemplates = async () => {
-  const response = await axios.get(`${API_URL}/templates`);
-  return response.data;
-};
-
-export const getDepartmentTemplates = async (department) => {
-  const response = await axios.get(`${API_URL}/templates/department/${department}`);
-  return response.data;
-};
-
-export const getSchedulesByEmployeeId = async (employeeId) => {
-  const response = await axios.get(`${API_URL}/employee/${employeeId}`);
-  return response.data;
-};
-
-export const createSchedule = async (scheduleData) => {
-  const response = await axios.post(API_URL, scheduleData);
-  return response.data;
-};
-
-export const updateSchedule = async (id, scheduleData) => {
-  const response = await axios.put(`${API_URL}/${id}`, scheduleData);
-  return response.data;
-};
-
-export const deleteSchedule = async (id) => {
-  const response = await axios.delete(`${API_URL}/${id}`);
-  return response.data;
-};
-
-export const deleteIndividualShift = async (id, shiftData) => {
-  const response = await axios.delete(`${API_URL}/${id}/shift`, {
-    data: shiftData
-  });
+  
+  console.log(`✅ API: Remove days response:`, response.data);
   return response.data;
 };

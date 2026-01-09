@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { MdSchedule, MdPeople, MdClose } from "react-icons/md";
-import { getEmployeeSchedules, getPublishedTemplates } from "../api/ScheduleApi";
+import { getEmployeeSchedules } from "../api/ScheduleApi";
 import { fetchEmployees } from "../api/EmployeeApi";
 import { useSocket } from "../context/SocketContext";
+import { formatTimeRange24 } from "../utils/timeFormat";
 
 export default function ViewSchedules() {
-  const [templates, setTemplates] = useState([]);
   const [employeeSchedules, setEmployeeSchedules] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,33 +22,47 @@ export default function ViewSchedules() {
   useEffect(() => {
     if (!socket) return;
 
-    // Listen for real-time updates
+    // ViewSchedules page listens to employee schedule assignment changes
+    // This shows actual assignments, not template changes
     socket.on('schedules:published', () => {
-      console.log('📡 Schedules published - refreshing...');
+      console.log('📡 ViewSchedules: Employee schedules updated - refreshing...');
       fetchData();
     });
 
-    socket.on('drafts:published', () => {
-      console.log('📡 Drafts published - refreshing...');
+    socket.on('employee:assigned', () => {
+      console.log('📡 ViewSchedules: Employee assignment updated - refreshing...');
       fetchData();
     });
 
     return () => {
       socket.off('schedules:published');
-      socket.off('drafts:published');
+      socket.off('employee:assigned');
     };
   }, [socket]);
 
   const fetchData = async () => {
     try {
-      const [templatesData, schedulesData, employeesData] = await Promise.all([
-        getPublishedTemplates(), // Use the new endpoint that only returns published templates
-        getEmployeeSchedules(),
+      const [schedulesData, employeesData] = await Promise.all([
+        getEmployeeSchedules(), // Get actual employee assignments from employee_schedules table
         fetchEmployees()
       ]);
       
-      // No need to filter anymore - backend already returns only published templates
-      setTemplates(templatesData);
+      console.log(`📊 ViewSchedules: Loaded ${schedulesData.length} employee schedule assignments`);
+      console.log(`👥 ViewSchedules: Loaded ${employeesData.length} employees`);
+      
+      // Debug: Log team leaders specifically
+      const teamLeaders = employeesData.filter(emp => emp.position === "Team Leader");
+      console.log(`👑 ViewSchedules: Found ${teamLeaders.length} team leaders:`, 
+        teamLeaders.map(tl => ({
+          id: tl.employee_id,
+          name: tl.fullname || `${tl.firstname} ${tl.lastname}`,
+          firstname: tl.firstname,
+          lastname: tl.lastname,
+          department: tl.department
+        }))
+      );
+      
+      // No need for templates - we're showing actual employee assignments
       setEmployeeSchedules(schedulesData);
       setEmployees(employeesData);
     } catch (error) {
@@ -60,7 +74,21 @@ export default function ViewSchedules() {
 
   const getEmployeeName = (employeeId) => {
     const employee = employees.find((emp) => emp.employee_id === employeeId);
-    return employee ? employee.fullname : employeeId;
+    if (!employee) return employeeId;
+    
+    // Try different name formats
+    if (employee.firstname && employee.lastname) {
+      return `${employee.firstname} ${employee.lastname}`;
+    }
+    if (employee.fullname && employee.fullname.trim()) {
+      return employee.fullname;
+    }
+    if (employee.firstname && employee.firstname.trim()) {
+      return employee.firstname;
+    }
+    
+    // Fallback to employee ID
+    return employeeId;
   };
 
   const getEmployeePosition = (employeeId) => {
@@ -71,7 +99,21 @@ export default function ViewSchedules() {
   const getAssignedBy = (assignedById) => {
     if (!assignedById) return "Admin";
     const assigner = employees.find((emp) => emp.employee_id === assignedById);
-    return assigner ? assigner.fullname : assignedById;
+    if (!assigner) return assignedById;
+    
+    // Try different name formats
+    if (assigner.firstname && assigner.lastname) {
+      return `${assigner.firstname} ${assigner.lastname}`;
+    }
+    if (assigner.fullname && assigner.fullname.trim()) {
+      return assigner.fullname;
+    }
+    if (assigner.firstname && assigner.firstname.trim()) {
+      return assigner.firstname;
+    }
+    
+    // Fallback to employee ID
+    return assignedById;
   };
 
   // Get next 7 days starting from today
@@ -98,7 +140,7 @@ export default function ViewSchedules() {
   
   const displayDays = getDayNames();
 
-  // Organize schedules by day and shift
+  // Organize schedules by day and shift based on actual employee assignments
   const organizeSchedulesByDay = () => {
     const organized = {};
 
@@ -109,9 +151,17 @@ export default function ViewSchedules() {
       };
     });
 
-    // Group templates by day and shift
-    templates.forEach(template => {
-      template.days.forEach(day => {
+    // Group employee schedules by day and shift
+    employeeSchedules.forEach(schedule => {
+      // Skip if no template data
+      if (!schedule.template) return;
+      
+      const template = schedule.template;
+      
+      schedule.days.forEach(day => {
+        // Only show days that are in our display range
+        if (!organized[day]) return;
+        
         if (!organized[day].shifts[template.shift_name]) {
           organized[day].shifts[template.shift_name] = {
             shift_name: template.shift_name,
@@ -121,20 +171,25 @@ export default function ViewSchedules() {
           };
         }
 
-        // Get assigned members for this zone on this day
-        const assignedMembers = employeeSchedules.filter(schedule =>
-          schedule.template.department === template.department &&
-          schedule.template.shift_name === template.shift_name &&
-          schedule.days.includes(day)
+        // Find or create zone for this department
+        let zone = organized[day].shifts[template.shift_name].zones.find(
+          z => z.department === template.department
         );
-
-        organized[day].shifts[template.shift_name].zones.push({
-          department: template.department,
-          template_id: template.id,
-          member_limit: template.day_limits?.[day] || template.member_limit,
-          assigned_count: assignedMembers.length,
-          members: assignedMembers
-        });
+        
+        if (!zone) {
+          zone = {
+            department: template.department,
+            template_id: template.id,
+            member_limit: template.day_limits?.[day] || template.member_limit,
+            assigned_count: 0,
+            members: []
+          };
+          organized[day].shifts[template.shift_name].zones.push(zone);
+        }
+        
+        // Add this employee to the zone
+        zone.members.push(schedule);
+        zone.assigned_count = zone.members.length;
       });
     });
 
@@ -208,7 +263,7 @@ export default function ViewSchedules() {
                         <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-2 py-1 rounded text-xs">
                           <p className="font-semibold">{shift.shift_name}</p>
                           <p className="text-xs opacity-90">
-                            {shift.start_time} - {shift.end_time}
+                            {formatTimeRange24(shift.start_time, shift.end_time)}
                           </p>
                         </div>
 
@@ -257,7 +312,7 @@ export default function ViewSchedules() {
                   {selectedZone.department} - {selectedDay}
                 </h3>
                 <p className="text-sm text-gray-600">
-                  {selectedZone.shift.shift_name} ({selectedZone.shift.start_time} - {selectedZone.shift.end_time})
+                  {selectedZone.shift.shift_name} ({formatTimeRange24(selectedZone.shift.start_time, selectedZone.shift.end_time)})
                 </p>
               </div>
               <button

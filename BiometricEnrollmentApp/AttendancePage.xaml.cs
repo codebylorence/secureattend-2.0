@@ -16,6 +16,7 @@ namespace BiometricEnrollmentApp
         private readonly ZKTecoService _zkService;
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
+        private readonly SyncService _syncService;
         private CancellationTokenSource? _overlayCts;
         private CancellationTokenSource? _continuousScanCts;
         private static bool _isAttendancePageActive = false;
@@ -31,10 +32,14 @@ namespace BiometricEnrollmentApp
             _zkService = zkService ?? new ZKTecoService();
             _dataService = new DataService();
             _apiService = new ApiService();
+            _syncService = new SyncService(_dataService, _apiService);
 
             _zkService.OnStatus += (msg) => Dispatcher.Invoke(() => UpdateStatus(msg));
             Loaded += AttendancePage_Loaded;
             Unloaded += AttendancePage_Unloaded;
+
+            // Start sync service for retry mechanism
+            _syncService.StartSyncService();
 
             // Auto-sync deleted employees every 5 minutes
             var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
@@ -71,11 +76,145 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                var now = DateTime.Now;
-                ClockTextBlock.Text = now.ToString("HH:mm:ss");
-                DateTextBlock.Text = now.ToString("MMMM dd, yyyy");
+                var now = TimezoneHelper.Now;
+                
+                // Update admin panel clock
+                if (ClockTextBlock != null)
+                {
+                    ClockTextBlock.Text = now.ToString("HH:mm:ss");
+                    DateTextBlock.Text = now.ToString("MMMM dd, yyyy");
+                }
+                
+                // Update main display clock
+                if (CurrentTimeText != null)
+                {
+                    CurrentTimeText.Text = now.ToString("HH:mm:ss");
+                    CurrentDateText.Text = now.ToString("dddd, MMMM d, yyyy");
+                }
             }
             catch { }
+        }
+
+        private void ShowEmployeeAttendanceResult(string employeeId, string employeeName, string status, DateTime timestamp)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    // Show employee name
+                    EmployeeNameText.Text = employeeName;
+                    EmployeeNameText.Visibility = Visibility.Visible;
+
+                    // Show status message with appropriate color
+                    var timeStr = timestamp.ToString("HH:mm");
+                    var statusColor = status switch
+                    {
+                        "Present" => "#4CAF50", // Green
+                        "Late" => "#FF9800",    // Orange
+                        _ => "#4CAF50"          // Default green
+                    };
+
+                    var actionText = status == "Present" || status == "Late" ? "Clock-in" : "Clock-out";
+                    StatusMessage.Text = $"{actionText} successful at {timeStr}";
+                    StatusMessage.Foreground = new System.Windows.Media.SolidColorBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(statusColor));
+                    StatusMessage.Visibility = Visibility.Visible;
+
+                    // Try to load employee photo
+                    LoadEmployeePhoto(employeeId);
+
+                    // Hide the result after 5 seconds
+                    var hideTimer = new System.Timers.Timer(5000);
+                    hideTimer.Elapsed += (_, _) => Dispatcher.Invoke(HideEmployeeResult);
+                    hideTimer.AutoReset = false;
+                    hideTimer.Start();
+                });
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error showing employee result: {ex.Message}");
+            }
+        }
+
+        private void HideEmployeeResult()
+        {
+            try
+            {
+                EmployeeNameText.Visibility = Visibility.Collapsed;
+                StatusMessage.Visibility = Visibility.Collapsed;
+                EmployeePhoto.Visibility = Visibility.Collapsed;
+                DefaultUserIcon.Visibility = Visibility.Visible;
+            }
+            catch { }
+        }
+
+        private async void LoadEmployeePhoto(string employeeId)
+        {
+            try
+            {
+                // Try to get employee photo from server
+                var photoBase64 = await _apiService.GetEmployeePhotoAsync(employeeId);
+                
+                if (!string.IsNullOrEmpty(photoBase64))
+                {
+                    var photoBytes = Convert.FromBase64String(photoBase64);
+                    var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                    
+                    using (var stream = new System.IO.MemoryStream(photoBytes))
+                    {
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                        bitmap.StreamSource = stream;
+                        bitmap.EndInit();
+                        bitmap.Freeze();
+                    }
+                    
+                    EmployeePhoto.Source = bitmap;
+                    EmployeePhoto.Visibility = Visibility.Visible;
+                    DefaultUserIcon.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    // Keep default user icon if no photo available
+                    EmployeePhoto.Visibility = Visibility.Collapsed;
+                    DefaultUserIcon.Visibility = Visibility.Visible;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Could not load photo for {employeeId}: {ex.Message}");
+                // Keep default user icon on error
+                EmployeePhoto.Visibility = Visibility.Collapsed;
+                DefaultUserIcon.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void AdminToggleBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (AdminPanel.Visibility == Visibility.Visible)
+                {
+                    // Switch to main attendance display
+                    AdminPanel.Visibility = Visibility.Collapsed;
+                    MainAttendanceDisplay.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    // Switch to admin panel
+                    MainAttendanceDisplay.Visibility = Visibility.Collapsed;
+                    AdminPanel.Visibility = Visibility.Visible;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error toggling view: {ex.Message}");
+            }
+        }
+
+        private void ToggleViewBtn_Click(object sender, RoutedEventArgs e)
+        {
+            AdminToggleBtn_Click(sender, e);
         }
 
         private void AttendancePage_Unloaded(object? sender, RoutedEventArgs e)
@@ -120,9 +259,10 @@ namespace BiometricEnrollmentApp
                         {
                             LogHelper.Write($"  📤 Attempting to sync absent record for {session.EmployeeId}...");
                             
-                            // For absent records, don't send a clock-in time (send null)
-                            bool success = await _apiService.SendAttendanceAsync(
+                            // Use sync service for absent records with retry mechanism
+                            bool success = await _syncService.QueueAttendanceSync(
                                 session.EmployeeId,
+                                session.Id,
                                 null,
                                 null,
                                 "Absent"
@@ -136,26 +276,30 @@ namespace BiometricEnrollmentApp
                             else
                             {
                                 failed++;
-                                LogHelper.Write($"  ❌ Server rejected absent record for {session.EmployeeId}");
+                                LogHelper.Write($"  📝 Queued absent record for retry: {session.EmployeeId}");
                             }
                         }
                         catch (Exception ex)
                         {
                             failed++;
                             LogHelper.Write($"  ❌ Failed to sync absent record for {session.EmployeeId}: {ex.Message}");
-                            LogHelper.Write($"  Stack trace: {ex.StackTrace}");
                         }
                     }
                     
-                    LogHelper.Write($"✅ Sync complete: {synced} succeeded, {failed} failed");
-                    
-                    LogHelper.Write($"✅ Sync complete: {synced} absent record(s) synced to server");
+                    LogHelper.Write($"📊 Sync complete: {synced} succeeded, {failed} queued for retry");
                     
                     // Refresh the attendance grid immediately
                     Dispatcher.Invoke(() => 
                     {
                         RefreshAttendances();
-                        UpdateStatus($"✅ {markedAbsent} new absent, {synced} synced to server");
+                        if (failed == 0)
+                        {
+                            UpdateStatus($"✅ {markedAbsent} new absent, all synced to server");
+                        }
+                        else
+                        {
+                            UpdateStatus($"📝 {markedAbsent} new absent, {synced} synced, {failed} queued for retry");
+                        }
                     });
                 }
                 else
@@ -213,10 +357,10 @@ namespace BiometricEnrollmentApp
                         _zkService.LoadEnrollmentsToSdk(_data_service_get());
                         
                         // Verify templates were loaded
-                        var enrollments = _data_service_get().GetAllEnrollmentsWithRowId();
-                        LogHelper.Write($"Total enrollments in database: {enrollments.Count}");
+                        // var enrollments = _data_service_get().GetAllEnrollmentsWithRowId();
+                        // LogHelper.Write($"Total enrollments in database: {enrollments.Count}");
                         
-                        Dispatcher.Invoke(() => UpdateStatus($"✅ Ready! {enrollments.Count} employees enrolled. Place finger to scan..."));
+                        Dispatcher.Invoke(() => UpdateStatus($"Place finger to scan..."));
                         
                         // Start continuous scanning
                         StartContinuousScanning();
@@ -372,7 +516,7 @@ namespace BiometricEnrollmentApp
                     Dispatcher.Invoke(() => UpdateStatus($"✅ Identified: {matchedName} ({matchedEmployeeId})"));
                     
                     // Process attendance - clock in/out logic
-                    var now = DateTime.Now;
+                    var now = TimezoneHelper.Now;
                     try
                     {
                         long openSessionId = _data_service_get().GetOpenSessionId(matchedEmployeeId, now);
@@ -390,10 +534,27 @@ namespace BiometricEnrollmentApp
                                 DateTime clockInTime = DateTime.Parse(session.ClockIn);
                                 // Keep the original status (Present or Late) when clocking out
                                 string finalStatus = session.Status; // Will be "Present" or "Late"
-                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, finalStatus));
+                                
+                                // Send clock-out to server using sync service with retry mechanism
+                                Task.Run(async () => 
+                                {
+                                    bool syncSuccess = await _syncService.QueueAttendanceSync(matchedEmployeeId, session.Id, clockInTime, now, finalStatus);
+                                    Dispatcher.Invoke(() => 
+                                    {
+                                        if (syncSuccess)
+                                        {
+                                            UpdateStatus($"✅ Clock-out synced to server. Hours: {hours:F2}");
+                                        }
+                                        else
+                                        {
+                                            UpdateStatus($"⚠️ Clock-out recorded, queued for sync. Hours: {hours:F2}");
+                                        }
+                                    });
+                                });
                             }
                             
-                            Dispatcher.Invoke(() => UpdateStatus(hours >= 0 ? $"✅ Clock-out recorded. Hours: {hours:F2}" : "⚠️ Clock-out failed."));
+                            // Show employee result on main display
+                            Dispatcher.Invoke(() => ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Clock-out", now));
                         }
                         else
                         {
@@ -403,7 +564,7 @@ namespace BiometricEnrollmentApp
                             if (!scheduleCheck.IsScheduled)
                             {
                                 Dispatcher.Invoke(() => UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today."));
-                                LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {DateTime.Now.DayOfWeek}");
+                                LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {TimezoneHelper.Now.DayOfWeek}");
                             }
                             else
                             {
@@ -442,11 +603,33 @@ namespace BiometricEnrollmentApp
                                         // create new clock-in
                                         long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, status);
                                         
-                                        // Send clock-in to server
-                                        Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, status));
-                                        
-                                        string statusEmoji = status == "Late" ? "⏰" : "✅";
-                                        Dispatcher.Invoke(() => UpdateStatus(sid > 0 ? $"{statusEmoji} Clock-in recorded at {now:HH:mm:ss} - {status}" : "⚠️ Clock-in failed."));
+                                        if (sid > 0)
+                                        {
+                                            // Send clock-in to server using sync service with retry mechanism
+                                            Task.Run(async () => 
+                                            {
+                                                bool syncSuccess = await _syncService.QueueAttendanceSync(matchedEmployeeId, sid, now, null, status);
+                                                Dispatcher.Invoke(() => 
+                                                {
+                                                    string statusEmoji = status == "Late" ? "⏰" : "✅";
+                                                    if (syncSuccess)
+                                                    {
+                                                        UpdateStatus($"{statusEmoji} Clock-in synced to server - {status}");
+                                                    }
+                                                    else
+                                                    {
+                                                        UpdateStatus($"{statusEmoji} Clock-in recorded, queued for sync - {status}");
+                                                    }
+                                                });
+                                            });
+                                            
+                                            // Show employee result on main display
+                                            Dispatcher.Invoke(() => ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, status, now));
+                                        }
+                                        else
+                                        {
+                                            Dispatcher.Invoke(() => UpdateStatus("⚠️ Clock-in failed."));
+                                        }
                                     }
                                 }
                             }
@@ -863,7 +1046,7 @@ namespace BiometricEnrollmentApp
             }
 
             // 6) Clock-in / Clock-out using session API
-            var now = DateTime.Now;
+            var now = TimezoneHelper.Now;
 
             try
             {
@@ -896,7 +1079,7 @@ namespace BiometricEnrollmentApp
                     if (!scheduleCheck.IsScheduled)
                     {
                         window.UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today.");
-                        LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {DateTime.Now.DayOfWeek}");
+                        LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {TimezoneHelper.Now.DayOfWeek}");
                         Thread.Sleep(2500);
                     }
                     else
@@ -1081,7 +1264,6 @@ namespace BiometricEnrollmentApp
             try
             {
                 UpdateStatus("📥 Fetching schedules from server...");
-                UpdateScheduleBtn.IsEnabled = false;
 
                 var schedules = await _apiService.GetPublishedSchedulesAsync();
 
@@ -1111,10 +1293,6 @@ namespace BiometricEnrollmentApp
                 UpdateStatus("❌ Failed to update schedules");
                 MessageBox.Show($"Error updating schedules: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 LogHelper.Write($"💥 Error updating schedules: {ex.Message}");
-            }
-            finally
-            {
-                UpdateScheduleBtn.IsEnabled = true;
             }
         }
 

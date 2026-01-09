@@ -5,6 +5,11 @@ import { useSocket } from "../context/SocketContext";
 export default function ManageSchedule() {
   const [refreshKey, setRefreshKey] = useState(0);
   const { socket } = useSocket();
+  
+  // Get user role from localStorage
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = user.role;
+  const isSupervisor = userRole === "supervisor";
 
   useEffect(() => {
     if (!socket) return;
@@ -55,7 +60,7 @@ export default function ManageSchedule() {
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
         <h1 className="text-[#374151] text-[21px] font-semibold">
-          Manage Schedule
+        Manage Schedule
         </h1>
         <p className="text-sm text-gray-600 mt-1">
           Click on any day to add zones and create schedules

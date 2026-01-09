@@ -4,6 +4,7 @@ import Department from "../models/department.js";
 import EmployeeSchedule from "../models/employeeSchedule.js";
 import Attendance from "../models/attendance.js";
 import bcrypt from "bcryptjs";
+import { Op } from "sequelize";
 
 export const getAllEmployees = async () => {
   return await Employee.findAll({
@@ -12,6 +13,8 @@ export const getAllEmployees = async () => {
 };
 
 export const createEmployee = async (employeeData) => {
+  console.log("🔍 Creating employee with data:", JSON.stringify(employeeData, null, 2));
+  
   // Handle both old and new data formats
   const processedData = { ...employeeData };
   
@@ -26,22 +29,73 @@ export const createEmployee = async (employeeData) => {
     processedData.lastname = nameParts.slice(1).join(' ') || '';
   }
   
-  const employee = await Employee.create(processedData);
+  // Create user account with provided username and password
+  if (employeeData.username && employeeData.password) {
+    console.log(`🔐 Username and password provided: ${employeeData.username}`);
+    
+    // Check if username already exists
+    const existingUser = await User.findOne({ where: { username: employeeData.username } });
+    if (existingUser) {
+      console.log(`❌ Username already exists: ${employeeData.username}`);
+      throw new Error(`Username '${employeeData.username}' is already taken`);
+    }
+    
+    // Check if employee_id already exists
+    const existingEmployee = await Employee.findOne({ where: { employee_id: employeeData.employee_id } });
+    if (existingEmployee) {
+      console.log(`❌ Employee ID already exists: ${employeeData.employee_id}`);
+      throw new Error(`Employee ID '${employeeData.employee_id}' is already taken`);
+    }
+  } else {
+    console.log("⚠️ No username or password provided in employee data");
+  }
   
-  // Auto-create user account for Team Leaders
-  if (employeeData.position === "Team Leader") {
+  console.log("📝 Creating employee record...");
+  const employee = await Employee.create(processedData);
+  console.log(`✅ Employee created with ID: ${employee.id}`);
+  
+  // Create user account with provided username and password
+  if (employeeData.username && employeeData.password) {
     try {
-      const defaultPassword = await bcrypt.hash("teamleader123", 10);
-      await User.create({
-        username: employeeData.employee_id,
-        password: defaultPassword,
-        role: "teamleader",
+      let userRole = "employee"; // Default role
+      
+      // Determine role based on position
+      if (employeeData.position === "Team Leader") {
+        userRole = "teamleader";
+      } else if (employeeData.position === "Supervisor") {
+        userRole = "supervisor";
+      }
+      
+      console.log(`🔐 Creating user account with role: ${userRole}`);
+      const hashedPassword = await bcrypt.hash(employeeData.password, 10);
+      
+      const newUser = await User.create({
+        username: employeeData.username,
+        password: hashedPassword,
+        role: userRole,
         employeeId: employee.id,
       });
-      console.log(`✅ User account created for Team Leader: ${employeeData.employee_id}`);
+      
+      console.log(`✅ User account created successfully with ID: ${newUser.id} for ${employeeData.position || 'Employee'}: ${employeeData.username} with role: ${userRole}`);
+      
+      // Verify the user was created by querying it back
+      const verifyUser = await User.findOne({ where: { username: employeeData.username } });
+      if (verifyUser) {
+        console.log(`✅ User verification successful: ${verifyUser.username} (ID: ${verifyUser.id})`);
+      } else {
+        console.log(`❌ User verification failed: Could not find user ${employeeData.username}`);
+      }
+      
     } catch (error) {
-      console.error(`❌ Failed to create user account for ${employeeData.employee_id}:`, error);
+      console.error(`❌ Failed to create user account for ${employeeData.username}:`, error);
+      console.error("Error details:", error.message);
+      console.error("Error stack:", error.stack);
+      // If user creation fails, delete the employee to maintain consistency
+      await employee.destroy();
+      throw new Error(`Failed to create user account: ${error.message}`);
     }
+  } else {
+    console.log("⚠️ Skipping user account creation - no username/password provided");
   }
   
   return employee;
@@ -116,7 +170,36 @@ export const updateEmployee = async (id, updates) => {
   const employee = await Employee.findByPk(id);
   if (!employee) return null;
 
+  // Check if position is being updated
+  const positionChanged = updates.position && updates.position !== employee.position;
+  
   await employee.update(updates);
+  
+  // If position changed, update the associated user role (but not password)
+  if (positionChanged) {
+    try {
+      const user = await User.findOne({ where: { employeeId: id } });
+      
+      if (user) {
+        let newRole = "employee"; // Default role
+        
+        // Determine new role based on position
+        if (updates.position === "Team Leader") {
+          newRole = "teamleader";
+        } else if (updates.position === "Supervisor") {
+          newRole = "supervisor";
+        }
+        
+        // Update user role only (keep existing password)
+        await user.update({ role: newRole });
+        console.log(`✅ Updated user role for ${employee.employee_id}: ${user.role} → ${newRole}`);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to update user role for ${employee.employee_id}:`, error);
+      // Don't throw error - employee update should still succeed
+    }
+  }
+  
   return employee;
 };
 
@@ -134,7 +217,7 @@ export const getEmployeeByEmployeeId = async (employee_id) => {
   
   // Ensure fullname is populated for biometric app compatibility
   let fullname = employeeData.fullname;
-  if (!fullname || fullname.trim() === '') {
+  if (!fullname || fullname.trim() === '' || fullname === 'null') {
     if (employeeData.firstname && employeeData.lastname) {
       fullname = `${employeeData.firstname} ${employeeData.lastname}`;
     } else if (employeeData.firstname) {
@@ -151,4 +234,27 @@ export const getEmployeeByEmployeeId = async (employee_id) => {
     fullname: fullname,
     department: employeeData.department || 'No Department'
   };
+};
+
+export const getEmployeesByDepartment = async (department) => {
+  return await Employee.findAll({
+    where: {
+      department: department,
+      status: "Active"
+    },
+    order: [["createdAt", "DESC"]],
+  });
+};
+
+export const getSupervisorTeamMembers = async (supervisorDepartment) => {
+  return await Employee.findAll({
+    where: {
+      department: supervisorDepartment,
+      status: "Active",
+      position: {
+        [Op.not]: ["Team Leader", "Supervisor"]
+      }
+    },
+    order: [["createdAt", "DESC"]],
+  });
 };

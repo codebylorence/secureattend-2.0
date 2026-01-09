@@ -9,6 +9,11 @@ import AddEmployeeModal from "../components/AddEmployeeModal";
 export default function Employees() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const employeeListRef = useRef(null);
+  
+  // Get user role from localStorage
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = user.role;
+  const isSupervisor = userRole === "supervisor";
 
   const handleEmployeeAdded = () => {
     // Call the reload function from EmployeeList after adding
@@ -22,7 +27,7 @@ export default function Employees() {
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
         <h1 className="text-[#374151] text-[21px] font-semibold">
-          Manage Employees
+          {isSupervisor ? "Employees" : "Manage Employees"}
         </h1>
       </div>
 
@@ -35,20 +40,25 @@ export default function Employees() {
           <SearchBar />
         </div>
 
-        <div className="flex">
-          <AddEmpButton onClick={() => setIsModalOpen(true)} />
-        </div>
+        {/* Only show Add button for admin */}
+        {!isSupervisor && (
+          <div className="flex">
+            <AddEmpButton onClick={() => setIsModalOpen(true)} />
+          </div>
+        )}
       </div>
 
       {/* Employee Table */}
-      <EmployeeList ref={employeeListRef} />
+      <EmployeeList ref={employeeListRef} supervisorView={isSupervisor} />
 
-      {/* Add Employee Modal */}
-      <AddEmployeeModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onAdded={handleEmployeeAdded}
-      />
+      {/* Add Employee Modal - Only for admin */}
+      {!isSupervisor && (
+        <AddEmployeeModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onAdded={handleEmployeeAdded}
+        />
+      )}
     </div>
   );
 }
