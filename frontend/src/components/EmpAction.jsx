@@ -53,7 +53,7 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
         {/* Edit button */}
         <button
           onClick={() => setIsEditOpen(true)}
-          className="w-7 h-7 rounded-md bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
+          className="w-7 h-7 rounded-md bg-blue-600 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
           title="Edit employee"
         >
           <FaEdit size={12} />

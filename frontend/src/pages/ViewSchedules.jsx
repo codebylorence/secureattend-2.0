@@ -217,7 +217,7 @@ export default function ViewSchedules() {
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">View Assigned Schedules</h1>
+        <h1 className="text-heading text-[21px] font-semibold">View Assigned Schedules</h1>
         <p className="text-sm text-gray-600 mt-1">
           Weekly overview of all zone assignments and team members
         </p>
@@ -225,7 +225,7 @@ export default function ViewSchedules() {
 
       {/* Weekly Calendar View */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A] mb-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-primary mb-4">
           <MdSchedule /> Weekly Schedule Overview
         </h2>
 
@@ -239,12 +239,12 @@ export default function ViewSchedules() {
               <div
                 key={day}
                 className={`border-2 rounded-lg overflow-hidden ${
-                  isToday ? 'border-blue-500' : 'border-gray-300'
+                  isToday ? 'border-primary-500' : 'border-gray-300'
                 }`}
               >
                 {/* Day Header */}
                 <div className={`p-3 text-center ${
-                  isToday ? 'bg-blue-600' : 'bg-[#1E3A8A]'
+                  isToday ? 'bg-primary-600' : 'bg-primary'
                 } text-white`}>
                   <p className="font-semibold">{day}</p>
                   <p className="text-xs opacity-90">
@@ -308,7 +308,7 @@ export default function ViewSchedules() {
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-xl font-semibold text-[#1E3A8A]">
+                <h3 className="text-xl font-semibold text-primary">
                   {selectedZone.department} - {selectedDay}
                 </h3>
                 <p className="text-sm text-gray-600">
@@ -326,7 +326,7 @@ export default function ViewSchedules() {
               </button>
             </div>
 
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-md">
               <p className="text-sm text-gray-700">
                 <strong>Assigned:</strong> {selectedZone.assigned_count} / {selectedZone.member_limit || '∞'} members
               </p>

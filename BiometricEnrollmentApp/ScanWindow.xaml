@@ -89,6 +89,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- EMPLOYEE NAME -->
@@ -137,7 +138,7 @@
                             Background="#FFF3E0" 
                             Padding="15" 
                             CornerRadius="10"
-                            Margin="0,0,0,0">
+                            Margin="0,0,0,12">
                         <StackPanel>
                             <TextBlock Text="Status" 
                                        FontSize="13" 
@@ -149,6 +150,33 @@
                                        Foreground="#F57C00"
                                        TextWrapping="Wrap"
                                        Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- TOOLBOX MEETING INFO -->
+                    <Border x:Name="ToolboxMeetingPanel"
+                            Grid.Row="3"
+                            Background="#E8F5E8" 
+                            Padding="15" 
+                            CornerRadius="10"
+                            Margin="0,0,0,0"
+                            Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="Toolbox Meeting" 
+                                       FontSize="13" 
+                                       Foreground="#666" 
+                                       FontWeight="SemiBold"/>
+                            <TextBlock x:Name="ToolboxMeetingText" 
+                                       Text="08:00:00 - 09:00:00" 
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#2E7D32"
+                                       Margin="0,4,0,0"/>
+                            <TextBlock x:Name="ShiftTimeText" 
+                                       Text="Shift: 09:00:00 - 17:00:00" 
+                                       FontSize="12"
+                                       Foreground="#666"
+                                       Margin="0,2,0,0"/>
                         </StackPanel>
                     </Border>
 

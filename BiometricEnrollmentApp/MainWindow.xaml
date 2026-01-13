@@ -100,6 +100,26 @@
 
                 <!-- Navigation Buttons -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Notification Indicator -->
+                    <Border x:Name="NotificationIndicator" 
+                            Background="#DC2626" 
+                            CornerRadius="12" 
+                            Padding="8,4" 
+                            Margin="0,0,10,0"
+                            Visibility="Collapsed"
+                            ToolTip="Schedule updates available">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔔" FontSize="12" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="NotificationCount" 
+                                       Text="0" 
+                                       FontSize="11" 
+                                       FontWeight="Bold" 
+                                       Foreground="White" 
+                                       VerticalAlignment="Center" 
+                                       Margin="4,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    
                     <!-- Employee Mode Button -->
                     <Button x:Name="EmployeeModeBtn" 
                             Content="Employee Mode" 

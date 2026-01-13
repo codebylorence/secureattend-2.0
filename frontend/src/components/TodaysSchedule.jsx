@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FaClock, FaCalendarAlt, FaUserCheck } from "react-icons/fa";
 import { getTodayAttendances } from "../api/AttendanceApi";
 import { getEmployeeScheduleById } from "../api/ScheduleApi";
+import { formatDateTime24, formatTime24Short } from "../utils/timeFormat";
 
 export default function TodaysSchedule() {
   const [status, setStatus] = useState("Not Clocked In");
@@ -154,20 +155,20 @@ export default function TodaysSchedule() {
 
   const formatTime = (date) => {
     if (!date) return "-";
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return formatDateTime24(date);
   };
 
   const getStatusColor = () => {
     if (status === "Present" || status === "Completed") return "text-green-700";
     if (status === "Late") return "text-amber-700";
-    if (status === "Clocked In") return "text-blue-700";
+    if (status === "Clocked In") return "text-primary-700";
     return "text-gray-700";
   };
 
   if (loading) {
     return (
       <div className="bg-white rounded-md shadow">
-        <div className="flex items-center justify-between bg-[#1E3A8A] text-white px-4 py-2 rounded-t-md">
+        <div className="flex items-center justify-between bg-primary text-white px-4 py-2 rounded-t-md">
           <div className="flex items-center gap-2">
             <FaClock />
             <h3 className="font-medium">Today's Schedule</h3>
@@ -190,7 +191,7 @@ export default function TodaysSchedule() {
 
   return (
     <div className="bg-white rounded-md shadow">
-      <div className="flex items-center justify-between bg-[#1E3A8A] text-white px-4 py-2 rounded-t-md">
+      <div className="flex items-center justify-between bg-primary text-white px-4 py-2 rounded-t-md">
         <div className="flex items-center gap-2">
           <FaClock />
           <h3 className="font-medium">Today's Schedule</h3>
@@ -201,23 +202,23 @@ export default function TodaysSchedule() {
         {schedule ? (
           <div className="space-y-4">
             {/* Shift Information */}
-            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+            <div className="bg-primary-50 rounded-lg p-3 border border-blue-100">
               <div className="flex items-center gap-2 mb-3">
-                <FaCalendarAlt className="text-blue-700" size={14} />
+                <FaCalendarAlt className="text-primary-700" size={14} />
                 <h4 className="text-sm font-semibold text-blue-900">Shift Details</h4>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Shift</span>
-                  <span className="text-sm font-semibold text-blue-800">{schedule.shift_name}</span>
+                  <span className="text-sm font-semibold text-primary-800">{schedule.shift_name}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Start</span>
-                  <span className="text-sm font-semibold text-blue-800">{schedule.start_time}</span>
+                  <span className="text-sm font-semibold text-primary-800">{formatTime24Short(schedule.start_time)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">End</span>
-                  <span className="text-sm font-semibold text-blue-800">{schedule.end_time}</span>
+                  <span className="text-sm font-semibold text-primary-800">{formatTime24Short(schedule.end_time)}</span>
                 </div>
               </div>
             </div>
@@ -250,7 +251,7 @@ export default function TodaysSchedule() {
                   <span className={`${getStatusColor()} font-bold text-sm px-2 py-1 rounded-full bg-white border ${
                     status === "Present" || status === "Completed" ? "border-green-200" :
                     status === "Late" ? "border-amber-200" :
-                    status === "Clocked In" ? "border-blue-200" : "border-gray-200"
+                    status === "Clocked In" ? "border-primary-200" : "border-gray-200"
                   }`}>
                     {status}
                   </span>

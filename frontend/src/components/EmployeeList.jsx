@@ -4,14 +4,26 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import EmpAction from "./EmpAction";
 import { MdManageAccounts } from "react-icons/md";
 import { fetchEmployees, getFingerprintStatus } from "../api/EmployeeApi";
 
-const EmployeeList = forwardRef(({ supervisorView = false }, ref) => {
+const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zone", statusFilter = "Active", searchTerm = "" }, ref) => {
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
+  const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [fingerprintStatus, setFingerprintStatus] = useState({});
   const [loading, setLoading] = useState(true);
+
+  // Handle row click to navigate to employee profile
+  const handleRowClick = (employeeId, event) => {
+    // Don't navigate if clicking on action buttons
+    if (event.target.closest('button') || event.target.closest('.action-cell')) {
+      return;
+    }
+    navigate(`/admin/employee/${employeeId}`);
+  };
 
   //  Fetch employees and fingerprint status from API
   const loadEmployees = async () => {
@@ -66,14 +78,45 @@ const EmployeeList = forwardRef(({ supervisorView = false }, ref) => {
     loadEmployees();
   }, []);
 
+  // Filter employees based on filters
+  useEffect(() => {
+    let filtered = employees;
+
+    // Apply zone filter
+    if (zoneFilter && zoneFilter !== "All Zone") {
+      filtered = filtered.filter(emp => emp.department === zoneFilter);
+    }
+
+    // Apply status filter
+    if (statusFilter) {
+      filtered = filtered.filter(emp => emp.status === statusFilter);
+    }
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(emp =>
+        emp.fullname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.position?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    setFilteredEmployees(filtered);
+  }, [employees, zoneFilter, statusFilter, searchTerm]);
+
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
 
       {/* Header Bar */}
-      <div className="bg-[#1E3A8A] text-white flex items-center justify-between px-4 py-3">
+      <div className="bg-primary text-white flex items-center justify-between px-4 py-3">
         <div className="flex items-center space-x-2">
           <MdManageAccounts size={20} />
-          <h2 className="font-semibold text-white">Employee Accounts ({employees.length})</h2>
+          <h2 className="font-semibold text-white">Employee Accounts ({filteredEmployees.length})</h2>
+        </div>
+        <div className="text-sm text-blue-100">
+          Click on any row to view employee profile
         </div>
       </div>
 
@@ -85,14 +128,17 @@ const EmployeeList = forwardRef(({ supervisorView = false }, ref) => {
             <div className="h-4 bg-gray-200 rounded w-1/3"></div>
           </div>
         </div>
-      ) : employees.length === 0 ? (
+      ) : filteredEmployees.length === 0 ? (
         <div className="p-6 text-center text-gray-500">
           <MdManageAccounts className="text-4xl mx-auto mb-4 text-gray-300" />
-          <p>{supervisorView ? "No active employees found" : "No employees found"}</p>
+          <p>{searchTerm || zoneFilter !== "All Zone" || statusFilter !== "Active" ? "No employees match your filters" : (supervisorView ? "No active employees found" : "No employees found")}</p>
           <p className="text-sm mt-2">
-            {supervisorView 
-              ? "All active employees will appear here." 
-              : "Click 'Add Employee' to create the first employee record."
+            {searchTerm || zoneFilter !== "All Zone" || statusFilter !== "Active" 
+              ? "Try adjusting your search or filter criteria." 
+              : (supervisorView 
+                ? "All active employees will appear here." 
+                : "Click 'Add Employee' to create the first employee record."
+              )
             }
           </p>
         </div>
@@ -124,8 +170,13 @@ const EmployeeList = forwardRef(({ supervisorView = false }, ref) => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {employees.map((emp) => (
-                <tr key={emp.id} className="hover:bg-gray-50">
+              {filteredEmployees.map((emp) => (
+                <tr 
+                  key={emp.id} 
+                  className="hover:bg-primary-50 cursor-pointer transition-colors duration-200 hover:shadow-sm"
+                  onClick={(e) => handleRowClick(emp.employee_id, e)}
+                  title="Click to view employee profile"
+                >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {emp.employee_id}
                   </td>
@@ -164,7 +215,7 @@ const EmployeeList = forwardRef(({ supervisorView = false }, ref) => {
                     </span>
                   </td>
                   {!supervisorView && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium action-cell">
                       <EmpAction
                         id={emp.id}
                         employee={{

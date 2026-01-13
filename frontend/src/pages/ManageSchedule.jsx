@@ -59,11 +59,11 @@ export default function ManageSchedule() {
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">
-        Manage Schedule
+        <h1 className="text-heading text-[21px] font-semibold">
+          Manage Schedule
         </h1>
         <p className="text-sm text-gray-600 mt-1">
-          Click on any day to add zones and create schedules
+          Click on any day to add zones and create schedules. Assign supervisors to shifts.
         </p>
       </div>
 

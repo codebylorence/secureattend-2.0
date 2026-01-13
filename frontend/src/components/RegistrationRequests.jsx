@@ -57,14 +57,14 @@ export default function RegistrationRequests() {
       if (response.ok) {
         // Remove approved request from list
         setRequests(prev => prev.filter(req => req.id !== requestId));
-        toast.success('✅ Registration request approved successfully!');
+        toast.success('Registration request approved successfully!');
       } else {
         const data = await response.json();
-        toast.error(`❌ Failed to approve request: ${data.message}`);
+        toast.error(`Failed to approve request: ${data.message}`);
       }
     } catch (error) {
       console.error('Error approving request:', error);
-      toast.error('🌐 Network error. Please try again.');
+      toast.error('Network error. Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -72,7 +72,7 @@ export default function RegistrationRequests() {
 
   const handleReject = async () => {
     if (!rejectionReason.trim()) {
-      toast.error('📝 Please provide a reason for rejection');
+      toast.error('Please provide a reason for rejection');
       return;
     }
 
@@ -96,14 +96,14 @@ export default function RegistrationRequests() {
         setShowModal(false);
         setSelectedRequest(null);
         setRejectionReason('');
-        toast.success('❌ Registration request rejected successfully!');
+        toast.success('Registration request rejected successfully!');
       } else {
         const data = await response.json();
-        toast.error(`❌ Failed to reject request: ${data.message}`);
+        toast.error(`Failed to reject request: ${data.message}`);
       }
     } catch (error) {
       console.error('Error rejecting request:', error);
-      toast.error('🌐 Network error. Please try again.');
+      toast.error('Network error. Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -139,7 +139,7 @@ export default function RegistrationRequests() {
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <FaUsers className="text-blue-600" />
+          <FaUsers className="text-primary-600" />
           Pending Registration Requests ({requests.length})
         </h3>
       </div>

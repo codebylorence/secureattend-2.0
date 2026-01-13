@@ -8,6 +8,9 @@ import AddEmployeeModal from "../components/AddEmployeeModal";
 
 export default function Employees() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [zoneFilter, setZoneFilter] = useState("All Zone");
+  const [statusFilter, setStatusFilter] = useState("Active");
+  const [searchTerm, setSearchTerm] = useState("");
   const employeeListRef = useRef(null);
   
   // Get user role from localStorage
@@ -26,7 +29,7 @@ export default function Employees() {
     <div className="pr-10 bg-gray-50">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">
+        <h1 className="text-heading text-[21px] font-semibold">
           {isSupervisor ? "Employees" : "Manage Employees"}
         </h1>
       </div>
@@ -34,10 +37,10 @@ export default function Employees() {
       {/* Filters and Add Button */}
       <div className="flex justify-between my-6">
         <div className="flex items-center gap-4">
-          <p className="text-[#374151] mr-5">Filter :</p>
-          <DropdownZone />
-          <DropdownEmpStatus />
-          <SearchBar />
+          <p className="text-heading mr-5">Filter :</p>
+          <DropdownZone value={zoneFilter} onChange={setZoneFilter} />
+          <DropdownEmpStatus value={statusFilter} onChange={setStatusFilter} />
+          <SearchBar value={searchTerm} onChange={setSearchTerm} />
         </div>
 
         {/* Only show Add button for admin */}
@@ -49,7 +52,13 @@ export default function Employees() {
       </div>
 
       {/* Employee Table */}
-      <EmployeeList ref={employeeListRef} supervisorView={isSupervisor} />
+      <EmployeeList 
+        ref={employeeListRef} 
+        supervisorView={isSupervisor}
+        zoneFilter={zoneFilter}
+        statusFilter={statusFilter}
+        searchTerm={searchTerm}
+      />
 
       {/* Add Employee Modal - Only for admin */}
       {!isSupervisor && (

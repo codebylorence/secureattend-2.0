@@ -843,7 +843,7 @@ namespace BiometricEnrollmentApp.Services
                         if (IsOvernightShift(startTime, endTime))
                         {
                             // Verify that the current time is within the shift window
-                            var currentTime = now.ToString("HH:mm");
+                            var currentTime = TimezoneHelper.FormatTimeDisplayShort(now);
                             if (IsCurrentTimeWithinOvernightShift(startTime, endTime, currentTime))
                             {
                                 LogHelper.Write($"🌙 Found overnight shift for {employeeId} from {yesterday}: {shiftName} ({startTime} - {endTime})");
@@ -858,6 +858,96 @@ namespace BiometricEnrollmentApp.Services
                 LogHelper.Write($"💥 Error checking schedule for {employeeId}: {ex.Message}");
             }
             return (false, "", "", "");
+        }
+
+        public bool HasOvertimeAssignment(string employeeId)
+        {
+            try
+            {
+                var today = TimezoneHelper.Now.ToString("yyyy-MM-dd");
+                
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT COUNT(*) 
+                    FROM AttendanceSessions 
+                    WHERE employee_id = $emp_id 
+                    AND date = $today 
+                    AND status = 'Overtime'
+                ";
+                cmd.Parameters.AddWithValue("$emp_id", employeeId);
+                cmd.Parameters.AddWithValue("$today", today);
+
+                var count = Convert.ToInt32(cmd.ExecuteScalar());
+                
+                if (count > 0)
+                {
+                    LogHelper.Write($"⏰ Employee {employeeId} has overtime assignment for {today}");
+                    return true;
+                }
+                
+                return false;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error checking overtime assignment for {employeeId}: {ex.Message}");
+                return false;
+            }
+        }
+
+        public long CreateOvertimeAssignment(string employeeId, string reason = "Overtime Work")
+        {
+            try
+            {
+                var today = TimezoneHelper.Now.ToString("yyyy-MM-dd");
+                
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                // Check if overtime assignment already exists
+                using var checkCmd = conn.CreateCommand();
+                checkCmd.CommandText = @"
+                    SELECT COUNT(*) 
+                    FROM AttendanceSessions 
+                    WHERE employee_id = $emp_id 
+                    AND date = $today 
+                    AND status = 'Overtime'
+                ";
+                checkCmd.Parameters.AddWithValue("$emp_id", employeeId);
+                checkCmd.Parameters.AddWithValue("$today", today);
+
+                var existingCount = Convert.ToInt32(checkCmd.ExecuteScalar());
+                if (existingCount > 0)
+                {
+                    LogHelper.Write($"⚠️ Overtime assignment already exists for {employeeId} on {today}");
+                    return -1;
+                }
+
+                // Create overtime assignment
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT INTO AttendanceSessions (employee_id, date, clock_in, clock_out, total_hours, status)
+                    VALUES ($emp_id, $date, NULL, NULL, NULL, 'Overtime')
+                ";
+                cmd.Parameters.AddWithValue("$emp_id", employeeId);
+                cmd.Parameters.AddWithValue("$date", today);
+
+                cmd.ExecuteNonQuery();
+                
+                // Get the last inserted row ID
+                cmd.CommandText = "SELECT last_insert_rowid()";
+                var sessionId = Convert.ToInt64(cmd.ExecuteScalar());
+                LogHelper.Write($"✅ Created overtime assignment for {employeeId} (Session ID: {sessionId})");
+                
+                return sessionId;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error creating overtime assignment for {employeeId}: {ex.Message}");
+                return -1;
+            }
         }
 
         public (bool IsWithinShiftTime, string Message) IsWithinShiftTimeWindow(string shiftStartTime, string shiftEndTime)
@@ -923,6 +1013,127 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
+        // -----------------------
+        // Toolbox Meeting Methods
+        // -----------------------
+        
+        /// <summary>
+        /// Get toolbox meeting time range for an employee's shift
+        /// </summary>
+        public (string ToolboxStart, string ToolboxEnd, string ShiftStart, string ShiftEnd) GetToolboxMeetingTimes(string employeeId)
+        {
+            try
+            {
+                var scheduleCheck = IsEmployeeScheduledToday(employeeId);
+                
+                if (!scheduleCheck.IsScheduled)
+                {
+                    return ("", "", "", "");
+                }
+                
+                // Get toolbox meeting duration from config (default 60 minutes)
+                int toolboxMinutes = GetToolboxMeetingMinutes();
+                
+                // Parse shift start time
+                var timeParts = scheduleCheck.StartTime.Split(':');
+                if (timeParts.Length < 2) return ("", "", scheduleCheck.StartTime, scheduleCheck.EndTime);
+                
+                int shiftHour = int.Parse(timeParts[0]);
+                int shiftMinute = int.Parse(timeParts[1]);
+                
+                // Calculate toolbox meeting start time (X minutes before shift)
+                var shiftStart = new DateTime(2000, 1, 1, shiftHour, shiftMinute, 0);
+                var toolboxStart = shiftStart.AddMinutes(-toolboxMinutes);
+                
+                string toolboxStartStr = toolboxStart.ToString("HH:mm:ss");
+                string toolboxEndStr = scheduleCheck.StartTime + ":00";
+                
+                LogHelper.Write($"📋 Toolbox meeting for {employeeId}: {toolboxStartStr} - {toolboxEndStr} (Shift: {scheduleCheck.StartTime} - {scheduleCheck.EndTime})");
+                
+                return (toolboxStartStr, toolboxEndStr, scheduleCheck.StartTime, scheduleCheck.EndTime);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting toolbox meeting times: {ex.Message}");
+                return ("", "", "", "");
+            }
+        }
+        
+        /// <summary>
+        /// Get toolbox meeting duration from system config
+        /// </summary>
+        private int GetToolboxMeetingMinutes()
+        {
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "config", "system-config.json");
+                if (File.Exists(configPath))
+                {
+                    string json = File.ReadAllText(configPath);
+                    var config = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                    
+                    if (config != null && config.ContainsKey("toolboxMeetingMinutes"))
+                    {
+                        if (config["toolboxMeetingMinutes"] is System.Text.Json.JsonElement element && element.ValueKind == System.Text.Json.JsonValueKind.Number)
+                        {
+                            return element.GetInt32();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Error reading toolbox meeting config: {ex.Message}");
+            }
+            
+            // Default to 60 minutes
+            return 60;
+        }
+        
+        /// <summary>
+        /// Check if current time is within toolbox meeting period
+        /// </summary>
+        public bool IsWithinToolboxMeetingPeriod(string employeeId, DateTime currentTime)
+        {
+            try
+            {
+                var toolboxTimes = GetToolboxMeetingTimes(employeeId);
+                
+                if (string.IsNullOrEmpty(toolboxTimes.ToolboxStart) || string.IsNullOrEmpty(toolboxTimes.ToolboxEnd))
+                {
+                    return false;
+                }
+                
+                // Parse toolbox meeting times
+                var toolboxStartParts = toolboxTimes.ToolboxStart.Split(':');
+                var toolboxEndParts = toolboxTimes.ToolboxEnd.Split(':');
+                
+                if (toolboxStartParts.Length < 2 || toolboxEndParts.Length < 2) return false;
+                
+                int toolboxStartHour = int.Parse(toolboxStartParts[0]);
+                int toolboxStartMinute = int.Parse(toolboxStartParts[1]);
+                int toolboxEndHour = int.Parse(toolboxEndParts[0]);
+                int toolboxEndMinute = int.Parse(toolboxEndParts[1]);
+                
+                var toolboxStart = new DateTime(currentTime.Year, currentTime.Month, currentTime.Day, toolboxStartHour, toolboxStartMinute, 0);
+                var toolboxEnd = new DateTime(currentTime.Year, currentTime.Month, currentTime.Day, toolboxEndHour, toolboxEndMinute, 0);
+                
+                bool isWithinPeriod = currentTime >= toolboxStart && currentTime <= toolboxEnd;
+                
+                if (isWithinPeriod)
+                {
+                    LogHelper.Write($"📋 {employeeId} is within toolbox meeting period: {toolboxTimes.ToolboxStart} - {toolboxTimes.ToolboxEnd}");
+                }
+                
+                return isWithinPeriod;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error checking toolbox meeting period: {ex.Message}");
+                return false;
+            }
+        }
+
         public string DetermineAttendanceStatus(DateTime clockInTime, string shiftStartTime)
         {
             try
@@ -943,7 +1154,10 @@ namespace BiometricEnrollmentApp.Services
                 var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
                 int gracePeriod = settingsService.GetClockInGracePeriodMinutes();
                 
-                LogHelper.Write($"📊 Clock-in analysis: {minutesDifference:F1} minutes from shift start (Grace period: ±{gracePeriod} min)");
+                // Get toolbox meeting duration
+                int toolboxMinutes = GetToolboxMeetingMinutes();
+                
+                LogHelper.Write($"📊 Clock-in analysis: {minutesDifference:F1} minutes from shift start (Grace period: ±{gracePeriod} min, Toolbox: {toolboxMinutes} min before)");
                 
                 // If within grace period (before or after shift start), mark as Present
                 if (Math.Abs(minutesDifference) <= gracePeriod)
@@ -966,8 +1180,15 @@ namespace BiometricEnrollmentApp.Services
                     return "Late";
                 }
                 
-                // If too early (before grace period), still mark as Present but log it
-                LogHelper.Write($"⏰ Very early clock-in ({minutesDifference:F1} < -{gracePeriod} min) - Status: Present");
+                // If early but within toolbox meeting period, mark as Present
+                if (minutesDifference < -gracePeriod && Math.Abs(minutesDifference) <= toolboxMinutes)
+                {
+                    LogHelper.Write($"📋 Toolbox meeting clock-in ({minutesDifference:F1} min before shift) - Status: Present");
+                    return "Present";
+                }
+                
+                // If too early (before toolbox meeting period), still mark as Present but log it
+                LogHelper.Write($"⏰ Very early clock-in ({minutesDifference:F1} min before shift, outside toolbox period) - Status: Present");
                 return "Present";
             }
             catch (Exception ex)
@@ -992,7 +1213,7 @@ namespace BiometricEnrollmentApp.Services
                 var now = TimezoneHelper.Now;
                 var today = now.ToString("yyyy-MM-dd");
                 var dayOfWeek = now.DayOfWeek.ToString();
-                var currentTime = now.ToString("HH:mm");
+                var currentTime = TimezoneHelper.FormatTimeDisplayShort(now);
                 
                 LogHelper.Write($"🔍 ========== ABSENT MARKING CHECK ==========");
                 LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} ({dayOfWeek}) - Philippines time");
@@ -1636,6 +1857,122 @@ namespace BiometricEnrollmentApp.Services
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Failed to mark sync failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Diagnostic method to check attendance records and sync queue for a specific employee
+        /// </summary>
+        public void DiagnoseEmployeeAttendance(string employeeId)
+        {
+            try
+            {
+                LogHelper.Write($"🔍 DIAGNOSTIC: Checking attendance data for employee {employeeId}");
+                
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                
+                // Check AttendanceSessions
+                using var cmd1 = conn.CreateCommand();
+                cmd1.CommandText = "SELECT * FROM AttendanceSessions WHERE employee_id = @empId ORDER BY date DESC, clock_in DESC LIMIT 10";
+                cmd1.Parameters.AddWithValue("@empId", employeeId);
+                
+                LogHelper.Write($"📊 Recent AttendanceSessions for {employeeId}:");
+                using var reader1 = cmd1.ExecuteReader();
+                int sessionCount = 0;
+                while (reader1.Read())
+                {
+                    sessionCount++;
+                    var id = reader1.GetInt64(0);
+                    var date = reader1.GetString(2);
+                    var clockIn = reader1.GetString(3);
+                    var clockOut = reader1.IsDBNull(4) ? "NULL" : reader1.GetString(4);
+                    var status = reader1.GetString(6);
+                    
+                    LogHelper.Write($"  Session {id}: {date} | In: {clockIn} | Out: {clockOut} | Status: {status}");
+                }
+                
+                if (sessionCount == 0)
+                {
+                    LogHelper.Write($"  ❌ No AttendanceSessions found for {employeeId}");
+                }
+                reader1.Close();
+                
+                // Check SyncQueue
+                using var cmd2 = conn.CreateCommand();
+                cmd2.CommandText = "SELECT * FROM SyncQueue WHERE employee_id = @empId ORDER BY created_at DESC LIMIT 10";
+                cmd2.Parameters.AddWithValue("@empId", employeeId);
+                
+                LogHelper.Write($"🔄 SyncQueue entries for {employeeId}:");
+                using var reader2 = cmd2.ExecuteReader();
+                int queueCount = 0;
+                while (reader2.Read())
+                {
+                    queueCount++;
+                    var id = reader2.GetInt64(0);
+                    var sessionId = reader2.GetInt64(2);
+                    var syncType = reader2.GetString(3);
+                    var retryCount = reader2.GetInt32(5);
+                    var status = reader2.GetString(8);
+                    var lastAttempt = reader2.IsDBNull(6) ? "NULL" : reader2.GetString(6);
+                    
+                    LogHelper.Write($"  Queue {id}: Session {sessionId} | Type: {syncType} | Retries: {retryCount} | Status: {status} | Last: {lastAttempt}");
+                }
+                
+                if (queueCount == 0)
+                {
+                    LogHelper.Write($"  ✅ No SyncQueue entries for {employeeId}");
+                }
+                reader2.Close();
+                
+                // Check Attendances (legacy table)
+                using var cmd3 = conn.CreateCommand();
+                cmd3.CommandText = "SELECT * FROM Attendances WHERE employee_id = @empId ORDER BY recorded_at DESC LIMIT 5";
+                cmd3.Parameters.AddWithValue("@empId", employeeId);
+                
+                LogHelper.Write($"📝 Recent Attendances (legacy) for {employeeId}:");
+                using var reader3 = cmd3.ExecuteReader();
+                int attendanceCount = 0;
+                while (reader3.Read())
+                {
+                    attendanceCount++;
+                    var id = reader3.GetInt64(0);
+                    var recordedAt = reader3.GetString(5);
+                    var method = reader3.IsDBNull(4) ? "NULL" : reader3.GetString(4);
+                    
+                    LogHelper.Write($"  Attendance {id}: {recordedAt} | Method: {method}");
+                }
+                
+                if (attendanceCount == 0)
+                {
+                    LogHelper.Write($"  ✅ No legacy Attendances for {employeeId}");
+                }
+                reader3.Close();
+                
+                // Check if employee has fingerprint enrollment
+                using var cmd4 = conn.CreateCommand();
+                cmd4.CommandText = "SELECT employee_id, name, department FROM Enrollments WHERE employee_id = @empId";
+                cmd4.Parameters.AddWithValue("@empId", employeeId);
+                
+                using var reader4 = cmd4.ExecuteReader();
+                if (reader4.Read())
+                {
+                    var name = reader4.IsDBNull(1) ? "NULL" : reader4.GetString(1);
+                    var dept = reader4.IsDBNull(2) ? "NULL" : reader4.GetString(2);
+                    LogHelper.Write($"👤 Enrollment found: {employeeId} | Name: {name} | Dept: {dept}");
+                }
+                else
+                {
+                    LogHelper.Write($"❌ No fingerprint enrollment found for {employeeId}");
+                }
+                reader4.Close();
+                
+                LogHelper.Write($"🔍 DIAGNOSTIC COMPLETE for {employeeId}");
+                
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Diagnostic failed for {employeeId}: {ex.Message}");
             }
         }
     }

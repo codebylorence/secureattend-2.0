@@ -46,7 +46,7 @@ namespace BiometricEnrollmentApp
                 CurrentDateText.Text = now.ToString("dddd, MMMM d, yyyy");
                 
                 // Also update header time
-                HeaderTimeText.Text = now.ToString("HH:mm");
+                HeaderTimeText.Text = TimezoneHelper.FormatTimeDisplay(now);
                 HeaderDateText.Text = now.ToString("ddd, MMM dd");
             }
             catch { }
@@ -324,7 +324,7 @@ namespace BiometricEnrollmentApp
                 EmployeeNameText.Visibility = Visibility.Visible;
 
                 // Show status message with appropriate color
-                var timeStr = timestamp.ToString("HH:mm");
+                var timeStr = TimezoneHelper.FormatTimeDisplay(timestamp);
                 var statusColor = status switch
                 {
                     "Present" => "#4CAF50", // Green

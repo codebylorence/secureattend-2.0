@@ -8,6 +8,7 @@ import sequelize from "./config/database.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
+// Trigger restart
 import departmentRoutes from "./routes/departmentRoutes.js";
 import scheduleTemplateRoutes from "./routes/scheduleTemplateRoutes.js";
 import employeeScheduleRoutes from "./routes/employeeScheduleRoutes.js";
@@ -17,6 +18,8 @@ import registrationRoutes from "./routes/registrationRoutes.js";
 import positionRoutes from "./routes/positionRoutes.js";
 import backupRoutes from "./routes/backupRoutes.js";
 import systemConfigRoutes from "./routes/systemConfigRoutes.js";
+import scheduleNotificationRoutes from "./routes/scheduleNotificationRoutes.js";
+import shiftTemplateRoutes from "./routes/shiftTemplateRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
 // Import models first
 import "./models/employee.js";
@@ -28,6 +31,8 @@ import "./models/employeeSchedule.js";
 import "./models/notification.js";
 import "./models/registrationRequest.js";
 import "./models/position.js";
+import "./models/scheduleNotification.js";
+import "./models/shiftTemplate.js";
 // Import associations last
 import "./models/associations.js";
 
@@ -37,7 +42,7 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "http://localhost:5174"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   },
@@ -49,7 +54,7 @@ const io = new Server(httpServer, {
 // Make io accessible to routes
 app.set('io', io);
 
-app.use(cors());
+app.use(cors()); // Enable CORS for all routes
 app.use(express.json({ limit: '50mb' })); // Increase limit for base64 images
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -80,11 +85,13 @@ app.use("/api/departments", departmentRoutes);
 app.use("/api/templates", scheduleTemplateRoutes);
 app.use("/api/employee-schedules", employeeScheduleRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/schedule-notifications", scheduleNotificationRoutes);
 app.use("/api/cleanup", cleanupRoutes);
 app.use("/api/registration", registrationRoutes);
 app.use("/api/positions", positionRoutes);
 app.use("/api/backup", backupRoutes);
 app.use("/api/system", systemConfigRoutes);
+app.use("/api/shift-templates", shiftTemplateRoutes);
 app.use("/employees", employeeRoutes);
 
 

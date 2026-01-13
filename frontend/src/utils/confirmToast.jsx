@@ -15,7 +15,7 @@ export const confirmAction = (message, onConfirm) => {
             toast.dismiss(toastId);
             onConfirm();
           }}
-          className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+          className="px-6 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 font-medium"
         >
           OK
         </button>

@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 import { 
   FaUser, 
   FaCamera,
   FaArrowLeft,
-  FaPaperPlane
+  FaPaperPlane,
+  FaFingerprint
 } from 'react-icons/fa';
 
 export default function EmployeeRegistration() {
   const navigate = useNavigate();
+  const { systemConfig } = useSystemConfig();
   const [formData, setFormData] = useState({
     employee_id: '',
     firstname: '',
@@ -262,8 +265,23 @@ export default function EmployeeRegistration() {
       <div className="max-w-2xl mx-auto">
         <div className="bg-white shadow-lg rounded-lg p-8">
           <div className="text-center mb-8">
+            {/* Logo */}
+            <div className="flex justify-center mb-4">
+              {systemConfig.logo ? (
+                <img 
+                  src={systemConfig.logo} 
+                  alt={systemConfig.systemName || "System Logo"} 
+                  className="max-h-16 max-w-48 object-contain"
+                />
+              ) : (
+                <div className="bg-[#1E3A8A] p-4 rounded-full shadow-md">
+                  <FaFingerprint size={35} color="white" />
+                </div>
+              )}
+            </div>
             <h2 className="text-3xl font-bold text-gray-900">Employee Registration</h2>
             <p className="mt-2 text-gray-600">Submit your registration request for admin approval</p>
+            <p className="text-sm text-gray-500 mt-1">{systemConfig.systemName} - {systemConfig.companyName}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">

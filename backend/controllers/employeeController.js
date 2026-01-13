@@ -27,9 +27,13 @@ export const getEmployees = async (req, res) => {
         }
       }
       
+      // Include role from user relationship
+      const role = employeeData.user?.role || 'employee';
+      
       return {
         ...employeeData,
-        fullname: fullname
+        fullname: fullname,
+        role: role
       };
     });
     

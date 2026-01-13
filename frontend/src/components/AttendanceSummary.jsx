@@ -145,7 +145,7 @@ export default function AttendanceSummary() {
 
   return (
     <div className="bg-white rounded-md shadow">
-      <div className="flex items-center justify-between bg-[#1E3A8A] text-white px-4 py-2 rounded-t-md">
+      <div className="flex items-center justify-between bg-primary text-white px-4 py-2 rounded-t-md">
         <div className="flex items-center gap-2">
           <FaClock />
           <h3 className="font-medium">Attendance Summary</h3>
@@ -175,7 +175,7 @@ export default function AttendanceSummary() {
           
           <button
             onClick={handleViewAttendance}
-            className="flex items-center gap-1 text-sm hover:bg-blue-700 px-2 py-1 rounded transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-sm hover:bg-primary-700 px-2 py-1 rounded transition-colors cursor-pointer"
             title="View Full Attendance"
           >
             <FaEye size={12} />
@@ -192,7 +192,7 @@ export default function AttendanceSummary() {
               onClick={() => setFilter("7")}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
                 filter === "7" 
-                  ? "bg-blue-600 text-white" 
+                  ? "bg-primary-600 text-white" 
                   : "text-gray-600 hover:bg-gray-200"
               }`}
             >
@@ -202,7 +202,7 @@ export default function AttendanceSummary() {
               onClick={() => setFilter("30")}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
                 filter === "30" 
-                  ? "bg-blue-600 text-white" 
+                  ? "bg-primary-600 text-white" 
                   : "text-gray-600 hover:bg-gray-200"
               }`}
             >

@@ -173,11 +173,11 @@ export default function Profile() {
     return (
       <div className="pr-10 bg-gray-50 min-h-screen pb-10">
         <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
-          <h1 className="text-[#374151] text-[21px] font-semibold">My Profile</h1>
+          <h1 className="text-heading text-[21px] font-semibold">My Profile</h1>
         </div>
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3A8A] mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 spinner-primary mx-auto mb-4"></div>
             <p className="text-gray-600">Loading profile...</p>
           </div>
         </div>
@@ -188,12 +188,12 @@ export default function Profile() {
   return (
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">My Profile</h1>
+        <h1 className="text-heading text-[21px] font-semibold">My Profile</h1>
       </div>
 
       <div className="max-w-4xl mx-auto">
         {/* Profile Header Card */}
-        <div className="bg-gradient-to-r from-[#1E3A8A] to-[#2563EB] rounded-lg shadow-lg p-8 mb-6">
+        <div className="bg-gradient-primary rounded-lg shadow-lg p-8 mb-6">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
             {/* Profile Photo */}
             <div className="relative flex-shrink-0">
@@ -210,7 +210,7 @@ export default function Profile() {
               )}
               <label
                 htmlFor="photo-upload"
-                className="absolute bottom-2 right-2 bg-white text-[#1E3A8A] p-3 rounded-full cursor-pointer hover:bg-gray-100 shadow-lg transition-all"
+                className="absolute bottom-2 right-2 bg-white text-primary p-3 rounded-full cursor-pointer hover:bg-gray-100 shadow-lg transition-all"
                 title="Upload Photo"
               >
                 <FaCamera size={20} />
@@ -252,12 +252,12 @@ export default function Profile() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Personal Information */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-[#1E3A8A] mb-4 pb-2 border-b-2 border-blue-100">
+            <h3 className="text-lg font-semibold text-primary mb-4 pb-2 border-b-2 border-blue-100">
               Personal Information
             </h3>
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <FaIdCard className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
+                <FaIdCard className="text-primary mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Employee ID</p>
                   <p className="text-gray-900 font-medium">{user?.employee?.employee_id || "N/A"}</p>
@@ -265,7 +265,7 @@ export default function Profile() {
               </div>
 
               <div className="flex items-start gap-3">
-                <FaUser className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
+                <FaUser className="text-primary mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Full Name</p>
                   <p className="text-gray-900 font-medium">
@@ -277,7 +277,7 @@ export default function Profile() {
               </div>
 
               <div className="flex items-start gap-3">
-                <FaEnvelope className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
+                <FaEnvelope className="text-primary mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Email Address</p>
                   <p className="text-gray-900 font-medium break-all">{user?.employee?.email || "N/A"}</p>
@@ -285,7 +285,7 @@ export default function Profile() {
               </div>
 
               <div className="flex items-start gap-3">
-                <FaPhone className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
+                <FaPhone className="text-primary mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Contact Number</p>
                   <p className="text-gray-900 font-medium">{user?.employee?.contact_number || "N/A"}</p>
@@ -296,12 +296,12 @@ export default function Profile() {
 
           {/* Work Information */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-[#1E3A8A] mb-4 pb-2 border-b-2 border-blue-100">
+            <h3 className="text-lg font-semibold text-primary mb-4 pb-2 border-b-2 border-blue-100">
               Work Information
             </h3>
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <FaBuilding className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
+                <FaBuilding className="text-primary mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Department</p>
                   <p className="text-gray-900 font-medium">{user?.employee?.department || "N/A"}</p>
@@ -309,7 +309,7 @@ export default function Profile() {
               </div>
 
               <div className="flex items-start gap-3">
-                <FaBriefcase className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
+                <FaBriefcase className="text-primary mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Position</p>
                   <p className="text-gray-900 font-medium">{user?.employee?.position || "N/A"}</p>
@@ -317,7 +317,7 @@ export default function Profile() {
               </div>
 
               <div className="flex items-start gap-3">
-                <FaUserTag className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
+                <FaUserTag className="text-primary mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Role</p>
                   <p className="text-gray-900 font-medium capitalize">{user?.role || "N/A"}</p>
@@ -325,7 +325,7 @@ export default function Profile() {
               </div>
 
               <div className="flex items-start gap-3">
-                <FaUser className="text-[#1E3A8A] mt-1 flex-shrink-0" size={20} />
+                <FaUser className="text-primary mt-1 flex-shrink-0" size={20} />
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
                     <div>
@@ -334,7 +334,7 @@ export default function Profile() {
                     </div>
                     <button
                       onClick={handleEditCredentials}
-                      className="text-[#1E3A8A] hover:text-blue-700 p-2 rounded-full hover:bg-blue-50 transition-colors"
+                      className="text-primary hover:text-primary-hover p-2 rounded-full hover:bg-primary-50 transition-colors"
                       title="Edit Username & Password"
                     >
                       <FaEdit size={16} />
@@ -344,8 +344,7 @@ export default function Profile() {
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full mt-1 flex-shrink-0" 
-                     style={{ backgroundColor: user?.employee?.status === "Active" ? "#10B981" : "#EF4444" }}>
+                <div className={`w-5 h-5 rounded-full mt-1 flex-shrink-0 ${user?.employee?.status === "Active" ? "status-active" : "status-inactive"}`}>
                 </div>
                 <div className="flex-1">
                   <p className="text-xs text-gray-500 mb-1">Status</p>
@@ -359,8 +358,8 @@ export default function Profile() {
         </div>
 
         {/* Help Text */}
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
+        <div className="mt-6 bg-primary-50 border border-primary-200 rounded-lg p-4">
+          <p className="text-sm text-primary-800">
             <strong>Tip:</strong> Click the camera icon on your profile photo to upload a new picture. 
             Your photo will be displayed across the system and used for attendance verification.
             Click the edit icon next to your username to update your login credentials.
@@ -373,7 +372,7 @@ export default function Profile() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative mx-4">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-[#1E3A8A] flex items-center gap-2">
+              <h2 className="text-xl font-semibold text-primary flex items-center gap-2">
                 <FaLock size={20} />
                 Edit Credentials
               </h2>
@@ -397,7 +396,7 @@ export default function Profile() {
                   value={credentialsForm.username}
                   onChange={handleCredentialsChange}
                   required
-                  className="w-full border border-gray-300 rounded-md p-3 focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                  className="w-full border border-gray-300 rounded-md p-3 focus:ring-2 focus-ring-primary focus:border-transparent"
                   placeholder="Enter new username"
                 />
               </div>
@@ -414,7 +413,7 @@ export default function Profile() {
                     value={credentialsForm.currentPassword}
                     onChange={handleCredentialsChange}
                     required
-                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus-ring-primary focus:border-transparent"
                     placeholder="Enter current password"
                   />
                   <button
@@ -440,7 +439,7 @@ export default function Profile() {
                     onChange={handleCredentialsChange}
                     required
                     minLength={6}
-                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus-ring-primary focus:border-transparent"
                     placeholder="Enter new password (min 6 characters)"
                   />
                   <button
@@ -465,7 +464,7 @@ export default function Profile() {
                     value={credentialsForm.confirmPassword}
                     onChange={handleCredentialsChange}
                     required
-                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus:ring-[#1E3A8A] focus:border-transparent"
+                    className="w-full border border-gray-300 rounded-md p-3 pr-10 focus:ring-2 focus-ring-primary focus:border-transparent"
                     placeholder="Confirm new password"
                   />
                   <button
@@ -491,7 +490,7 @@ export default function Profile() {
                 <button
                   type="submit"
                   disabled={updatingCredentials}
-                  className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md hover:bg-blue-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {updatingCredentials ? (
                     <>

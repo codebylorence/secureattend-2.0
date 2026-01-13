@@ -99,6 +99,7 @@ export default function AttendanceReports() {
     if (record.status === "Present") return "Regular working day";
     if (record.status === "Absent") return "Absent";
     if (record.status === "COMPLETED") return "Completed shift";
+    if (record.status === "Overtime") return "Overtime work";
     return "Regular attendance";
   };
 
@@ -161,7 +162,7 @@ export default function AttendanceReports() {
     <div className="pr-10 bg-gray-50">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">Attendance Reports</h1>
+        <h1 className="text-heading text-[21px] font-semibold">Attendance Reports</h1>
       </div>
 
       {/* Filter Section */}
@@ -209,7 +210,7 @@ export default function AttendanceReports() {
             <button
               onClick={generateReport}
               disabled={loading}
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? "Generating..." : "Generate Report"}
             </button>
@@ -330,6 +331,8 @@ export default function AttendanceReports() {
                             ? 'bg-yellow-100 text-yellow-800'
                             : record.status === 'Absent'
                             ? 'bg-red-100 text-red-800'
+                            : record.status === 'Overtime'
+                            ? 'bg-purple-100 text-purple-800'
                             : 'bg-gray-100 text-gray-800'
                         }`}>
                           {record.status}
@@ -369,7 +372,7 @@ export default function AttendanceReports() {
                       onClick={() => setCurrentPage(pageNum)}
                       className={`px-3 py-1 text-sm border rounded ${
                         currentPage === pageNum
-                          ? 'bg-blue-500 text-white border-blue-500'
+                          ? 'bg-primary-500 text-white border-primary-500'
                           : 'border-gray-300 hover:bg-gray-50'
                       }`}
                     >

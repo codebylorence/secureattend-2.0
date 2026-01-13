@@ -8,6 +8,14 @@ import { Op } from "sequelize";
 
 export const getAllEmployees = async () => {
   return await Employee.findAll({
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["role"],
+        required: false // LEFT JOIN to include employees without user accounts
+      }
+    ],
     order: [["createdAt", "DESC"]],
   });
 };
@@ -206,6 +214,14 @@ export const updateEmployee = async (id, updates) => {
 export const getEmployeeByEmployeeId = async (employee_id) => {
   const employee = await Employee.findOne({
     where: { employee_id },
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["role"],
+        required: false // LEFT JOIN to include employees without user accounts
+      }
+    ],
   });
   
   if (!employee) {
@@ -227,12 +243,16 @@ export const getEmployeeByEmployeeId = async (employee_id) => {
     }
   }
   
+  // Get role from user relationship
+  const role = employeeData.user?.role || 'employee';
+  
   // Return in the format expected by biometric app
   return {
     ...employeeData,
     employeeId: employeeData.employee_id, // Map employee_id to employeeId for C# app
     fullname: fullname,
-    department: employeeData.department || 'No Department'
+    department: employeeData.department || 'No Department',
+    role: role // Include the role from user table
   };
 };
 

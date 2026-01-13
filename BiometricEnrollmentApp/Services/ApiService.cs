@@ -174,6 +174,187 @@ namespace BiometricEnrollmentApp.Services
                 return null;
             }
         }
+
+        public async Task<List<ServerEmployee>?> GetAllEmployeesAsync()
+        {
+            try
+            {
+                LogHelper.Write("📥 Fetching all employees from server...");
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/employees");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    var employees = JsonSerializer.Deserialize<List<ServerEmployee>>(json, new JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    
+                    LogHelper.Write($"✅ Retrieved {employees?.Count ?? 0} employee(s)");
+                    return employees;
+                }
+                else
+                {
+                    LogHelper.Write($"⚠️ Failed to get employees: {response.StatusCode}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting employees: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<bool> AssignOvertimeAsync(OvertimeAssignment assignment)
+        {
+            try
+            {
+                var payload = new
+                {
+                    employee_id = assignment.EmployeeId,
+                    reason = assignment.Reason,
+                    estimated_hours = assignment.EstimatedHours,
+                    assigned_date = assignment.AssignedDate.ToString("yyyy-MM-dd"),
+                    assigned_by = assignment.AssignedBy
+                };
+
+                var json = JsonSerializer.Serialize(payload);
+                LogHelper.Write($"📤 Assigning overtime: {json}");
+                
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync($"{_baseUrl}/api/overtime/assign", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    LogHelper.Write($"✅ Overtime assignment sent successfully for {assignment.EmployeeId}");
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"❌ Failed to assign overtime: {response.StatusCode} - {errorContent}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error assigning overtime: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> RemoveOvertimeAsync(string employeeId)
+        {
+            try
+            {
+                LogHelper.Write($"📤 Removing overtime assignment for {employeeId}");
+                
+                var response = await _httpClient.DeleteAsync($"{_baseUrl}/api/overtime/{employeeId}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    LogHelper.Write($"✅ Overtime removal sent successfully for {employeeId}");
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"❌ Failed to remove overtime: {response.StatusCode} - {errorContent}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error removing overtime: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<List<ScheduleNotification>?> GetScheduleNotificationsAsync()
+        {
+            try
+            {
+                LogHelper.Write("📥 Fetching schedule notifications from server...");
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/schedule-notifications/unacknowledged");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    var result = JsonSerializer.Deserialize<ScheduleNotificationResponse>(json, new JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    
+                    LogHelper.Write($"✅ Retrieved {result?.Notifications?.Count ?? 0} schedule notification(s)");
+                    return result?.Notifications;
+                }
+                else
+                {
+                    LogHelper.Write($"⚠️ Failed to get schedule notifications: {response.StatusCode}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting schedule notifications: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<bool> AcknowledgeNotificationAsync(int notificationId)
+        {
+            try
+            {
+                LogHelper.Write($"📤 Acknowledging notification {notificationId}");
+                
+                var response = await _httpClient.PutAsync($"{_baseUrl}/api/schedule-notifications/{notificationId}/acknowledge", null);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    LogHelper.Write($"✅ Notification {notificationId} acknowledged successfully");
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"❌ Failed to acknowledge notification: {response.StatusCode} - {errorContent}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error acknowledging notification: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> AcknowledgeAllNotificationsAsync()
+        {
+            try
+            {
+                LogHelper.Write("📤 Acknowledging all notifications");
+                
+                var response = await _httpClient.PutAsync($"{_baseUrl}/api/schedule-notifications/acknowledge-all", null);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    LogHelper.Write("✅ All notifications acknowledged successfully");
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"❌ Failed to acknowledge all notifications: {response.StatusCode} - {errorContent}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error acknowledging all notifications: {ex.Message}");
+                return false;
+            }
+        }
     }
 
     public class EmployeeDetails
@@ -186,6 +367,15 @@ namespace BiometricEnrollmentApp.Services
         public string? Contact_Number { get; set; }
         public string? Email { get; set; }
         public string? Photo { get; set; }
+        public string? Status { get; set; }
+    }
+
+    public class ServerEmployee
+    {
+        public string? EmployeeId { get; set; }
+        public string? Fullname { get; set; }
+        public string? Department { get; set; }
+        public string? Position { get; set; }
         public string? Status { get; set; }
     }
 
@@ -203,5 +393,33 @@ namespace BiometricEnrollmentApp.Services
         public string? Assigned_By { get; set; }
         public DateTime? Created_At { get; set; }
         public DateTime? Updated_At { get; set; }
+    }
+
+    public class OvertimeAssignment
+    {
+        public string? EmployeeId { get; set; }
+        public string? Reason { get; set; }
+        public double EstimatedHours { get; set; }
+        public DateTime AssignedDate { get; set; }
+        public string? AssignedBy { get; set; }
+    }
+
+    public class ScheduleNotification
+    {
+        public int Id { get; set; }
+        public string? Message { get; set; }
+        public string? Type { get; set; }
+        public string? Details { get; set; }
+        public bool Is_Acknowledged { get; set; }
+        public string? Created_By { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public DateTime? Acknowledged_At { get; set; }
+    }
+
+    public class ScheduleNotificationResponse
+    {
+        public bool Success { get; set; }
+        public List<ScheduleNotification>? Notifications { get; set; }
+        public int Count { get; set; }
     }
 }

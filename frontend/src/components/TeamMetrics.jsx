@@ -4,7 +4,7 @@ import { fetchEmployees } from "../api/EmployeeApi";
 import { getEmployeeSchedules } from "../api/ScheduleApi";
 
 export default function TeamMetrics({ department }) {
-  const [metrics, setMetrics] = useState({ present: 0, absent: 0, late: 0, scheduled: 0 });
+  const [metrics, setMetrics] = useState({ present: 0, absent: 0, late: 0, overtime: 0, scheduled: 0, totalOvertimeHours: 0 });
 
   useEffect(() => {
     if (department) {
@@ -71,6 +71,16 @@ export default function TeamMetrics({ department }) {
       const late = departmentAttendances.filter(att => 
         att.status === "Late"
       ).length;
+
+      // Count overtime employees
+      const overtime = departmentAttendances.filter(att => 
+        att.status === "Overtime"
+      ).length;
+
+      // Calculate total overtime hours for this department today
+      const totalOvertimeHours = departmentAttendances
+        .filter(att => att.status === "Overtime" && att.overtime_hours)
+        .reduce((total, att) => total + parseFloat(att.overtime_hours || 0), 0);
       
       // Count absent - only count actual "Absent" status records
       const absentRecords = departmentAttendances.filter(att => att.status === "Absent");
@@ -80,9 +90,11 @@ export default function TeamMetrics({ department }) {
       console.log('  Total department attendances:', departmentAttendances.length);
       console.log('  Absent records:', absentRecords);
       console.log('  Absent count:', absentRecords.length);
+      console.log('  Overtime count:', overtime);
+      console.log('  Total overtime hours:', totalOvertimeHours);
       const absent = absentRecords.length;
 
-      setMetrics({ present, absent, late, scheduled });
+      setMetrics({ present, absent, late, overtime, scheduled, totalOvertimeHours });
     } catch (error) {
       console.error("Error fetching metrics:", error);
     }
@@ -91,7 +103,7 @@ export default function TeamMetrics({ department }) {
   return (
     <>
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 w-full">
         {/* Scheduled Today */}
         <div className="bg-purple-600 text-white rounded-md p-6 text-center shadow">
           <p className="text-3xl font-semibold">{metrics.scheduled}</p>
@@ -102,6 +114,13 @@ export default function TeamMetrics({ department }) {
         <div className="bg-emerald-500 text-white rounded-md p-6 text-center shadow">
           <p className="text-3xl font-semibold">{metrics.present}</p>
           <p className="text-sm mt-1">Present</p>
+        </div>
+
+        {/* Overtime */}
+        <div className="bg-indigo-600 text-white rounded-md p-6 text-center shadow">
+          <p className="text-3xl font-semibold">{metrics.overtime}</p>
+          <p className="text-sm mt-1">Overtime</p>
+          <p className="text-xs mt-1 opacity-90">{metrics.totalOvertimeHours.toFixed(1)}h total</p>
         </div>
 
         {/* Absent */}

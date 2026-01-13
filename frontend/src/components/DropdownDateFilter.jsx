@@ -5,7 +5,7 @@ export default function DropdownDateFilter() {
     <div className="inline-flex items-center border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700">
       <select
         className="bg-transparent focus:outline-none appearance-none pr-6"
-        defaultValue="Zone A"
+        defaultValue="Week"
       >
         <option>Week</option>
         <option>Month</option>

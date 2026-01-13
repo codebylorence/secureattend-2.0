@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa6";
 import { getAttendances } from "../api/AttendanceApi";
+import { formatDateTime24 } from "../utils/timeFormat";
 
 export default function LastAttendance() {
   const [lastAttendance, setLastAttendance] = useState(null);
@@ -50,16 +51,14 @@ export default function LastAttendance() {
   };
 
   const formatTime = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return formatDateTime24(dateString);
   };
 
   return (
     <>
       <div className="bg-white shadow rounded-md overflow-hidden">
         {/* Header Bar */}
-        <div className="bg-[#1E3A8A] text-white flex items-center justify-between px-4 py-3">
+        <div className="bg-primary text-white flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-2">
             <FaClock size={20}/> 
             <h2 className="font-semibold text-white">Last Attendance</h2>
@@ -101,7 +100,9 @@ export default function LastAttendance() {
                         const statusDisplay = {
                           'Present': { label: 'Present', color: 'bg-green-100 text-green-800' },
                           'Late': { label: 'Late', color: 'bg-orange-100 text-orange-800' },
-                          'IN': { label: 'Clocked In', color: 'bg-blue-100 text-blue-800' },
+                          'Absent': { label: 'Absent', color: 'bg-red-100 text-red-800' },
+                          'Overtime': { label: 'Overtime', color: 'bg-purple-100 text-purple-800' },
+                          'IN': { label: 'Clocked In', color: 'bg-primary-100 text-primary-800' },
                           'COMPLETED': { label: 'Completed', color: 'bg-green-100 text-green-800' },
                         };
                         const display = statusDisplay[lastAttendance.status] || { label: lastAttendance.status, color: 'bg-gray-100 text-gray-800' };

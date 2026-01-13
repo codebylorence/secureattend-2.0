@@ -79,14 +79,8 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
       }
     } catch (error) {
       console.error('Error loading data:', error);
-      // Fallback data
-      setDepartments([
-        { id: 1, name: 'Zone A' },
-        { id: 2, name: 'Zone B' },
-        { id: 3, name: 'Zone C' },
-        { id: 4, name: 'Warehouse Admin' },
-        { id: 5, name: 'HR Department' }
-      ]);
+      // Set empty arrays as fallback - let user know there was an error
+      setDepartments([]);
       setPositions([
         { id: 1, name: 'Picker' },
         { id: 2, name: 'Packer' },
@@ -94,6 +88,7 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
         { id: 4, name: 'Supervisor' },
         { id: 5, name: 'Team Leader' }
       ]);
+      toast.error("Failed to load departments. Please refresh the page.");
     } finally {
       setLoading(false);
     }
@@ -134,7 +129,7 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative">
-        <h2 className="text-lg font-semibold mb-4 text-[#1E3A8A]">Edit Employee</h2>
+        <h2 className="text-lg font-semibold mb-4 text-primary">Edit Employee</h2>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           {/* Employee ID */}
@@ -272,7 +267,7 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md hover:bg-blue-900"
+              className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover"
             >
               Save Changes
             </button>

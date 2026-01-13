@@ -10,6 +10,7 @@ import {
   getScheduleById,
 } from "../services/employeeScheduleService.js";
 import { getTodaysSchedule } from "../utils/scheduleDateGenerator.js";
+import { createScheduleNotification } from "./scheduleNotificationController.js";
 import User from "../models/user.js";
 import Employee from "../models/employee.js";
 
@@ -51,14 +52,39 @@ export const getDepartmentSchedules = async (req, res) => {
 // POST /api/employee-schedules/assign
 export const assignSchedule = async (req, res) => {
   try {
-    console.log("Assigning schedule with data:", req.body);
+    console.log("📥 Assigning schedule with data:", req.body);
+    console.log("👤 Request user:", req.user);
+    
     const schedule = await assignScheduleToEmployee(req.body);
-    console.log("Schedule assigned successfully:", schedule.id);
+    console.log("✅ Schedule assigned successfully:", schedule.id);
+    
+    // Create notification for biometric app
+    try {
+      const assignedBy = req.user?.username || "System";
+      const employeeId = req.body.employee_id;
+      const shiftName = req.body.shift_name || "Schedule";
+      
+      await createScheduleNotification(
+        `New schedule assigned to employee ${employeeId}: ${shiftName}`,
+        "schedule_update",
+        {
+          employee_id: employeeId,
+          schedule_id: schedule.id,
+          shift_name: shiftName,
+          action: "assigned"
+        },
+        assignedBy
+      );
+    } catch (notificationError) {
+      console.error("⚠️ Failed to create schedule notification:", notificationError);
+      // Don't fail the main operation if notification fails
+    }
+    
     res.status(201).json(schedule);
   } catch (error) {
-    console.error("Error assigning schedule:", error);
-    console.error("Error details:", error.message);
-    console.error("Stack trace:", error.stack);
+    console.error("❌ Error assigning schedule:", error);
+    console.error("❌ Error details:", error.message);
+    console.error("❌ Stack trace:", error.stack);
     res.status(500).json({ 
       message: "Error assigning schedule",
       error: error.message 
@@ -74,6 +100,27 @@ export const editEmployeeSchedule = async (req, res) => {
     
     if (!schedule) {
       return res.status(404).json({ message: "Schedule not found" });
+    }
+    
+    // Create notification for biometric app
+    try {
+      const updatedBy = req.user?.username || "System";
+      const employeeId = schedule.employee_id;
+      const shiftName = schedule.template?.shift_name || "Schedule";
+      
+      await createScheduleNotification(
+        `Schedule updated for employee ${employeeId}: ${shiftName}`,
+        "schedule_update",
+        {
+          employee_id: employeeId,
+          schedule_id: schedule.id,
+          shift_name: shiftName,
+          action: "updated"
+        },
+        updatedBy
+      );
+    } catch (notificationError) {
+      console.error("⚠️ Failed to create schedule notification:", notificationError);
     }
     
     res.status(200).json({ message: "Schedule updated successfully", schedule });
@@ -136,6 +183,27 @@ export const removeEmployeeSchedule = async (req, res) => {
     
     if (!deleted) {
       return res.status(404).json({ message: "Schedule not found" });
+    }
+    
+    // Create notification for biometric app
+    try {
+      const deletedBy = userRecord.employee.fullname || userRecord.username;
+      const employeeId = schedule.employee_id;
+      const shiftName = schedule.template?.shift_name || "Schedule";
+      
+      await createScheduleNotification(
+        `Schedule deleted for employee ${employeeId}: ${shiftName}`,
+        "schedule_delete",
+        {
+          employee_id: employeeId,
+          schedule_id: id,
+          shift_name: shiftName,
+          action: "deleted"
+        },
+        deletedBy
+      );
+    } catch (notificationError) {
+      console.error("⚠️ Failed to create schedule notification:", notificationError);
     }
     
     console.log(`✅ Schedule ${id} deleted successfully by ${currentUser.role} user ${userRecord.employee.employee_id}`);

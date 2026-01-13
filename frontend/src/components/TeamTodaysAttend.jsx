@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa6";
 import { getTodayAttendances, getAttendances } from "../api/AttendanceApi";
+import { formatDateTime24 } from "../utils/timeFormat";
 
 export default function TeamTodaysAttend({ department, statusFilter, searchTerm }) {
   const [attendances, setAttendances] = useState([]);
@@ -47,9 +48,7 @@ export default function TeamTodaysAttend({ department, statusFilter, searchTerm 
   };
 
   const formatTime = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return formatDateTime24(dateString);
   };
 
   // Apply additional filters (status and search)
@@ -78,7 +77,7 @@ export default function TeamTodaysAttend({ department, statusFilter, searchTerm 
     <>
       <div className="bg-white shadow rounded-md overflow-hidden">
         {/* Header Bar */}
-        <div className="bg-[#1E3A8A] text-white flex items-center justify-between px-4 py-3">
+        <div className="bg-primary text-white flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-2">
             <FaClock size={20} />
             <h2 className="font-semibold text-white">Today's Attendance</h2>
@@ -128,7 +127,8 @@ export default function TeamTodaysAttend({ department, statusFilter, searchTerm 
                               'Present': { label: 'Present', color: 'bg-green-100 text-green-800' },
                               'Late': { label: 'Late', color: 'bg-orange-100 text-orange-800' },
                               'Absent': { label: 'Absent', color: 'bg-red-100 text-red-800' },
-                              'IN': { label: 'Clocked In', color: 'bg-blue-100 text-blue-800' },
+                              'Overtime': { label: 'Overtime', color: 'bg-purple-100 text-purple-800' },
+                              'IN': { label: 'Clocked In', color: 'bg-primary-100 text-primary-800' },
                               'COMPLETED': { label: 'Completed', color: 'bg-green-100 text-green-800' },
                             };
                             const display = statusDisplay[attendance.status] || { label: attendance.status, color: 'bg-gray-100 text-gray-800' };
@@ -196,7 +196,7 @@ export default function TeamTodaysAttend({ department, statusFilter, searchTerm 
                           onClick={() => setCurrentPage(i)}
                           className={`px-3 py-1 text-sm border rounded ${
                             currentPage === i
-                              ? 'bg-blue-500 text-white border-blue-500'
+                              ? 'bg-primary-500 text-white border-primary-500'
                               : 'border-gray-300 hover:bg-gray-50'
                           }`}
                         >

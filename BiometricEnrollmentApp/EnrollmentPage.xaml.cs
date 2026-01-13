@@ -643,9 +643,6 @@ namespace BiometricEnrollmentApp
         {
             LogHelper.Write("🔥 EnrollBtn_Click started");
             
-            // Simple test to confirm method is called
-            MessageBox.Show("Enrollment button clicked! Check logs for details.", "Debug", MessageBoxButton.OK, MessageBoxImage.Information);
-            
             UpdateStatusSafely("🔄 Starting enrollment process...");
             
             try

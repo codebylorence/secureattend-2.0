@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminMetrics from "../components/AdminMetrics";
 import TodaysAttendance from "../components/TodaysAttendance";
 import WelcomeSection from "../components/WelcomeSection";
+import { fetchDepartments } from "../api/DepartmentApi";
 
-export default function Dashboard() {
+export default function AdminDashboard() {
   // State for filters
   const [statusFilter, setStatusFilter] = useState("");
   const [zoneFilter, setZoneFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [departments, setDepartments] = useState([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(true);
   
   // Get user role from localStorage
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -16,11 +19,27 @@ export default function Dashboard() {
   // Check for admin, supervisor, or teamleader roles
   const isSupervisor = userRole === "supervisor" || userRole === "admin" || userRole === "teamleader";
 
+  // Fetch departments on component mount
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const departmentData = await fetchDepartments();
+        setDepartments(departmentData);
+      } catch (error) {
+        console.error("Error fetching departments:", error);
+      } finally {
+        setLoadingDepartments(false);
+      }
+    };
+
+    loadDepartments();
+  }, []);
+
   return (
     <div className="pr-10 bg-gray-50">
       {/* Header Section */}
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">
+        <h1 className="text-heading text-[21px] font-semibold">
           Dashboard
         </h1>
       </div>
@@ -30,7 +49,7 @@ export default function Dashboard() {
 
       <div className="flex justify-between my-6">
         <div className="flex items-center gap-4">
-          <p className="text-[#374151] mr-5">Filter :</p>
+          <p className="text-heading mr-5">Filter :</p>
           {/* For now, use simple dropdowns - can be enhanced later */}
           <select 
             value={statusFilter} 
@@ -46,12 +65,18 @@ export default function Dashboard() {
             value={zoneFilter} 
             onChange={(e) => setZoneFilter(e.target.value)}
             className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700"
+            disabled={loadingDepartments}
           >
             <option value="">All Departments</option>
-            <option value="IT">IT</option>
-            <option value="HR">HR</option>
-            <option value="Finance">Finance</option>
-            <option value="Operations">Operations</option>
+            {loadingDepartments ? (
+              <option disabled>Loading departments...</option>
+            ) : (
+              departments.map((department) => (
+                <option key={department.id} value={department.name}>
+                  {department.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
         <input

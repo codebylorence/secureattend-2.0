@@ -5,5 +5,6 @@
   "logo": null,
   "companyName": "Your Company",
   "timezone": "Asia/Manila",
-  "lastUpdated": "2026-01-09T15:45:00.000Z"
+  "toolboxMeetingMinutes": 60,
+  "lastUpdated": "2026-01-12T19:00:00.000Z"
 }

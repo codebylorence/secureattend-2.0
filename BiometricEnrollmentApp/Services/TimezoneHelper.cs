@@ -78,6 +78,27 @@ namespace BiometricEnrollmentApp.Services
         }
         
         /// <summary>
+        /// Formats time for display in 24-hour format with seconds (HH:mm:ss)
+        /// </summary>
+        public static string FormatTimeDisplay(DateTime time)
+        {
+            return time.ToString("HH:mm:ss");
+        }
+        
+        /// <summary>
+        /// Formats time for display in 24-hour format without seconds (HH:mm) - for schedules
+        /// </summary>
+        public static string FormatTimeDisplayShort(DateTime time)
+        {
+            return time.ToString("HH:mm");
+        }
+        
+        /// <summary>
+        /// Formats current time for display in 24-hour format with seconds
+        /// </summary>
+        public static string CurrentTimeDisplay => FormatTimeDisplay(Now);
+        
+        /// <summary>
         /// Gets the timezone display name for logging
         /// </summary>
         public static string TimeZoneName => PhilippinesTimeZone.DisplayName;

@@ -10,7 +10,9 @@ export default function AdminMetrics() {
     present: 0,
     absent: 0,
     late: 0,
-    scheduled: 0
+    overtime: 0,
+    scheduled: 0,
+    totalOvertimeHours: 0
   });
 
   useEffect(() => {
@@ -112,16 +114,28 @@ export default function AdminMetrics() {
         att.status === "Late"
       ).length;
 
+      // Count overtime employees
+      const overtime = filteredAttendances.filter(att => 
+        att.status === "Overtime"
+      ).length;
+
       // Count absent - only count actual "Absent" status records
       // Stale records are automatically cleaned up when schedules are assigned
       const absent = filteredAttendances.filter(att => att.status === "Absent").length;
+
+      // Calculate total overtime hours for today
+      const totalOvertimeHours = filteredAttendances
+        .filter(att => att.status === "Overtime" && att.overtime_hours)
+        .reduce((total, att) => total + parseFloat(att.overtime_hours || 0), 0);
 
       console.log('📊 Final metrics calculated:', {
         totalEmployees,
         present,
         absent,
         late,
-        scheduled
+        overtime,
+        scheduled,
+        totalOvertimeHours
       });
 
       setMetrics({
@@ -129,7 +143,9 @@ export default function AdminMetrics() {
         present,
         absent,
         late,
-        scheduled
+        overtime,
+        scheduled,
+        totalOvertimeHours
       });
     } catch (error) {
       console.error("❌ Error fetching admin metrics:", error);
@@ -139,9 +155,9 @@ export default function AdminMetrics() {
   return (
     <>
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 w-full">
         {/* Total Employees */}
-        <div className="bg-blue-600 text-white rounded-md p-6 text-center shadow">
+        <div className="bg-primary text-white rounded-md p-6 text-center shadow">
           <p className="text-3xl font-semibold">{metrics.totalEmployees}</p>
           <p className="text-sm mt-1">Total Employees</p>
         </div>
@@ -156,6 +172,13 @@ export default function AdminMetrics() {
         <div className="bg-emerald-500 text-white rounded-md p-6 text-center shadow">
           <p className="text-3xl font-semibold">{metrics.present}</p>
           <p className="text-sm mt-1">Present</p>
+        </div>
+
+        {/* Overtime */}
+        <div className="bg-[#A9A9A9] text-white rounded-md p-6 text-center shadow">
+          <p className="text-3xl font-semibold">{metrics.overtime}</p>
+          <p className="text-sm mt-1">Overtime</p>
+          <p className="text-xs mt-1 opacity-90">{metrics.totalOvertimeHours.toFixed(1)}h total</p>
         </div>
 
         {/* Absent */}

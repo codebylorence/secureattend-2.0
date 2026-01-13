@@ -69,6 +69,16 @@ namespace BiometricEnrollmentApp
             Dispatcher.Invoke(() =>
             {
                 StatusText.Text = status;
+                
+                // Hide toolbox meeting info when status is reset to waiting
+                if (status.Contains("Waiting for fingerprint") || status.Contains("Scanning"))
+                {
+                    ToolboxMeetingPanel.Visibility = Visibility.Collapsed;
+                    IdText.Text = "---";
+                    NameText.Text = "Scanning...";
+                    PhotoImage.Visibility = Visibility.Collapsed;
+                    PhotoPlaceholderText.Visibility = Visibility.Visible;
+                }
             });
         }
 
@@ -78,6 +88,9 @@ namespace BiometricEnrollmentApp
             {
                 IdText.Text = employeeId;
                 NameText.Text = name;
+
+                // Show toolbox meeting information for this employee
+                ShowToolboxMeetingInfo(employeeId);
 
                 if (!string.IsNullOrEmpty(photoBase64))
                 {
@@ -127,6 +140,34 @@ namespace BiometricEnrollmentApp
                     PhotoPlaceholderText.Visibility = Visibility.Visible;
                 }
             });
+        }
+
+        private void ShowToolboxMeetingInfo(string employeeId)
+        {
+            try
+            {
+                var dataService = new DataService();
+                var toolboxTimes = dataService.GetToolboxMeetingTimes(employeeId);
+                
+                if (!string.IsNullOrEmpty(toolboxTimes.ToolboxStart) && !string.IsNullOrEmpty(toolboxTimes.ToolboxEnd))
+                {
+                    ToolboxMeetingText.Text = $"{toolboxTimes.ToolboxStart} - {toolboxTimes.ToolboxEnd}";
+                    ShiftTimeText.Text = $"Shift: {toolboxTimes.ShiftStart} - {toolboxTimes.ShiftEnd}";
+                    ToolboxMeetingPanel.Visibility = Visibility.Visible;
+                    
+                    LogHelper.Write($"📋 Displaying toolbox meeting info for {employeeId}: {toolboxTimes.ToolboxStart} - {toolboxTimes.ToolboxEnd}");
+                }
+                else
+                {
+                    ToolboxMeetingPanel.Visibility = Visibility.Collapsed;
+                    LogHelper.Write($"📋 No toolbox meeting info available for {employeeId} (not scheduled today)");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error showing toolbox meeting info: {ex.Message}");
+                ToolboxMeetingPanel.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)

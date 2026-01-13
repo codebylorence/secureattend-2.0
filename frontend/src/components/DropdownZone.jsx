@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { fetchDepartments } from "../api/DepartmentApi";
 
-export default function DropdownZone() {
+export default function DropdownZone({ value = "All Zone", onChange }) {
   const [departments, setDepartments] = useState([]);
-  const [selectedZone, setSelectedZone] = useState("All Zone");
 
   useEffect(() => {
     const loadDepartments = async () => {
@@ -25,14 +24,20 @@ export default function DropdownZone() {
     loadDepartments();
   }, []);
 
+  const handleChange = (e) => {
+    if (onChange) {
+      onChange(e.target.value);
+    }
+  };
+
   return (
     <div className="inline-flex items-center border border-gray-300 rounded-md px-3 py-2 bg-white text-sm text-gray-700">
       <select
         className="bg-transparent focus:outline-none appearance-none pr-6"
-        value={selectedZone}
-        onChange={(e) => setSelectedZone(e.target.value)}
+        value={value}
+        onChange={handleChange}
       >
-        <option value="All Zone">All Zone</option>
+        <option value="All Zone">All Departments</option>
         {departments.map((dept) => (
           <option key={dept.id} value={dept.name}>
             {dept.name}

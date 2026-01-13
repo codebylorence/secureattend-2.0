@@ -38,6 +38,7 @@ export default function Login() {
 
       // Redirect user based on role
       if (data.user.role === "admin") navigate("/admin/dashboard");
+      else if (data.user.role === "superadmin") navigate("/admin/dashboard");
       else if (data.user.role === "supervisor") navigate("/admin/dashboard");
       else if (data.user.role === "teamleader") navigate("/team/dashboard");
       else navigate("/employee/dashboard");
@@ -62,10 +63,22 @@ export default function Login() {
       <div className="bg-white shadow-xl rounded-2xl w-full max-w-md p-8 relative overflow-hidden">
         {/* Logo / Title */}
         <div className="flex flex-col items-center mb-6">
-          <div className="bg-[#1E3A8A] p-4 rounded-full mb-3 shadow-md">
-            <FaFingerprint size={35} color="white" />
-          </div>
-          <h1 className="text-2xl font-bold text-[#1E3A8A]">{systemConfig.systemName}</h1>
+          {systemConfig.logo ? (
+            // Display uploaded logo
+            <div className="mb-3">
+              <img 
+                src={systemConfig.logo} 
+                alt={systemConfig.systemName || "System Logo"} 
+                className="max-h-16 max-w-48 object-contain"
+              />
+            </div>
+          ) : (
+            // Fallback to fingerprint icon
+            <div className="bg-primary p-4 rounded-full mb-3 shadow-md">
+              <FaFingerprint size={35} color="white" />
+            </div>
+          )}
+          <h1 className="text-2xl font-bold text-primary">{systemConfig.systemName}</h1>
           <p className="text-gray-500 text-sm mt-1">
             Attendance Management System
           </p>
@@ -85,7 +98,7 @@ export default function Login() {
               onChange={handleChange}
               required
               placeholder="Enter your username"
-              className="w-full border border-gray-300 rounded-md px-4 py-2 focus:ring-2 focus:ring-[#1E3A8A] focus:border-[#1E3A8A] outline-none"
+              className="w-full border border-gray-300 rounded-md px-4 py-2 input-primary"
             />
           </div>
 
@@ -102,12 +115,12 @@ export default function Login() {
                 onChange={handleChange}
                 required
                 placeholder="Enter your password"
-                className="w-full border border-gray-300 rounded-md px-4 py-2 pr-10 focus:ring-2 focus:ring-[#1E3A8A] focus:border-[#1E3A8A] outline-none"
+                className="w-full border border-gray-300 rounded-md px-4 py-2 pr-10 input-primary"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2 text-gray-500 hover:text-[#1E3A8A]"
+                className="absolute right-3 top-2 text-gray-500 hover:text-primary"
               >
                 {showPassword ? 
                 <IoMdEyeOff size={25}/>
@@ -121,7 +134,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setShowForgotModal(true)}
-              className="text-sm text-[#1E3A8A] hover:underline"
+              className="text-sm link-primary hover:underline"
             >
               Forgot Password?
             </button>
@@ -131,7 +144,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#1E3A8A] hover:bg-blue-900 text-white font-medium py-2 rounded-md transition"
+            className="w-full btn-primary font-medium py-2 rounded-md transition"
           >
             {loading ? "Logging in..." : "Login"}
           </button>
@@ -143,7 +156,7 @@ export default function Login() {
             Don't have an account?{' '}
             <button
               onClick={() => navigate('/register')}
-              className="text-[#1E3A8A] hover:underline font-medium"
+              className="link-primary hover:underline font-medium"
             >
               Register here
             </button>
@@ -152,7 +165,7 @@ export default function Login() {
             Already submitted a registration?{' '}
             <button
               onClick={() => navigate('/check-status')}
-              className="text-[#1E3A8A] hover:underline font-medium"
+              className="link-primary hover:underline font-medium"
             >
               Check status
             </button>
@@ -161,7 +174,7 @@ export default function Login() {
 
         {/* Footer */}
         <div className="text-center text-gray-400 text-xs mt-4">
-          © 2025 SecureAttend | Toplis Solutions Inc.
+          © 2025 {systemConfig.systemName} | {systemConfig.companyName}
         </div>
       </div>
 
@@ -169,7 +182,7 @@ export default function Login() {
       {showForgotModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
-            <h2 className="text-lg font-semibold text-[#1E3A8A] mb-4">
+            <h2 className="text-lg font-semibold text-primary mb-4">
               Forgot Password
             </h2>
             <form onSubmit={handleForgotSubmit}>
@@ -194,7 +207,7 @@ export default function Login() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md hover:bg-blue-900"
+                  className="px-4 py-2 btn-primary rounded-md"
                 >
                   Send Reset Link
                 </button>

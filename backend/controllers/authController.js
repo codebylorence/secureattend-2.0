@@ -20,13 +20,16 @@ export const loginUser = async (req, res) => {
 
 export const updateCredentials = async (req, res) => {
   try {
-    const { username, password, currentPassword } = req.body;
+    console.log("🔍 updateCredentials called for user ID:", req.params.id);
+    
+    const { username, password, currentPassword, firstname, lastname } = req.body;
     const { id } = req.params;
 
-    const result = await changeUserCredentials(id, username, password, currentPassword);
+    const result = await changeUserCredentials(id, username, password, currentPassword, firstname, lastname);
+    console.log("✅ Credentials updated successfully for user:", id);
     res.json(result);
   } catch (error) {
-    console.error("Error updating credentials:", error);
+    console.error("❌ Error updating credentials for user", req.params.id, ":", error.message);
     res.status(400).json({ message: error.message || "Error updating credentials" });
   }
 };

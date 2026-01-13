@@ -213,7 +213,7 @@ export default function PositionManagement() {
     return (
       <div className="pr-10 bg-gray-50">
         <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
-          <h1 className="text-[#374151] text-[21px] font-semibold">Position Management</h1>
+          <h1 className="text-heading text-[21px] font-semibold">Position Management</h1>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <div className="animate-pulse space-y-4">
@@ -232,7 +232,7 @@ export default function PositionManagement() {
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-[#374151] text-[21px] font-semibold flex items-center gap-2">
+            <h1 className="text-heading text-[21px] font-semibold flex items-center gap-2">
               Positions
             </h1>
             <p className="text-gray-600 text-sm mt-1">Manage company positions</p>
@@ -242,7 +242,7 @@ export default function PositionManagement() {
               console.log('Add Position button clicked');
               setShowAddModal(true);
             }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2"
+            className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-700 flex items-center gap-2"
           >
             <FaPlus />
             Add Position
@@ -312,7 +312,7 @@ export default function PositionManagement() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => openEditModal(position)}
-                          className="w-7 h-7 rounded-md bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
+                          className="w-7 h-7 rounded-md bg-primary-500 hover:bg-primary-600 text-white flex items-center justify-center transition-colors"
                           title="Edit position"
                         >
                           <FaEdit size={12} />
@@ -381,7 +381,7 @@ export default function PositionManagement() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 flex items-center justify-center gap-2"
+                  className="flex-1 bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 flex items-center justify-center gap-2"
                 >
                   <FaSave />
                   Add Position
@@ -446,7 +446,7 @@ export default function PositionManagement() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 flex items-center justify-center gap-2"
+                  className="flex-1 bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 flex items-center justify-center gap-2"
                 >
                   <FaSave />
                   Update Position

@@ -1,24 +1,27 @@
-import sequelize from '../config/database.js';
-import '../models/scheduleTemplate.js'; // Import the updated model
+import sequelize from "../config/database.js";
 
 async function runMigration() {
   try {
-    console.log('🔄 Running database migration...');
+    console.log("🔄 Running migration: Add name field to Users table...");
     
-    // Sync the database with alter: true to add new columns
-    await sequelize.sync({ alter: true });
+    // Add the name column to Users table
+    await sequelize.getQueryInterface().addColumn('Users', 'name', {
+      type: sequelize.Sequelize.STRING,
+      allowNull: true,
+      after: 'username'
+    });
     
-    console.log('✅ Migration completed successfully!');
-    console.log('New fields added to schedule_templates:');
-    console.log('  - is_edited (BOOLEAN)');
-    console.log('  - original_template_id (INTEGER)');
-    console.log('  - edited_at (DATE)');
-    console.log('  - edited_by (STRING)');
+    console.log("✅ Migration completed successfully!");
+    console.log("📝 Added 'name' column to Users table");
     
-    process.exit(0);
   } catch (error) {
-    console.error('❌ Migration failed:', error);
-    process.exit(1);
+    if (error.message.includes("Duplicate column name")) {
+      console.log("ℹ️ Column 'name' already exists in Users table");
+    } else {
+      console.error("❌ Migration failed:", error.message);
+    }
+  } finally {
+    await sequelize.close();
   }
 }
 

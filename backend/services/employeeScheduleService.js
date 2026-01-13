@@ -88,22 +88,49 @@ export const getSchedulesByDepartment = async (department) => {
 };
 
 export const assignScheduleToEmployee = async (scheduleData) => {
+  console.log("🔧 Service: assignScheduleToEmployee called with:", scheduleData);
+  
   const { employee_id, template_id, days, start_date, end_date } = scheduleData;
+
+  // Validate required fields
+  if (!employee_id) {
+    throw new Error("employee_id is required");
+  }
+  if (!template_id) {
+    throw new Error("template_id is required");
+  }
+  if (!days || !Array.isArray(days) || days.length === 0) {
+    throw new Error("days array is required and must not be empty");
+  }
+
+  console.log("✅ Validation passed, creating schedule...");
 
   // For new assignments, use rolling schedule dates (current week)
   // This ensures schedules are always current and don't rely on static dates
   const scheduleDates = generateRollingScheduleDates(days);
+  console.log("📅 Generated schedule dates:", scheduleDates);
 
   // Set start_date to today and end_date to null (ongoing/rolling)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  return await EmployeeSchedule.create({
+  const scheduleToCreate = {
     ...scheduleData,
     schedule_dates: scheduleDates,
     start_date: today,
     end_date: null, // Rolling schedules are ongoing
-  });
+  };
+
+  console.log("💾 Creating schedule with data:", scheduleToCreate);
+
+  try {
+    const result = await EmployeeSchedule.create(scheduleToCreate);
+    console.log("✅ Schedule created successfully:", result.id);
+    return result;
+  } catch (dbError) {
+    console.error("❌ Database error:", dbError);
+    throw dbError;
+  }
 };
 
 export const updateEmployeeSchedule = async (id, updates) => {

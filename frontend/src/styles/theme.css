@@ -1,0 +1,244 @@
+/* Theme CSS Variables */
+:root {
+  /* Default colors - will be overridden by SystemConfigContext */
+  --primary-color: #1E3A8A;
+  --primary-hover: #1E40AF;
+  --primary-light: #3B82F6;
+  --primary-dark: #1E3A8A;
+  --secondary-color: #2563EB;
+  --secondary-hover: #2563EB;
+  
+  /* Text colors */
+  --text-primary: #374151;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  
+  /* Derived colors for consistency */
+  --primary-50: rgba(30, 58, 138, 0.05);
+  --primary-100: rgba(30, 58, 138, 0.1);
+  --primary-200: rgba(30, 58, 138, 0.2);
+  --primary-300: rgba(30, 58, 138, 0.3);
+  --primary-400: rgba(30, 58, 138, 0.4);
+  --primary-500: rgba(30, 58, 138, 0.5);
+  --primary-600: rgba(30, 58, 138, 0.6);
+  --primary-700: rgba(30, 58, 138, 0.7);
+  --primary-800: rgba(30, 58, 138, 0.8);
+  --primary-900: rgba(30, 58, 138, 0.9);
+}
+
+/* Utility classes for dynamic theming */
+.bg-primary {
+  background-color: var(--primary-color) !important;
+}
+
+.bg-primary-hover:hover {
+  background-color: var(--primary-hover) !important;
+}
+
+.bg-primary-50 {
+  background-color: var(--primary-50) !important;
+}
+
+.bg-primary-100 {
+  background-color: var(--primary-100) !important;
+}
+
+.bg-primary-200 {
+  background-color: var(--primary-200) !important;
+}
+
+.bg-primary-300 {
+  background-color: var(--primary-300) !important;
+}
+
+.bg-primary-400 {
+  background-color: var(--primary-400) !important;
+}
+
+.bg-primary-500 {
+  background-color: var(--primary-500) !important;
+}
+
+.bg-primary-600 {
+  background-color: var(--primary-600) !important;
+}
+
+.bg-primary-700 {
+  background-color: var(--primary-700) !important;
+}
+
+.bg-primary-800 {
+  background-color: var(--primary-800) !important;
+}
+
+.bg-primary-900 {
+  background-color: var(--primary-900) !important;
+}
+
+.text-primary {
+  color: var(--primary-color) !important;
+}
+
+.text-primary-hover:hover {
+  color: var(--primary-hover) !important;
+}
+
+.text-primary-50 {
+  color: var(--primary-50) !important;
+}
+
+.text-primary-100 {
+  color: var(--primary-100) !important;
+}
+
+.text-primary-200 {
+  color: var(--primary-200) !important;
+}
+
+.text-primary-300 {
+  color: var(--primary-300) !important;
+}
+
+.text-primary-400 {
+  color: var(--primary-400) !important;
+}
+
+.text-primary-500 {
+  color: var(--primary-500) !important;
+}
+
+.text-primary-600 {
+  color: var(--primary-600) !important;
+}
+
+.text-primary-700 {
+  color: var(--primary-700) !important;
+}
+
+.text-primary-800 {
+  color: var(--primary-800) !important;
+}
+
+.text-primary-900 {
+  color: var(--primary-900) !important;
+}
+
+.text-heading {
+  color: var(--text-primary) !important;
+}
+
+.border-primary {
+  border-color: var(--primary-color) !important;
+}
+
+.border-primary-50 {
+  border-color: var(--primary-50) !important;
+}
+
+.border-primary-100 {
+  border-color: var(--primary-100) !important;
+}
+
+.border-primary-200 {
+  border-color: var(--primary-200) !important;
+}
+
+.border-primary-300 {
+  border-color: var(--primary-300) !important;
+}
+
+.border-primary-400 {
+  border-color: var(--primary-400) !important;
+}
+
+.border-primary-500 {
+  border-color: var(--primary-500) !important;
+}
+
+.border-primary-600 {
+  border-color: var(--primary-600) !important;
+}
+
+.border-primary-700 {
+  border-color: var(--primary-700) !important;
+}
+
+.border-primary-800 {
+  border-color: var(--primary-800) !important;
+}
+
+.border-primary-900 {
+  border-color: var(--primary-900) !important;
+}
+
+/* Focus ring utilities */
+.focus-primary:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+}
+
+.focus-ring-primary:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--primary-200) !important;
+}
+
+/* Button variants */
+.btn-primary {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover) !important;
+}
+
+.btn-primary:disabled {
+  background-color: var(--primary-300) !important;
+  cursor: not-allowed !important;
+}
+
+/* Link variants */
+.link-primary {
+  color: var(--primary-color) !important;
+}
+
+.link-primary:hover {
+  color: var(--primary-hover) !important;
+}
+
+/* Icon variants */
+.icon-primary {
+  color: var(--primary-color) !important;
+}
+
+/* Gradient variants */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
+}
+
+/* Spinner/Loading variants */
+.spinner-primary {
+  border: 2px solid var(--primary-200) !important;
+  border-top: 2px solid var(--primary-color) !important;
+}
+
+/* Input variants */
+.input-primary {
+  border-color: #d1d5db !important;
+}
+
+.input-primary:focus {
+  outline: none !important;
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px var(--primary-200) !important;
+}
+
+/* Status indicator variants */
+.status-active {
+  background-color: #10B981 !important;
+}
+
+.status-inactive {
+  background-color: #EF4444 !important;
+}

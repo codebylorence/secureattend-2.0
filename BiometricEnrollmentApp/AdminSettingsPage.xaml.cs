@@ -283,5 +283,91 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write($"💥 Cleanup error: {ex.Message}");
             }
         }
+
+        private async void CheckNotificationsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CheckNotificationsBtn.IsEnabled = false;
+                CheckNotificationsBtn.Content = "⏳ Checking...";
+                NotificationStatusText.Text = "Checking for notifications...";
+
+                var notifications = await _apiService.GetScheduleNotificationsAsync();
+                
+                if (notifications != null && notifications.Count > 0)
+                {
+                    NotificationStatusText.Text = $"Found {notifications.Count} unacknowledged notification(s)";
+                    NotificationStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Orange);
+                    
+                    // Show notifications in a message box
+                    var message = "Schedule Notifications:\n\n";
+                    foreach (var notification in notifications)
+                    {
+                        message += $"• {notification.Message}\n";
+                        message += $"  Created by: {notification.Created_By ?? "System"}\n";
+                        message += $"  Time: {notification.CreatedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Unknown"}\n\n";
+                    }
+                    
+                    MessageBox.Show(message, "Schedule Notifications", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    NotificationStatusText.Text = "No unacknowledged notifications";
+                    NotificationStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
+                    MessageBox.Show("No schedule notifications found.", "Notifications", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                NotificationStatusText.Text = "Error checking notifications";
+                NotificationStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+                MessageBox.Show($"Error checking notifications: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogHelper.Write($"💥 Error checking notifications: {ex.Message}");
+            }
+            finally
+            {
+                CheckNotificationsBtn.IsEnabled = true;
+                CheckNotificationsBtn.Content = "Check Now";
+            }
+        }
+
+        private async void ClearNotificationsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = MessageBox.Show("This will acknowledge all schedule notifications. Continue?", 
+                                            "Confirm Clear All", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                
+                if (result == MessageBoxResult.Yes)
+                {
+                    ClearNotificationsBtn.IsEnabled = false;
+                    ClearNotificationsBtn.Content = "⏳ Clearing...";
+                    
+                    var success = await _apiService.AcknowledgeAllNotificationsAsync();
+                    
+                    if (success)
+                    {
+                        NotificationStatusText.Text = "All notifications cleared";
+                        NotificationStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
+                        MessageBox.Show("All schedule notifications have been acknowledged.", "Notifications Cleared", MessageBoxButton.OK, MessageBoxImage.Information);
+                        LogHelper.Write("✅ All schedule notifications acknowledged");
+                    }
+                    else
+                    {
+                        MessageBox.Show("Failed to clear notifications. Please try again.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error clearing notifications: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogHelper.Write($"💥 Error clearing notifications: {ex.Message}");
+            }
+            finally
+            {
+                ClearNotificationsBtn.IsEnabled = true;
+                ClearNotificationsBtn.Content = "Clear All";
+            }
+        }
     }
 }

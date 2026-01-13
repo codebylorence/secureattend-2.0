@@ -77,7 +77,7 @@ export default function Settings() {
       
       console.log(`🔄 Updating ${field}:`, updateData);
       const result = await updateSystemConfig(updateData);
-      console.log('✅ Field updated successfully:', result);
+      console.log('Field updated successfully:', result);
       
       // Update both local state and context
       const updatedValue = result.config[field];
@@ -89,7 +89,7 @@ export default function Settings() {
       // Update context to propagate changes throughout the app
       updateContextConfig({ [field]: updatedValue });
       
-      toast.success(`✅ ${field === 'systemName' ? 'System name' : 
+      toast.success(`${field === 'systemName' ? 'System name' : 
                           field === 'companyName' ? 'Company name' :
                           field === 'primaryColor' ? 'Primary color' :
                           field === 'secondaryColor' ? 'Secondary color' :
@@ -114,7 +114,7 @@ export default function Settings() {
       const updateData = { logo: logoData };
       console.log('🔄 Updating logo');
       const result = await updateSystemConfig(updateData);
-      console.log('✅ Logo updated successfully:', result);
+      console.log('Logo updated successfully:', result);
       
       // Update both local state and context
       setLocalConfig(prev => ({
@@ -125,7 +125,7 @@ export default function Settings() {
       // Update context to propagate changes throughout the app
       updateContextConfig({ logo: logoData });
       
-      toast.success('✅ Logo updated successfully!');
+      toast.success('Logo updated successfully!');
       
     } catch (error) {
       console.error('❌ Error updating logo:', error);
@@ -169,12 +169,12 @@ export default function Settings() {
     try {
       console.log('🔄 Saving system config:', localConfig);
       const result = await updateSystemConfig(localConfig);
-      console.log('✅ System config saved successfully:', result);
+      console.log('System config saved successfully:', result);
       
       // Update context with the saved configuration
       updateContextConfig(result.config);
       
-      toast.success('✅ System configuration saved successfully!');
+      toast.success('System configuration saved successfully!');
       setShowConfigModal(false);
       
     } catch (error) {
@@ -196,7 +196,7 @@ export default function Settings() {
         setLocalConfig(result.config);
         updateContextConfig(result.config);
         
-        toast.success('✅ System configuration reset to defaults!');
+        toast.success('System configuration reset to defaults!');
       } catch (error) {
         console.error('Error resetting system config:', error);
         toast.error('❌ Failed to reset system configuration');
@@ -208,11 +208,11 @@ export default function Settings() {
     return (
       <div className="pr-10 bg-gray-50 min-h-screen">
         <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
-          <h1 className="text-[#374151] text-[21px] font-semibold">System Configuration</h1>
+          <h1 className="text-heading text-[21px] font-semibold">System Configuration</h1>
         </div>
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3A8A] mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 spinner-primary mx-auto mb-4"></div>
             <p className="text-gray-600">Loading system configuration...</p>
           </div>
         </div>
@@ -224,7 +224,7 @@ export default function Settings() {
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">
+        <h1 className="text-heading text-[21px] font-semibold">
           System Configuration
         </h1>
         <p className="text-sm text-gray-600 mt-1">
@@ -236,12 +236,12 @@ export default function Settings() {
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-            <MdSettings className="text-indigo-600" />
+            <MdSettings className="text-primary" />
             System Configuration
           </h2>
           <button
             onClick={() => setShowConfigModal(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors flex items-center gap-2"
+            className="btn-primary px-4 py-2 rounded-md flex items-center gap-2"
           >
             <MdSettings size={16} />
             Edit All Settings
@@ -256,7 +256,7 @@ export default function Settings() {
               {editingField !== 'systemName' && (
                 <button
                   onClick={() => startEditing('systemName')}
-                  className="text-indigo-600 hover:text-indigo-700 p-1"
+                  className="text-primary hover:text-primary-700 p-1"
                   title="Edit system name"
                 >
                   <MdEdit size={16} />
@@ -296,7 +296,7 @@ export default function Settings() {
                 </div>
               </div>
             ) : (
-              <p className="text-lg font-bold text-indigo-600">{systemConfig.systemName}</p>
+              <p className="text-lg font-bold text-primary">{systemConfig.systemName}</p>
             )}
           </div>
 
@@ -307,7 +307,7 @@ export default function Settings() {
               {editingField !== 'companyName' && (
                 <button
                   onClick={() => startEditing('companyName')}
-                  className="text-indigo-600 hover:text-indigo-700 p-1"
+                  className="text-primary hover:text-primary-700 p-1"
                   title="Edit company name"
                 >
                   <MdEdit size={16} />
@@ -347,7 +347,7 @@ export default function Settings() {
                 </div>
               </div>
             ) : (
-              <p className="text-lg font-bold text-indigo-600">{systemConfig.companyName}</p>
+              <p className="text-lg font-bold text-primary">{systemConfig.companyName}</p>
             )}
           </div>
 
@@ -358,7 +358,7 @@ export default function Settings() {
               {editingField !== 'primaryColor' && (
                 <button
                   onClick={() => startEditing('primaryColor')}
-                  className="text-indigo-600 hover:text-indigo-700 p-1"
+                  className="text-primary hover:text-primary-700 p-1"
                   title="Edit primary color"
                 >
                   <MdEdit size={16} />
@@ -422,7 +422,7 @@ export default function Settings() {
               {editingField !== 'timezone' && (
                 <button
                   onClick={() => startEditing('timezone')}
-                  className="text-indigo-600 hover:text-indigo-700 p-1"
+                  className="text-primary hover:text-primary-700 p-1"
                   title="Edit timezone"
                 >
                   <MdEdit size={16} />
@@ -471,7 +471,7 @@ export default function Settings() {
                 </div>
               </div>
             ) : (
-              <p className="text-lg font-bold text-indigo-600">{systemConfig.timezone}</p>
+              <p className="text-lg font-bold text-primary">{systemConfig.timezone}</p>
             )}
           </div>
         </div>
@@ -481,7 +481,7 @@ export default function Settings() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-medium text-gray-800">System Logo</h3>
             <div className="flex gap-2">
-              <label className="px-3 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 transition-colors cursor-pointer flex items-center gap-1">
+              <label className="px-3 py-1 bg-primary text-white text-sm rounded-md hover:bg-primary-700 transition-colors cursor-pointer flex items-center gap-1">
                 <MdImage size={14} />
                 {systemConfig.logo ? 'Change Logo' : 'Upload Logo'}
                 <input
@@ -505,8 +505,8 @@ export default function Settings() {
           </div>
           {savingField === 'logo' && (
             <div className="text-center py-2">
-              <div className="inline-flex items-center gap-2 text-indigo-600">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+              <div className="inline-flex items-center gap-2 text-primary">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                 Updating logo...
               </div>
             </div>
@@ -533,12 +533,12 @@ export default function Settings() {
       </div>
 
       {/* Configuration Help */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
         <div className="flex items-start gap-2">
           <MdInfo className="text-blue-500 mt-0.5 flex-shrink-0" />
           <div>
-            <h4 className="font-medium text-blue-800 mb-2">System Configuration</h4>
-            <div className="text-sm text-blue-700 space-y-1">
+            <h4 className="font-medium text-primary-800 mb-2">System Configuration</h4>
+            <div className="text-sm text-primary-700 space-y-1">
               <p>• <strong>Individual Editing:</strong> Click the edit icon next to any field to update it individually</p>
               <p>• <strong>System Name:</strong> The name displayed throughout the application</p>
               <p>• <strong>Company Name:</strong> Your organization's name for branding</p>
@@ -557,7 +557,7 @@ export default function Settings() {
           <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 relative mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-                <MdSettings className="text-indigo-600" />
+                <MdSettings className="text-primary" />
                 Bulk Configuration Editor
               </h2>
               <button
@@ -769,7 +769,7 @@ export default function Settings() {
                 <button
                   onClick={handleSaveConfig}
                   disabled={isSavingConfig}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {isSavingConfig ? (
                     <>

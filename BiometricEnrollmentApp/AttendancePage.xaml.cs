@@ -106,7 +106,7 @@ namespace BiometricEnrollmentApp
                     EmployeeNameText.Visibility = Visibility.Visible;
 
                     // Show status message with appropriate color
-                    var timeStr = timestamp.ToString("HH:mm");
+                    var timeStr = TimezoneHelper.FormatTimeDisplay(timestamp);
                     var statusColor = status switch
                     {
                         "Present" => "#4CAF50", // Green
@@ -563,8 +563,68 @@ namespace BiometricEnrollmentApp
                             
                             if (!scheduleCheck.IsScheduled)
                             {
-                                Dispatcher.Invoke(() => UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today."));
-                                LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {TimezoneHelper.Now.DayOfWeek}");
+                                // Check if employee has overtime assignment
+                                bool hasOvertime = _data_service_get().HasOvertimeAssignment(matchedEmployeeId);
+                                
+                                if (hasOvertime)
+                                {
+                                    LogHelper.Write($"⏰ Employee {matchedEmployeeId} has overtime assignment - allowing clock-in");
+                                    
+                                    // Check if already completed overtime today
+                                    bool hasCompletedOvertime = false;
+                                    try
+                                    {
+                                        var todaySessions = _data_service_get().GetTodaySessions();
+                                        hasCompletedOvertime = todaySessions.Any(s => s.EmployeeId == matchedEmployeeId && s.Status == "Overtime" && !string.IsNullOrEmpty(s.ClockIn));
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        LogHelper.Write($"Overtime session check failed: {ex}");
+                                        hasCompletedOvertime = false;
+                                    }
+
+                                    if (hasCompletedOvertime)
+                                    {
+                                        Dispatcher.Invoke(() => UpdateStatus($"⚠️ Already clocked in for overtime today."));
+                                    }
+                                    else
+                                    {
+                                        // Create overtime clock-in
+                                        long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, "Overtime");
+                                        
+                                        if (sid > 0)
+                                        {
+                                            // Send overtime clock-in to server
+                                            Task.Run(async () => 
+                                            {
+                                                bool syncSuccess = await _syncService.QueueAttendanceSync(matchedEmployeeId, sid, now, null, "Overtime");
+                                                Dispatcher.Invoke(() => 
+                                                {
+                                                    if (syncSuccess)
+                                                    {
+                                                        UpdateStatus($"⏰ Overtime clock-in synced to server");
+                                                    }
+                                                    else
+                                                    {
+                                                        UpdateStatus($"⏰ Overtime clock-in recorded, queued for sync");
+                                                    }
+                                                });
+                                            });
+                                            
+                                            // Show employee result on main display
+                                            Dispatcher.Invoke(() => ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Overtime", now));
+                                        }
+                                        else
+                                        {
+                                            Dispatcher.Invoke(() => UpdateStatus("⚠️ Overtime clock-in failed."));
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    Dispatcher.Invoke(() => UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today."));
+                                    LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {TimezoneHelper.Now.DayOfWeek}");
+                                }
                             }
                             else
                             {
@@ -1078,9 +1138,49 @@ namespace BiometricEnrollmentApp
                     
                     if (!scheduleCheck.IsScheduled)
                     {
-                        window.UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today.");
-                        LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {TimezoneHelper.Now.DayOfWeek}");
-                        Thread.Sleep(2500);
+                        // Check if employee has overtime assignment
+                        bool hasOvertime = _data_service_get().HasOvertimeAssignment(matchedEmployeeId);
+                        
+                        if (hasOvertime)
+                        {
+                            LogHelper.Write($"⏰ Employee {matchedEmployeeId} has overtime assignment - allowing clock-in");
+                            
+                            // Check if already completed overtime today
+                            bool hasCompletedOvertime = false;
+                            try
+                            {
+                                var todaySessions = _data_service_get().GetTodaySessions();
+                                hasCompletedOvertime = todaySessions.Any(s => s.EmployeeId == matchedEmployeeId && s.Status == "Overtime" && !string.IsNullOrEmpty(s.ClockIn));
+                            }
+                            catch (Exception ex)
+                            {
+                                LogHelper.Write($"Overtime session check failed: {ex}");
+                                hasCompletedOvertime = false;
+                            }
+
+                            if (hasCompletedOvertime)
+                            {
+                                window.UpdateStatus($"⚠️ Already clocked in for overtime today.");
+                                Thread.Sleep(2000);
+                            }
+                            else
+                            {
+                                // Create overtime clock-in
+                                long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, "Overtime");
+                                
+                                // Send overtime clock-in to server
+                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, "Overtime"));
+                                
+                                window.UpdateStatus(sid > 0 ? $"⏰ Overtime clock-in recorded at {now:HH:mm:ss}" : "⚠️ Overtime clock-in failed.");
+                                Thread.Sleep(2000);
+                            }
+                        }
+                        else
+                        {
+                            window.UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today.");
+                            LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {TimezoneHelper.Now.DayOfWeek}");
+                            Thread.Sleep(2500);
+                        }
                     }
                     else
                     {
@@ -1293,6 +1393,27 @@ namespace BiometricEnrollmentApp
                 UpdateStatus("❌ Failed to update schedules");
                 MessageBox.Show($"Error updating schedules: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 LogHelper.Write($"💥 Error updating schedules: {ex.Message}");
+            }
+        }
+
+        private void OvertimeManagementBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var overtimeWindow = new OvertimeManagementWindow();
+                overtimeWindow.Owner = Window.GetWindow(this);
+                overtimeWindow.ShowDialog();
+                
+                // Refresh attendance grid after overtime management
+                RefreshAttendances();
+                
+                LogHelper.Write("✅ Overtime management window closed");
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("❌ Failed to open overtime management");
+                MessageBox.Show($"Error opening overtime management: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogHelper.Write($"💥 Error opening overtime management: {ex.Message}");
             }
         }
 

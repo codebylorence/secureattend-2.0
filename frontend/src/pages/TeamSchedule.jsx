@@ -586,6 +586,14 @@ export default function TeamSchedule() {
       return toast.warning("Please select at least one team member!");
     }
 
+    // Debug: Check authentication status
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    console.log("🔐 Debug - Token exists:", !!token);
+    console.log("🔐 Debug - Token preview:", token?.substring(0, 20) + "...");
+    console.log("🔐 Debug - User data:", user);
+    console.log("🔐 Debug - User role:", user.role);
+
     const results = {
       success: [],
       failed: []
@@ -594,6 +602,13 @@ export default function TeamSchedule() {
     // Assign the selected day to each selected employee
     for (const employeeId of selectedEmployees) {
       try {
+        console.log("📤 Assigning schedule:", {
+          employee_id: employeeId,
+          template_id: selectedTemplate.id,
+          days: [selectedDay],
+          assigned_by: user.employee?.employee_id || "teamleader"
+        });
+
         await assignSchedule({
           employee_id: employeeId,
           template_id: selectedTemplate.id,
@@ -603,11 +618,33 @@ export default function TeamSchedule() {
         
         results.success.push(getEmployeeName(employeeId));
       } catch (err) {
-        const errorMsg = err.response?.data?.message || "Failed to assign schedule";
-        results.failed.push({
-          name: getEmployeeName(employeeId),
-          error: errorMsg
-        });
+        console.error("❌ Assignment failed:", err);
+        console.error("❌ Error response:", err.response?.data);
+        
+        // Handle authentication errors specifically
+        if (err.response?.status === 401) {
+          const errorMsg = err.response?.data?.message || "Authentication failed";
+          console.error("🔐 Authentication error:", errorMsg);
+          
+          // Show specific error message and suggest re-login
+          toast.error(`Authentication failed: ${errorMsg}. Please log out and log back in.`, {
+            autoClose: 8000
+          });
+          
+          results.failed.push({
+            name: getEmployeeName(employeeId),
+            error: "Authentication failed - please re-login"
+          });
+          
+          // Stop processing more assignments if auth fails
+          break;
+        } else {
+          const errorMsg = err.response?.data?.message || "Failed to assign schedule";
+          results.failed.push({
+            name: getEmployeeName(employeeId),
+            error: errorMsg
+          });
+        }
       }
     }
 
@@ -628,7 +665,13 @@ export default function TeamSchedule() {
     } else if (results.success.length > 0 && results.failed.length > 0) {
       toast.warning(`Assigned ${results.success.length} member(s), but ${results.failed.length} failed`);
     } else if (results.failed.length > 0) {
-      toast.error("Failed to assign schedules");
+      // Check if all failures were due to authentication
+      const authFailures = results.failed.filter(f => f.error.includes("Authentication failed"));
+      if (authFailures.length === results.failed.length) {
+        toast.error("Authentication failed. Please log out and log back in to continue.");
+      } else {
+        toast.error("Failed to assign schedules");
+      }
     } else {
       toast.info("No schedules were assigned");
     }
@@ -836,18 +879,18 @@ export default function TeamSchedule() {
     <div className="pr-10 bg-gray-50 min-h-screen pb-10">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
-        <h1 className="text-[#374151] text-[21px] font-semibold">Team Schedule Management</h1>
+        <h1 className="text-heading text-[21px] font-semibold">Team Schedule Management</h1>
         <p className="text-sm text-gray-600 mt-1">
           Assign schedule templates to your team members in {userDepartment}
         </p>
-        <p className="text-xs text-blue-600 mt-1">
+        <p className="text-xs text-primary-600 mt-1">
           💡 Note: You cannot delete your own schedule. Contact an administrator if changes are needed.
         </p>
       </div>
 
       {/* Available Templates */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A] mb-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-primary mb-4">
           <MdSchedule /> Available Schedule Templates
         </h2>
         
@@ -901,8 +944,8 @@ export default function TeamSchedule() {
                   })}
                   className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                     selectedTemplate?.id === template.id
-                      ? "border-[#1E3A8A] bg-blue-50"
-                      : "border-gray-200 hover:border-blue-300"
+                      ? "border-primary bg-primary-50"
+                      : "border-gray-200 hover:border-primary-300"
                   }`}
                 >
                   <h3 className="font-semibold text-gray-800 mb-2">{template.shift_name}</h3>
@@ -936,11 +979,11 @@ export default function TeamSchedule() {
       {/* Select Day for Assignment */}
       {selectedTemplate && !selectedDay && (
         <div className="bg-white rounded-lg shadow-md p-6 my-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A] mb-4">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-primary mb-4">
             <MdSchedule /> Select Day to Assign
           </h2>
           
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-md">
             <p className="text-sm text-gray-700">
               <strong>Selected Template:</strong> {selectedTemplate.shift_name} ({formatTimeRange24(selectedTemplate.start_time, selectedTemplate.end_time)})
             </p>
@@ -992,7 +1035,7 @@ export default function TeamSchedule() {
                   className={`border-2 rounded-lg p-4 transition-all text-center ${
                     shiftPassed
                       ? "border-gray-200 bg-gray-100 cursor-not-allowed opacity-50"
-                      : "border-gray-300 hover:border-blue-500 hover:bg-blue-50"
+                      : "border-gray-300 hover:border-primary-500 hover:bg-primary-50"
                   }`}
                 >
                   <p className="font-semibold text-gray-800 mb-1">{day}</p>
@@ -1016,11 +1059,11 @@ export default function TeamSchedule() {
       {/* Assign to Team Members */}
       {selectedTemplate && selectedDay && (
         <div className="bg-white rounded-lg shadow-md p-6 my-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A] mb-4">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-primary mb-4">
             <MdPeople /> Select Team Members for {selectedDay}
           </h2>
           
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-md">
             <p className="text-sm text-gray-700">
               <strong>Template:</strong> {selectedTemplate.shift_name} ({formatTimeRange24(selectedTemplate.start_time, selectedTemplate.end_time)})
             </p>
@@ -1032,7 +1075,7 @@ export default function TeamSchedule() {
                 setSelectedDay(null);
                 setSelectedEmployees([]);
               }}
-              className="text-xs text-blue-600 hover:text-blue-800 mt-2 underline"
+              className="text-xs text-primary-600 hover:text-primary-800 mt-2 underline"
             >
               ← Change Day
             </button>
@@ -1128,7 +1171,7 @@ export default function TeamSchedule() {
                 className={`w-full py-3 rounded-md font-medium transition-colors ${
                   selectedEmployees.length === 0
                     ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    : "bg-[#1E3A8A] text-white hover:bg-blue-900"
+                    : "bg-primary text-white hover:bg-primary-hover"
                 }`}
               >
                 Assign {selectedTemplate.shift_name} on {selectedDay} to {selectedEmployees.length} Member(s)
@@ -1140,7 +1183,7 @@ export default function TeamSchedule() {
 
       {/* Assigned Schedules */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A8A] mb-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-primary mb-4">
           <MdSchedule /> Assigned Team Schedules
         </h2>
         
@@ -1181,7 +1224,7 @@ export default function TeamSchedule() {
                         <p className="text-xs text-gray-500">{schedule.employee_id}</p>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
                           {schedule.shift_name}
                         </span>
                       </td>
@@ -1269,7 +1312,7 @@ export default function TeamSchedule() {
                 </p>
                 <button
                   onClick={handleSelectAllDays}
-                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  className="text-xs text-primary-600 hover:text-primary-800 underline"
                 >
                   {selectedDaysToDelete.length === scheduleToDelete.days.length ? 'Deselect All' : 'Select All'}
                 </button>
@@ -1282,7 +1325,7 @@ export default function TeamSchedule() {
                       type="checkbox"
                       checked={selectedDaysToDelete.includes(day)}
                       onChange={() => handleDaySelectionToggle(day)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-gray-300 text-primary-600 focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-700">{day}</span>
                   </label>

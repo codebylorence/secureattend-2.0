@@ -6,8 +6,9 @@ import { fetchTeamLeaders } from "../api/UserApi";
 import axios from "axios";
 import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
-export default function ManageDepartment({ supervisorView = false, refreshTrigger }) {
+export default function ManageDepartment({ supervisorView = false, refreshTrigger, searchTerm = "" }) {
   const [departments, setDepartments] = useState([]);
+  const [filteredDepartments, setFilteredDepartments] = useState([]);
   const [teamLeaders, setTeamLeaders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
@@ -22,6 +23,21 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
     loadDepartments();
     loadTeamLeaders();
   }, []);
+
+  // Filter departments based on search term
+  useEffect(() => {
+    if (!searchTerm) {
+      setFilteredDepartments(departments);
+    } else {
+      const filtered = departments.filter(dept =>
+        dept.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        dept.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        dept.manager?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredDepartments(filtered);
+    }
+    setCurrentPage(1); // Reset to first page when searching
+  }, [departments, searchTerm]);
 
   // Add effect to refresh team leaders when refreshTrigger changes
   useEffect(() => {
@@ -184,13 +200,13 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
             {/* Modal Header */}
-            <div className="bg-[#1E3A8A] text-white px-6 py-4 flex justify-between items-center">
+            <div className="bg-primary text-white px-6 py-4 flex justify-between items-center">
               <h3 className="text-xl font-semibold">
                 {selectedDepartment?.name} - Members
               </h3>
               <button
                 onClick={closeViewModal}
-                className="hover:bg-blue-700 rounded-full p-1"
+                className="hover:bg-primary-700 rounded-full p-1"
               >
                 <MdClose size={24} />
               </button>
@@ -211,7 +227,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                       {selectedDepartment?.manager || "Not Assigned"}
                       {selectedDepartment?.manager && (
                         <>
-                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800">
                             Manager
                           </span>
                           {(() => {
@@ -295,7 +311,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                             key={member.id} 
                             className={`hover:bg-gray-50 ${
                               isTeamLeader 
-                                ? 'bg-blue-50 hover:bg-blue-100 border-l-4 border-l-blue-600' 
+                                ? 'bg-primary-50 hover:bg-primary-100 border-l-4 border-l-blue-600' 
                                 : ''
                             }`}
                           >
@@ -303,7 +319,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                               {memberFullName}
                               {isTeamLeader && (
-                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800">
                                   Team Leader
                                 </span>
                               )}
@@ -352,7 +368,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
       )}
 
       <div className="bg-white shadow rounded-md overflow-hidden">
-        <div className="bg-[#1E3A8A] text-white flex items-center justify-between px-4 py-3">
+        <div className="bg-primary text-white flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-2">
             <MdManageAccounts size={20} />
             <h2 className="font-semibold text-white">Manage Department</h2>
@@ -376,15 +392,17 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                   <tr>
                     <td colSpan="5" className="px-6 py-4 text-center text-gray-500">Loading...</td>
                   </tr>
-                ) : departments.length === 0 ? (
+                ) : filteredDepartments.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">No departments found</td>
+                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                      {searchTerm ? "No departments match your search" : "No departments found"}
+                    </td>
                   </tr>
                 ) : (
                   (() => {
                     const startIndex = (currentPage - 1) * itemsPerPage;
                     const endIndex = startIndex + itemsPerPage;
-                    const paginatedDepartments = departments.slice(startIndex, endIndex);
+                    const paginatedDepartments = filteredDepartments.slice(startIndex, endIndex);
                     return paginatedDepartments.map((dept) => (
                     <tr key={dept.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -481,7 +499,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                                 </button>
                                 <button
                                   onClick={() => handleEdit(dept)}
-                                  className="w-7 h-7 rounded-md bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
+                                  className="w-7 h-7 rounded-md bg-blue-600 hover:bg-primary-600 text-white flex items-center justify-center transition-colors"
                                   title="Edit"
                                 >
                                   <FaEdit size={12} />
@@ -552,7 +570,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                   </button>
                   
                   {(() => {
-                    const totalPages = Math.ceil(departments.length / itemsPerPage);
+                    const totalPages = Math.ceil(filteredDepartments.length / itemsPerPage);
                     const pages = [];
                     const startPage = Math.max(1, currentPage - 2);
                     const endPage = Math.min(totalPages, startPage + 4);
@@ -564,7 +582,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                           onClick={() => setCurrentPage(i)}
                           className={`px-3 py-1 text-sm border rounded ${
                             currentPage === i
-                              ? 'bg-blue-500 text-white border-blue-500'
+                              ? 'bg-primary-500 text-white border-primary-500'
                               : 'border-gray-300 hover:bg-gray-50'
                           }`}
                         >
@@ -576,8 +594,8 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                   })()}
                   
                   <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(departments.length / itemsPerPage)))}
-                    disabled={currentPage === Math.ceil(departments.length / itemsPerPage)}
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredDepartments.length / itemsPerPage)))}
+                    disabled={currentPage === Math.ceil(filteredDepartments.length / itemsPerPage)}
                     className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next

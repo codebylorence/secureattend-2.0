@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { MdEdit, MdDelete, MdSave, MdContentCopy, MdClose, MdCheck, MdPlayArrow, MdAdd, MdLightbulb, MdLock, MdLockOpen } from "react-icons/md";
-import { getTemplates, deleteTemplate, updateTemplate, createTemplate, publishSchedules } from "../api/ScheduleApi";
+import { MdEdit, MdDelete, MdSave, MdContentCopy, MdClose, MdCheck, MdPlayArrow, MdAdd, MdLightbulb, MdLock, MdLockOpen, MdSupervisorAccount, MdPerson } from "react-icons/md";
+import { getTemplates, deleteTemplate, updateTemplate, createTemplate, publishSchedules, assignSchedule, getEmployeeSchedules, deleteEmployeeSchedule } from "../api/ScheduleApi";
+import { getShiftTemplates, createShiftTemplate, updateShiftTemplate, deleteShiftTemplate } from "../api/ShiftTemplateApi";
 import { fetchDepartments } from "../api/DepartmentApi";
+import { fetchEmployees } from "../api/EmployeeApi";
 import { toast } from 'react-toastify';
 import { confirmAction } from "../utils/confirmToast.jsx";
 
@@ -9,6 +11,8 @@ import { confirmAction } from "../utils/confirmToast.jsx";
 function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose, onAddDepartment, onEdit, onDelete, onDeleteFromDay }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [localSchedules, setLocalSchedules] = useState(schedules); // Local state for real-time updates
+  const [supervisors, setSupervisors] = useState([]);
+  const [supervisorSchedules, setSupervisorSchedules] = useState([]);
   const [formData, setFormData] = useState({
     departments: [], // Changed to array for multiple selection
     shift_name: "",
@@ -21,6 +25,114 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
   useEffect(() => {
     setLocalSchedules(schedules);
   }, [schedules]);
+
+  // Fetch supervisors and their schedules
+  useEffect(() => {
+    fetchSupervisors();
+    fetchSupervisorSchedules();
+  }, []);
+
+  const fetchSupervisors = async () => {
+    try {
+      const allEmployees = await fetchEmployees();
+      const supervisorList = allEmployees.filter(emp => 
+        emp.role === 'supervisor' || emp.role === 'team_leader'
+      );
+      setSupervisors(supervisorList);
+    } catch (error) {
+      console.error("Error fetching supervisors:", error);
+    }
+  };
+
+  const fetchSupervisorSchedules = async () => {
+    try {
+      const allSchedules = await getEmployeeSchedules();
+      const allEmployees = await fetchEmployees();
+      
+      // Filter schedules for supervisors only
+      const supervisorScheduleList = allSchedules.filter(schedule => {
+        const employee = allEmployees.find(emp => emp.employee_id === schedule.employee_id);
+        return employee && (employee.role === 'supervisor' || employee.role === 'team_leader');
+      });
+
+      setSupervisorSchedules(supervisorScheduleList);
+    } catch (error) {
+      console.error("Error fetching supervisor schedules:", error);
+    }
+  };
+
+  const assignSupervisorToShift = async (shiftName, startTime, endTime, supervisorId) => {
+    try {
+      // Create a template for the supervisor
+      const templateData = {
+        shift_name: shiftName,
+        start_time: startTime,
+        end_time: endTime,
+        days: [day],
+        department: "Supervisor",
+        member_limit: 1,
+        publish_status: "published"
+      };
+
+      const template = await createTemplate(templateData);
+      
+      if (template) {
+        await assignSchedule({
+          employee_id: supervisorId,
+          template_id: template.id,
+          days: [day],
+          assigned_by: "admin"
+        });
+
+        await fetchSupervisorSchedules();
+        toast.success("Supervisor assigned to shift!");
+      }
+    } catch (error) {
+      console.error("Error assigning supervisor:", error);
+      toast.error("Failed to assign supervisor");
+    }
+  };
+
+  const removeSupervisorFromShift = async (scheduleId, supervisorName) => {
+    try {
+      await deleteEmployeeSchedule(scheduleId);
+      await fetchSupervisorSchedules();
+      toast.success(`${supervisorName} removed from shift!`);
+    } catch (error) {
+      console.error("Error removing supervisor:", error);
+      toast.error("Failed to remove supervisor");
+    }
+  };
+
+  const getSupervisorForShift = (shiftName, startTime, endTime) => {
+    const supervisorSchedule = supervisorSchedules.find(schedule => 
+      schedule.template.shift_name === shiftName &&
+      schedule.template.start_time === startTime &&
+      schedule.template.end_time === endTime &&
+      schedule.days.includes(day)
+    );
+
+    if (supervisorSchedule) {
+      const supervisor = supervisors.find(s => s.employee_id === supervisorSchedule.employee_id);
+      return {
+        schedule: supervisorSchedule,
+        supervisor: supervisor
+      };
+    }
+    return null;
+  };
+
+  const getAvailableSupervisors = (shiftName, startTime, endTime) => {
+    // Get supervisors already assigned to this day
+    const assignedSupervisorIds = supervisorSchedules
+      .filter(schedule => schedule.days.includes(day))
+      .map(schedule => schedule.employee_id);
+
+    // Return supervisors not assigned to any shift on this day
+    return supervisors.filter(supervisor => 
+      !assignedSupervisorIds.includes(supervisor.employee_id)
+    );
+  };
 
   // Helper function to parse time string to minutes since midnight
   const parseTimeToMinutes = (timeStr) => {
@@ -150,12 +262,12 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
       <div className="bg-white rounded-lg p-4 md:p-6 w-full max-w-xs sm:max-w-md md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg md:text-2xl font-semibold text-[#1E3A8A]">{day} Schedule</h2>
+            <h2 className="text-lg md:text-2xl font-semibold text-primary">{day} Schedule</h2>
             {(() => {
               const today = new Date();
               const todayDayName = getDayOfWeek(today);
               return day === todayDayName && (
-                <span className="px-2 md:px-3 py-1 bg-blue-100 text-blue-800 text-xs md:text-sm font-medium rounded-full">
+                <span className="px-2 md:px-3 py-1 bg-primary-100 text-primary-800 text-xs md:text-sm font-medium rounded-full">
                   Today
                 </span>
               );
@@ -199,9 +311,84 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                       </span>
                     </div>
                   </div>
+
+                  {/* Supervisor Section */}
+                  <div className="bg-gradient-to-r from-purple-50 to-purple-100 border-b border-purple-200 p-3">
+                    {(() => {
+                      const supervisorInfo = getSupervisorForShift(shiftName, shiftSchedules[0].start_time, shiftSchedules[0].end_time);
+                      const availableSupervisors = getAvailableSupervisors(shiftName, shiftSchedules[0].start_time, shiftSchedules[0].end_time);
+                      
+                      return (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <MdSupervisorAccount size={20} className="text-purple-600" />
+                            <span className="font-semibold text-purple-800">Supervisor:</span>
+                            {supervisorInfo ? (
+                              <div className="flex items-center gap-2 bg-white rounded-md px-3 py-1 border border-purple-200">
+                                <MdPerson size={16} className="text-purple-600" />
+                                <span className="text-purple-900 font-semibold">
+                                  {supervisorInfo.supervisor?.fullname || 
+                                   `${supervisorInfo.supervisor?.firstname} ${supervisorInfo.supervisor?.lastname}` ||
+                                   supervisorInfo.schedule.employee_id}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    confirmAction(
+                                      `Remove ${supervisorInfo.supervisor?.fullname || supervisorInfo.schedule.employee_id} from this shift?`,
+                                      () => removeSupervisorFromShift(
+                                        supervisorInfo.schedule.id, 
+                                        supervisorInfo.supervisor?.fullname || supervisorInfo.schedule.employee_id
+                                      )
+                                    );
+                                  }}
+                                  className="text-red-600 hover:text-red-800 hover:bg-red-100 p-1 rounded"
+                                  title="Remove Supervisor"
+                                >
+                                  <MdDelete size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-500 italic bg-white px-2 py-1 rounded border border-gray-200">Not assigned</span>
+                                {availableSupervisors.length > 0 && (
+                                  <select
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        assignSupervisorToShift(
+                                          shiftName, 
+                                          shiftSchedules[0].start_time, 
+                                          shiftSchedules[0].end_time, 
+                                          e.target.value
+                                        );
+                                        e.target.value = ""; // Reset selection
+                                      }
+                                    }}
+                                    className="text-sm border border-purple-300 rounded px-3 py-1 bg-white hover:border-purple-400 focus:border-purple-500 focus:outline-none"
+                                  >
+                                    <option value="">Assign Supervisor</option>
+                                    {availableSupervisors.map(supervisor => (
+                                      <option key={supervisor.employee_id} value={supervisor.employee_id}>
+                                        {supervisor.fullname || `${supervisor.firstname} ${supervisor.lastname}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                                {availableSupervisors.length === 0 && (
+                                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">(No available supervisors)</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-xs text-purple-700 bg-purple-200 px-2 py-1 rounded font-medium">
+                            Max: 1 Supervisor
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </div>
                   
                   {/* Zones in this shift */}
-                  <div className="bg-blue-50 p-3 space-y-2">
+                  <div className="bg-primary-50 p-3 space-y-2">
                     {shiftSchedules.map((schedule, idx) => {
                       // Get limit with proper fallback (default to 1 if not set)
                       const dayLimit = schedule.day_limits?.[day];
@@ -224,7 +411,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                                 ? 'border-yellow-300 bg-yellow-50'
                                 : isDraft 
                                   ? 'border-orange-300 bg-orange-50' 
-                                  : 'border-blue-200'
+                                  : 'border-primary-200'
                           }`}
                         >
                           <div className="flex items-center gap-3 flex-1">
@@ -235,7 +422,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                                   ? 'bg-yellow-600'
                                   : isDraft 
                                     ? 'bg-orange-600' 
-                                    : 'bg-blue-600'
+                                    : 'bg-primary-600'
                             }`}></div>
                             <div>
                               <div className="flex items-center gap-2">
@@ -284,7 +471,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                               className={`p-2 rounded ${
                                 isDeleted 
                                   ? 'text-gray-400 cursor-not-allowed' 
-                                  : 'text-blue-600 hover:text-blue-800 hover:bg-blue-100'
+                                  : 'text-primary-600 hover:text-primary-800 hover:bg-primary-100'
                               }`}
                               title={isDeleted ? "Cannot edit deleted schedule" : "Edit"}
                               disabled={isDeleted}
@@ -314,6 +501,12 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                     })}
                     <div className="text-xs text-gray-600 mt-2 px-2">
                       <strong>{shiftSchedules.length}</strong> zone{shiftSchedules.length !== 1 ? 's' : ''} assigned to this shift
+                      {(() => {
+                        const supervisorInfo = getSupervisorForShift(shiftName, shiftSchedules[0].start_time, shiftSchedules[0].end_time);
+                        return supervisorInfo ? (
+                          <span className="ml-2 text-purple-600">+ 1 supervisor</span>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -357,7 +550,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                               type="checkbox"
                               checked={formData.departments.includes(dept.name)}
                               onChange={() => handleDepartmentToggle(dept.name)}
-                              className="w-4 h-4 text-blue-600"
+                              className="w-4 h-4 text-primary-600"
                             />
                             <span className="text-sm flex-1">{dept.name}</span>
                           </label>
@@ -365,7 +558,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                       </div>
                     </div>
                     {formData.departments.length > 0 && (
-                      <p className="text-sm text-blue-600 mt-2">
+                      <p className="text-sm text-primary-600 mt-2">
                         Selected: {formData.departments.join(", ")}
                       </p>
                     )}
@@ -449,7 +642,7 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
                 <button
                   type="submit"
                   disabled={formData.departments.length === 0}
-                  className="flex-1 bg-[#1E3A8A] text-white rounded-md px-4 py-2 hover:bg-blue-900 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  className="flex-1 bg-primary text-white rounded-md px-4 py-2 hover:bg-primary-hover disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   Add {formData.departments.length > 0 ? `${formData.departments.length} Zone${formData.departments.length > 1 ? 's' : ''}` : 'Schedule'}
                 </button>
@@ -486,11 +679,7 @@ export default function WeeklyTemplateView() {
   const [viewingSavedTemplate, setViewingSavedTemplate] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
   const [departments, setDepartments] = useState([]);
-  const [shiftTemplates, setShiftTemplates] = useState([
-    { name: "Opening Shift", start: "08:00", end: "16:00" },
-    { name: "Closing Shift", start: "16:00", end: "00:00" },
-    { name: "Graveyard Shift", start: "00:00", end: "08:00" },
-  ]);
+  const [shiftTemplates, setShiftTemplates] = useState([]);
   const [showShiftTemplateModal, setShowShiftTemplateModal] = useState(false);
   const [shiftTemplateForm, setShiftTemplateForm] = useState({ name: "", start: "", end: "" });
   const [editingShiftIndex, setEditingShiftIndex] = useState(null);
@@ -528,6 +717,7 @@ export default function WeeklyTemplateView() {
     fetchTemplatesData();
     loadSavedTemplates();
     fetchDepartmentsData();
+    fetchShiftTemplatesData();
   }, []);
 
   useEffect(() => {
@@ -555,6 +745,23 @@ export default function WeeklyTemplateView() {
       setDepartments(data);
     } catch (error) {
       console.error("Error fetching departments:", error);
+    }
+  };
+
+  const fetchShiftTemplatesData = async () => {
+    try {
+      const data = await getShiftTemplates();
+      // Convert backend format to frontend format
+      const formattedTemplates = data.map(template => ({
+        id: template.id,
+        name: template.name,
+        start: template.start_time.substring(0, 5), // Convert "08:00:00" to "08:00"
+        end: template.end_time.substring(0, 5)
+      }));
+      setShiftTemplates(formattedTemplates);
+    } catch (error) {
+      console.error("Error fetching shift templates:", error);
+      toast.error("Failed to load shift templates");
     }
   };
 
@@ -986,46 +1193,79 @@ export default function WeeklyTemplateView() {
     }
   };
 
-  const handleAddShiftTemplate = () => {
+  const handleAddShiftTemplate = async () => {
     if (!shiftTemplateForm.name || !shiftTemplateForm.start || !shiftTemplateForm.end) {
       toast.warning("Please fill all fields!");
       return;
     }
 
-    if (editingShiftIndex !== null) {
-      // Edit existing
-      const updated = [...shiftTemplates];
-      updated[editingShiftIndex] = shiftTemplateForm;
-      setShiftTemplates(updated);
-      toast.success("Shift template updated!");
-    } else {
-      // Add new
-      setShiftTemplates([...shiftTemplates, shiftTemplateForm]);
-      toast.success("Shift template created!");
-    }
+    try {
+      if (editingShiftIndex !== null) {
+        // Edit existing
+        const templateToEdit = shiftTemplates[editingShiftIndex];
+        await updateShiftTemplate(templateToEdit.id, {
+          name: shiftTemplateForm.name,
+          start_time: shiftTemplateForm.start + ":00", // Convert "08:00" to "08:00:00"
+          end_time: shiftTemplateForm.end + ":00"
+        });
+        toast.success("Shift template updated!");
+      } else {
+        // Add new
+        await createShiftTemplate({
+          name: shiftTemplateForm.name,
+          start_time: shiftTemplateForm.start + ":00",
+          end_time: shiftTemplateForm.end + ":00",
+          created_by: JSON.parse(localStorage.getItem("user") || "{}")?.employee?.employee_id || "admin"
+        });
+        toast.success("Shift template created!");
+      }
 
-    setShiftTemplateForm({ name: "", start: "", end: "" });
-    setEditingShiftIndex(null);
-    setShowShiftTemplateModal(false);
+      // Refresh the shift templates list
+      await fetchShiftTemplatesData();
+      
+      setShiftTemplateForm({ name: "", start: "", end: "" });
+      setEditingShiftIndex(null);
+      setShowShiftTemplateModal(false);
+    } catch (error) {
+      console.error("Error saving shift template:", error);
+      if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error("Failed to save shift template");
+      }
+    }
   };
 
   const handleEditShiftTemplate = (index) => {
-    setShiftTemplateForm(shiftTemplates[index]);
+    const template = shiftTemplates[index];
+    setShiftTemplateForm({
+      name: template.name,
+      start: template.start,
+      end: template.end
+    });
     setEditingShiftIndex(index);
     setShowShiftTemplateModal(true);
   };
 
   const handleDeleteShiftTemplate = async (index) => {
-    const confirmed = await confirmAction(
-      `Delete "${shiftTemplates[index].name}"?`,
-      "This shift template will be removed from the list."
-    );
+    const template = shiftTemplates[index];
     
-    if (confirmed) {
-      const updated = shiftTemplates.filter((_, i) => i !== index);
-      setShiftTemplates(updated);
-      toast.success("Shift template deleted!");
-    }
+    confirmAction(`Delete "${template.name}"?`, async () => {
+      try {
+        await deleteShiftTemplate(template.id);
+        toast.success("Shift template deleted!");
+        
+        // Refresh the shift templates list
+        await fetchShiftTemplatesData();
+      } catch (error) {
+        console.error("Error deleting shift template:", error);
+        if (error.response?.data?.message) {
+          toast.error(error.response.data.message);
+        } else {
+          toast.error("Failed to delete shift template");
+        }
+      }
+    });
   };
 
   return (
@@ -1145,7 +1385,7 @@ export default function WeeklyTemplateView() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEditShiftTemplate(index)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                        className="p-2 text-primary-600 hover:bg-primary-50 rounded-md"
                         title="Edit"
                       >
                         <MdEdit size={18} />
@@ -1263,7 +1503,7 @@ export default function WeeklyTemplateView() {
                       const shiftPassed = isToday && isShiftTimePassedForToday(editingSchedule.start_time, editingSchedule.end_time);
                       return shiftPassed 
                         ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
-                        : "bg-[#1E3A8A] text-white hover:bg-blue-900";
+                        : "bg-primary text-white hover:bg-primary-hover";
                     })()
                   }`}
                 >
@@ -1349,11 +1589,11 @@ export default function WeeklyTemplateView() {
       )}
 
       {/* Instructions Banner */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 md:p-4 mb-6">
+      <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 md:p-4 mb-6">
         <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2 text-sm md:text-base">
           <MdLightbulb size={18} className="md:w-5 md:h-5" /> How to Create Schedules
         </h3>
-        <ul className="text-xs md:text-sm text-blue-800 space-y-1">
+        <ul className="text-xs md:text-sm text-primary-800 space-y-1">
           <li>• <strong>Click on any day</strong> (Monday-Sunday) to open the schedule manager</li>
           <li>• <strong>Add departments/zones</strong> to that specific day with shift details</li>
           <li>• <strong>Edit or delete</strong> schedules directly from the day view</li>
@@ -1364,11 +1604,11 @@ export default function WeeklyTemplateView() {
       {/* Weekly Calendar View */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-          <h2 className="text-lg md:text-xl font-semibold text-[#1E3A8A]">Weekly Schedule Overview</h2>
+          <h2 className="text-lg md:text-xl font-semibold text-primary">Weekly Schedule Overview</h2>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={handlePublishSchedules}
-              className="flex items-center justify-center gap-2 bg-blue-600 text-white px-3 md:px-4 py-2 rounded-md hover:bg-blue-700 font-semibold text-sm md:text-base"
+              className="flex items-center justify-center gap-2 bg-primary text-white px-3 md:px-4 py-2 rounded-md hover:bg-primary-700 font-semibold text-sm md:text-base"
             >
               <MdCheck size={16} className="md:w-5 md:h-5" /> Publish Schedule
             </button>
@@ -1386,7 +1626,7 @@ export default function WeeklyTemplateView() {
           <h3 className="text-sm font-semibold text-gray-700 mb-2">Schedule Status Legend:</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4 text-xs">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-blue-200 bg-white rounded flex-shrink-0"></div>
+              <div className="w-4 h-4 border-2 border-primary-200 bg-white rounded flex-shrink-0"></div>
               <span className="text-gray-600">Published Schedule</span>
             </div>
             <div className="flex items-center gap-2">
@@ -1412,10 +1652,10 @@ export default function WeeklyTemplateView() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 md:gap-3">
           {daysOfWeek.map(day => (
-            <div key={day} className="border-2 border-gray-300 rounded-lg overflow-hidden hover:border-blue-500 transition-all">
+            <div key={day} className="border-2 border-gray-300 rounded-lg overflow-hidden hover:border-primary-500 transition-all">
               <button
                 onClick={() => handleDayClick(day)}
-                className="w-full bg-[#1E3A8A] text-white p-2 md:p-3 text-center font-semibold hover:bg-blue-900 transition-colors cursor-pointer text-sm md:text-base"
+                className="w-full bg-primary text-white p-2 md:p-3 text-center font-semibold hover:bg-primary-hover transition-colors cursor-pointer text-sm md:text-base"
                 title={`Click to manage ${day} schedule`}
               >
                 <span className="hidden sm:inline">{day}</span>
@@ -1445,7 +1685,7 @@ export default function WeeklyTemplateView() {
                               ? 'border-2 border-yellow-300 bg-yellow-50'
                               : isDraft 
                                 ? 'border-2 border-orange-300 bg-orange-50' 
-                                : 'border border-blue-200'
+                                : 'border border-primary-200'
                         }`}
                       >
                         <div className="flex justify-between items-start mb-1">
@@ -1457,7 +1697,7 @@ export default function WeeklyTemplateView() {
                                   ? 'text-yellow-800'
                                   : isDraft 
                                     ? 'text-orange-800' 
-                                    : 'text-blue-800'
+                                    : 'text-primary-800'
                             }`}>
                               {schedule.department}
                             </p>
@@ -1483,7 +1723,7 @@ export default function WeeklyTemplateView() {
                               className={`p-1 ${
                                 isDeleted 
                                   ? 'text-gray-400 cursor-not-allowed' 
-                                  : 'text-blue-600 hover:text-blue-800'
+                                  : 'text-primary-600 hover:text-primary-800'
                               }`}
                               title={isDeleted ? "Cannot edit deleted schedule" : "Edit"}
                               disabled={isDeleted}
@@ -1547,7 +1787,7 @@ export default function WeeklyTemplateView() {
                   <div className="flex gap-1 ml-2">
                     <button
                       onClick={() => handleLoadTemplate(template)}
-                      className="text-blue-600 hover:text-blue-800 p-1"
+                      className="text-primary-600 hover:text-primary-800 p-1"
                       title="View & Apply Template"
                     >
                       <MdContentCopy size={14} className="md:w-4 md:h-4" />

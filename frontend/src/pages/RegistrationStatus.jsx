@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 import { 
   FaCheckCircle, 
   FaTimesCircle, 
   FaHourglassHalf,
   FaSync,
   FaSignInAlt,
-  FaUserPlus
+  FaUserPlus,
+  FaFingerprint
 } from 'react-icons/fa';
 
 export default function RegistrationStatus() {
   const { employee_id } = useParams();
   const navigate = useNavigate();
+  const { systemConfig } = useSystemConfig();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -84,7 +87,7 @@ export default function RegistrationStatus() {
           <div className="text-red-500 text-6xl mb-4">
             <FaTimesCircle className="mx-auto" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">❌ Error</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Error</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button
             onClick={() => navigate('/register')}
@@ -102,6 +105,21 @@ export default function RegistrationStatus() {
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl mx-auto">
         <div className="bg-white shadow-lg rounded-lg p-8">
+          {/* Logo Section */}
+          <div className="text-center mb-6">
+            {systemConfig.logo ? (
+              <img 
+                src={systemConfig.logo} 
+                alt={systemConfig.companyName || 'Company Logo'} 
+                className="h-16 mx-auto mb-4 object-contain"
+              />
+            ) : (
+              <div className="text-blue-600 text-6xl mb-4">
+                <FaFingerprint className="mx-auto" />
+              </div>
+            )}
+          </div>
+
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-gray-900">Registration Status</h2>
             <p className="mt-2 text-gray-600">

@@ -238,6 +238,42 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Schedule Notifications -->
+                <Border Background="White" CornerRadius="12" Padding="20" BorderBrush="#E6E9EE" BorderThickness="1" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="Schedule Notifications" 
+                                   FontSize="18" FontWeight="SemiBold" 
+                                   Foreground="#1E3A8A" Margin="0,0,0,15"/>
+                        
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="0">
+                                <TextBlock Text="Unacknowledged Notifications" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                                <TextBlock x:Name="NotificationStatusText" Text="Checking..." Foreground="#6B7280"/>
+                            </StackPanel>
+                            
+                            <Button Grid.Row="0" Grid.Column="1" x:Name="CheckNotificationsBtn" Content="Check Now" 
+                                    Click="CheckNotificationsBtn_Click" Style="{StaticResource PrimaryButton}" Margin="0,0,10,0"/>
+                            <Button Grid.Row="0" Grid.Column="2" x:Name="ClearNotificationsBtn" Content="Clear All" 
+                                    Click="ClearNotificationsBtn_Click" Margin="0,0,0,0"/>
+                            
+                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" 
+                                       Text="Schedule notifications alert you when schedules are updated in the web application. Check regularly to stay informed of schedule changes."
+                                       FontSize="12" Foreground="#9CA3AF" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- System Information -->
                 <Border Background="White" CornerRadius="12" Padding="20" BorderBrush="#E6E9EE" BorderThickness="1">
                     <StackPanel>

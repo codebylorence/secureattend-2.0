@@ -50,7 +50,7 @@ export default function AddDeptButton({ onDepartmentAdded }) {
     <>
       <button
         onClick={() => setShowModal(true)}
-        className="flex items-center justify-center gap-2 bg-[#1E3A8A] hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-md transition cursor-pointer"
+        className="flex items-center justify-center gap-2 bg-primary hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-md transition cursor-pointer"
       >
         <span>Add Department</span>
         <div className="bg-white rounded-full p-1">

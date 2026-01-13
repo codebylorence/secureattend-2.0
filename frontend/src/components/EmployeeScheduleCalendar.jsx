@@ -236,7 +236,7 @@ const EmployeeScheduleCalendar = () => {
                   onClick={() => setViewMode("calendar")}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
                     viewMode === "calendar"
-                      ? "bg-white text-blue-600 shadow-sm"
+                      ? "bg-white text-primary-600 shadow-sm"
                       : "text-gray-600 hover:text-gray-800"
                   }`}
                 >
@@ -247,7 +247,7 @@ const EmployeeScheduleCalendar = () => {
                   onClick={() => setViewMode("table")}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
                     viewMode === "table"
-                      ? "bg-white text-blue-600 shadow-sm"
+                      ? "bg-white text-primary-600 shadow-sm"
                       : "text-gray-600 hover:text-gray-800"
                   }`}
                 >

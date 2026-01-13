@@ -311,6 +311,11 @@
                                 Style="{StaticResource PrimaryButton}"
                                 HorizontalAlignment="Stretch"
                                 Margin="0,8,0,0"/>
+                        <Button x:Name="OvertimeManagementBtn" Content="⏰ Manage Overtime" 
+                                Click="OvertimeManagementBtn_Click" 
+                                Style="{StaticResource PrimaryButton}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,8,0,0"/>
                     </StackPanel>
                 </Grid>
             </Border>

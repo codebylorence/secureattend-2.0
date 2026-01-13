@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FaClock, FaSync, FaExclamationTriangle } from "react-icons/fa";
 import { getTodayAttendances } from "../api/AttendanceApi";
 import { isAuthenticated } from "../utils/auth";
+import { formatDateTime24 } from "../utils/timeFormat";
 
 export default function TodaysAttendance({ statusFilter, zoneFilter, searchTerm, supervisorView = false }) {
   const [attendances, setAttendances] = useState([]);
@@ -76,9 +77,7 @@ export default function TodaysAttendance({ statusFilter, zoneFilter, searchTerm,
   };
 
   const formatTime = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return formatDateTime24(dateString);
   };
 
   // Filter attendances based on props
@@ -124,7 +123,7 @@ export default function TodaysAttendance({ statusFilter, zoneFilter, searchTerm,
     <>
       <div className="bg-white shadow rounded-md overflow-hidden">
         {/* Header Bar */}
-        <div className="bg-[#1E3A8A] text-white flex items-center justify-between px-4 py-3">
+        <div className="bg-primary text-white flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-2">
             <FaClock size={20}/> 
             <h2 className="font-semibold text-white">Today's Attendance</h2>
@@ -194,7 +193,8 @@ export default function TodaysAttendance({ statusFilter, zoneFilter, searchTerm,
                               'Present': { label: 'Present', color: 'bg-green-100 text-green-800' },
                               'Late': { label: 'Late', color: 'bg-orange-100 text-orange-800' },
                               'Absent': { label: 'Absent', color: 'bg-red-100 text-red-800' },
-                              'IN': { label: 'Clocked In', color: 'bg-blue-100 text-blue-800' },
+                              'Overtime': { label: 'Overtime', color: 'bg-purple-100 text-purple-800' },
+                              'IN': { label: 'Clocked In', color: 'bg-primary-100 text-primary-800' },
                               'COMPLETED': { label: 'Completed', color: 'bg-green-100 text-green-800' },
                             };
                             const display = statusDisplay[attendance.status] || { label: attendance.status, color: 'bg-gray-100 text-gray-800' };
@@ -262,7 +262,7 @@ export default function TodaysAttendance({ statusFilter, zoneFilter, searchTerm,
                           onClick={() => setCurrentPage(i)}
                           className={`px-3 py-1 text-sm border rounded ${
                             currentPage === i
-                              ? 'bg-blue-500 text-white border-blue-500'
+                              ? 'bg-primary-500 text-white border-primary-500'
                               : 'border-gray-300 hover:bg-gray-50'
                           }`}
                         >

@@ -4,41 +4,90 @@ import User from "../models/user.js";
 import Employee from "../models/employee.js";
 
 export const verifyLogin = async (username, password) => {
-  const user = await User.findOne({
-    where: { username },
-    include: [{ model: Employee, as: "employee" }],
-  });
+  try {
+    const user = await User.findOne({
+      where: { username },
+      include: [{ 
+        model: Employee, 
+        as: "employee",
+        required: false // Make the employee association optional
+      }],
+    });
 
-  if (!user) {
-    throw new Error("Invalid username or password");
+    if (!user) {
+      throw new Error("Invalid username or password");
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new Error("Invalid username or password");
+    }
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET || "your-secret-key",
+      { expiresIn: "24h" }
+    );
+
+    return {
+      message: "Login successful",
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        role: user.role,
+        employeeId: user.employeeId,
+        employee: user.employee,
+      },
+    };
+  } catch (error) {
+    // If there's an association error, try without the include
+    if (error.message.includes("not associated")) {
+      console.log("⚠️ Association error, trying without employee include...");
+      
+      const user = await User.findOne({
+        where: { username }
+      });
+
+      if (!user) {
+        throw new Error("Invalid username or password");
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        throw new Error("Invalid username or password");
+      }
+
+      const token = jwt.sign(
+        { id: user.id, role: user.role },
+        process.env.JWT_SECRET || "your-secret-key",
+        { expiresIn: "24h" }
+      );
+
+      return {
+        message: "Login successful",
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          firstname: user.firstname,
+          lastname: user.lastname,
+          role: user.role,
+          employeeId: user.employeeId,
+          employee: null, // No employee data for admin users
+        },
+      };
+    }
+    throw error;
   }
-
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) {
-    throw new Error("Invalid username or password");
-  }
-
-  const token = jwt.sign(
-    { id: user.id, role: user.role },
-    process.env.JWT_SECRET || "your-secret-key",
-    { expiresIn: "24h" }
-  );
-
-  return {
-    message: "Login successful",
-    token,
-    user: {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      employeeId: user.employeeId,
-      employee: user.employee,
-    },
-  };
 };
 
-export const changeUserCredentials = async (id, username, password, currentPassword = null) => {
-  const user = await User.findByPk(id);
+export const changeUserCredentials = async (id, username, password, currentPassword = null, firstname = null, lastname = null) => {
+  const user = await User.findByPk(id, {
+    include: [{ model: Employee, as: "employee" }]
+  });
   if (!user) {
     throw new Error("User not found");
   }
@@ -51,8 +100,34 @@ export const changeUserCredentials = async (id, username, password, currentPassw
     }
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-  await user.update({ username, password: hashedPassword });
+  // Prepare update data
+  const updateData = {};
+  
+  // Update username if provided and different
+  if (username && username !== user.username) {
+    updateData.username = username;
+  }
+  
+  // Update password if provided
+  if (password) {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    updateData.password = hashedPassword;
+  }
+  
+  // Update firstname if provided and user is superadmin or admin
+  if (firstname !== null && (user.role === 'superadmin' || user.role === 'admin')) {
+    updateData.firstname = firstname;
+  }
+  
+  // Update lastname if provided and user is superadmin or admin
+  if (lastname !== null && (user.role === 'superadmin' || user.role === 'admin')) {
+    updateData.lastname = lastname;
+  }
+  
+  // Only update if there are changes
+  if (Object.keys(updateData).length > 0) {
+    await user.update(updateData);
+  }
 
-  return { message: "Credentials updated successfully" };
+  return { message: "Profile updated successfully" };
 };

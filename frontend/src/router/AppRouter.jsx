@@ -25,6 +25,9 @@ import RegistrationManagement from "../pages/RegistrationManagement";
 import CheckRegistrationStatus from "../pages/CheckRegistrationStatus";
 import PositionManagement from "../pages/PositionManagementNew";
 import AttendanceReports from "../pages/AttendanceReports";
+import EmployeeProfile from "../pages/EmployeeProfile";
+import SuperAdminProfile from "../pages/SuperAdminProfile";
+import AdminProfile from "../pages/AdminProfile";
 
 // Component to redirect logged-in users away from login page
 function LoginRedirect() {
@@ -50,6 +53,8 @@ function LoginRedirect() {
     // Already logged in, redirect to dashboard
     switch (user.role) {
       case "admin":
+        return <Navigate to="/admin/dashboard" replace />;
+      case "superadmin":
         return <Navigate to="/admin/dashboard" replace />;
       case "supervisor":
         return <Navigate to="/admin/dashboard" replace />;
@@ -81,11 +86,12 @@ export default function AppRouter() {
         <Route path="/check-status" element={<CheckRegistrationStatus />} />
         <Route path="/registration-status/:employee_id" element={<RegistrationStatus />} />
 
-        {/* Admin Routes - Protected (Admin and Supervisor) */}
-        <Route element={<PrivateRoute allowedRole={["admin", "supervisor"]} />}>
+        {/* Admin Routes - Protected (Admin, Supervisor, and Team Leader) */}
+        <Route element={<PrivateRoute allowedRole={["admin", "supervisor", "teamleader", "superadmin"]} />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/employees" element={<Employees />} />
+            <Route path="/admin/employee/:employeeId" element={<EmployeeProfile />} />
             <Route path="/admin/schedule" element={<ManageSchedule />} />
             <Route path="/admin/view-schedules" element={<ViewSchedules />} />
             <Route path="/admin/attendance" element={<EmployeeAttendance />} />
@@ -97,6 +103,11 @@ export default function AppRouter() {
             <Route path="/supervisor/myschedule" element={<MySchedule />} />
             <Route path="/supervisor/profile" element={<Profile />} />
             
+            {/* Super Admin routes */}
+            <Route element={<PrivateRoute allowedRole="superadmin" />}>
+              <Route path="/superadmin/profile" element={<SuperAdminProfile />} />
+            </Route>
+            
             {/* Admin-only routes */}
             <Route element={<PrivateRoute allowedRole="admin" />}>
               <Route path="/admin/attendance-reports" element={<AttendanceReports />} />
@@ -105,7 +116,7 @@ export default function AppRouter() {
               <Route path="/admin/settings" element={<Settings />} />
             </Route>
             
-            <Route path="/admin/profile" element={<Profile />} />
+            <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>
         </Route>
 

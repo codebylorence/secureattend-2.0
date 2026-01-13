@@ -1,7 +1,12 @@
 import Attendance from "../models/attendance.js";
 import Employee from "../models/employee.js";
+import EmployeeSchedule from "../models/employeeSchedule.js";
+import ScheduleTemplate from "../models/scheduleTemplate.js";
 import { Op } from "sequelize";
-import { getCurrentDateInTimezone, getDateInTimezone } from "../utils/timezone.js";
+import sequelize from "../config/database.js";
+import { getCurrentDateInTimezone, getDateInTimezone, getConfiguredTimezone } from "../utils/timezone.js";
+import fs from 'fs';
+import path from 'path';
 
 export const recordAttendance = async (req, res) => {
   try {
@@ -143,6 +148,27 @@ export const recordAttendance = async (req, res) => {
         
         openSession.clock_out = clockOutDate;
         openSession.total_hours = totalHours;
+        
+        // If this is an overtime session, calculate actual overtime hours worked
+        if (openSession.status === "Overtime") {
+          console.log(`⏰ Calculating actual overtime hours for ${employee_id}`);
+          
+          // Get the employee's scheduled shift hours for today
+          const scheduleHours = await calculateScheduledHours(employee_id, openSession.date);
+          const regularHours = scheduleHours || 8; // Default to 8 hours if no schedule found
+          
+          // Calculate actual overtime hours worked (hours beyond regular shift)
+          const actualOvertimeHours = Math.max(0, totalHours - regularHours);
+          
+          // Update overtime_hours with actual worked hours (not estimated)
+          openSession.overtime_hours = actualOvertimeHours;
+          
+          console.log(`📊 Overtime calculation for ${employee_id}:`);
+          console.log(`  - Total hours worked: ${totalHours.toFixed(2)}`);
+          console.log(`  - Regular shift hours: ${regularHours}`);
+          console.log(`  - Actual overtime hours: ${actualOvertimeHours.toFixed(2)}`);
+        }
+        
         await openSession.save();
 
         console.log(`✅ Clock-out recorded for ${employee_id}, total hours: ${totalHours.toFixed(2)} (session date: ${openSession.date})`);
@@ -475,5 +501,482 @@ export const getTodayAttendances = async (req, res) => {
   } catch (error) {
     console.error("❌ Error fetching today's attendances:", error);
     res.status(500).json({ error: "Failed to fetch today's attendances" });
+  }
+};
+// Overtime Management Endpoints
+
+export const assignOvertime = async (req, res) => {
+  try {
+    const { employee_id, employee_ids, reason, estimated_hours, assigned_date, assigned_by } = req.body;
+
+    console.log(`📥 Overtime assignment request:`, req.body);
+
+    if (!reason || !estimated_hours) {
+      return res.status(400).json({ error: "reason and estimated_hours are required" });
+    }
+
+    // Handle both single employee and multiple employees
+    let employeeIds = [];
+    if (employee_ids && Array.isArray(employee_ids)) {
+      employeeIds = employee_ids;
+    } else if (employee_id) {
+      employeeIds = [employee_id];
+    } else {
+      return res.status(400).json({ error: "employee_id or employee_ids is required" });
+    }
+
+    const assignmentDate = assigned_date || getCurrentDateInTimezone();
+    const results = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const empId of employeeIds) {
+      try {
+        // Verify employee exists
+        const employee = await Employee.findOne({ where: { employee_id: empId } });
+        if (!employee) {
+          results.push({ employee_id: empId, success: false, error: "Employee not found" });
+          errorCount++;
+          continue;
+        }
+
+        // Check if employee is scheduled for today
+        // Get weekday in the configured timezone
+        const configPath = path.join(process.cwd(), 'config', 'system-config.json');
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const timezone = config.timezone || 'UTC';
+        
+        const now = new Date();
+        const today = new Intl.DateTimeFormat('en-US', {
+          timeZone: timezone,
+          weekday: 'long'
+        }).format(now);
+        
+        // Check if employee has ANY schedule for today (they might have multiple schedules)
+        const todaySchedule = await EmployeeSchedule.findOne({
+          where: {
+            employee_id: empId
+          },
+          include: [{
+            model: ScheduleTemplate,
+            as: 'template',
+            required: true,
+            where: sequelize.literal(`JSON_CONTAINS(template.days, '"${today}"')`)
+          }]
+        });
+
+        if (!todaySchedule) {
+          results.push({ employee_id: empId, success: false, error: "Employee is not scheduled to work today" });
+          errorCount++;
+          continue;
+        }
+
+        // Check if employee has already clocked in for their regular shift today
+        const todayAttendance = await Attendance.findOne({
+          where: {
+            employee_id: empId,
+            date: assignmentDate,
+            status: {
+              [Op.in]: ["Present", "Late"] // Must have clocked in (not absent)
+            },
+            clock_in: {
+              [Op.not]: null // Must have actually clocked in
+            }
+          }
+        });
+
+        if (!todayAttendance) {
+          results.push({ employee_id: empId, success: false, error: "Employee must clock in for regular shift before overtime assignment" });
+          errorCount++;
+          continue;
+        }
+
+        // Check if employee already has overtime assignment for the date
+        if (todayAttendance.status === "Overtime") {
+          results.push({ employee_id: empId, success: false, error: "Already has overtime assignment for this date" });
+          errorCount++;
+          continue;
+        }
+
+        // Update the existing Present/Late record to Overtime status
+        todayAttendance.status = "Overtime";
+        todayAttendance.overtime_hours = parseFloat(estimated_hours);
+        await todayAttendance.save();
+        
+        const overtimeRecord = todayAttendance;
+
+        results.push({ 
+          employee_id: empId, 
+          success: true, 
+          employee_name: employee.fullname || `${employee.firstname} ${employee.lastname}`,
+          overtime_id: overtimeRecord.id
+        });
+        successCount++;
+
+        console.log(`✅ Overtime assigned to ${empId} for ${assignmentDate}`);
+      } catch (error) {
+        console.error(`❌ Error assigning overtime to ${empId}:`, error);
+        results.push({ employee_id: empId, success: false, error: error.message });
+        errorCount++;
+      }
+    }
+
+    console.log(`📊 Overtime assignment complete: ${successCount} success, ${errorCount} errors`);
+    
+    res.status(200).json({
+      message: `Overtime assignment complete: ${successCount} success, ${errorCount} errors`,
+      results,
+      summary: {
+        total: employeeIds.length,
+        success: successCount,
+        errors: errorCount
+      },
+      reason,
+      estimated_hours
+    });
+  } catch (error) {
+    console.error("❌ Error in bulk overtime assignment:", error);
+    res.status(500).json({ error: "Failed to assign overtime" });
+  }
+};
+
+export const removeOvertime = async (req, res) => {
+  try {
+    const { employee_id } = req.params;
+    const today = getCurrentDateInTimezone();
+
+    console.log(`📥 Overtime removal request for employee: ${employee_id}`);
+
+    // Find overtime record for today
+    const overtimeRecord = await Attendance.findOne({
+      where: {
+        employee_id,
+        date: today,
+        status: "Overtime"
+      }
+    });
+
+    if (!overtimeRecord) {
+      return res.status(404).json({ error: "No overtime assignment found for this employee" });
+    }
+
+    // If employee hasn't clocked out yet, change status back to Present
+    // If they have clocked out, we keep the overtime record as is for payroll purposes
+    if (!overtimeRecord.clock_out) {
+      overtimeRecord.status = "Present";
+      overtimeRecord.overtime_hours = null; // Clear overtime hours
+      await overtimeRecord.save();
+      console.log(`✅ Overtime status changed back to Present for ${employee_id}`);
+    } else {
+      return res.status(400).json({ error: "Cannot remove overtime - employee has already completed overtime work" });
+    }
+    
+    res.status(200).json({
+      message: "Overtime assignment removed successfully"
+    });
+  } catch (error) {
+    console.error("❌ Error removing overtime:", error);
+    res.status(500).json({ error: "Failed to remove overtime assignment" });
+  }
+};
+
+export const getOvertimeEligibleEmployees = async (req, res) => {
+  try {
+    const today = getCurrentDateInTimezone();
+    
+    // Get weekday in the configured timezone
+    const configPath = path.join(process.cwd(), 'config', 'system-config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const timezone = config.timezone || 'UTC';
+    
+    const now = new Date();
+    const todayWeekday = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'long'
+    }).format(now);
+    
+    console.log(`📅 Fetching overtime eligible employees for ${today} (${todayWeekday}) in timezone ${timezone}`);
+    
+    // Step 1: Get all employees who have clocked in today (Present or Late)
+    const todayAttendances = await Attendance.findAll({
+      where: {
+        date: today,
+        status: {
+          [Op.in]: ["Present", "Late"]
+        },
+        clock_in: {
+          [Op.not]: null
+        }
+      }
+    });
+
+    console.log(`📊 Found ${todayAttendances.length} employees who clocked in today:`, 
+      todayAttendances.map(a => `${a.employee_id} (${a.status})`));
+
+    if (todayAttendances.length === 0) {
+      console.log(`📊 No employees clocked in today, returning empty list`);
+      return res.status(200).json([]);
+    }
+
+    // Step 2: Get employee IDs who clocked in
+    const clockedInEmployeeIds = todayAttendances.map(att => att.employee_id);
+    console.log(`📋 Clocked in employee IDs:`, clockedInEmployeeIds);
+
+    // Step 3: Get all employee schedules for today's weekday
+    // Use JSON_CONTAINS for MySQL or JSON array operations for PostgreSQL
+    const employeeSchedules = await EmployeeSchedule.findAll({
+      include: [{
+        model: ScheduleTemplate,
+        as: 'template',
+        required: true,
+        where: sequelize.literal(`JSON_CONTAINS(template.days, '"${todayWeekday}"')`)
+      }]
+    });
+
+    console.log(`📊 Found ${employeeSchedules.length} employee schedules for ${todayWeekday}`);
+    console.log(`📋 Schedule details:`, employeeSchedules.map(s => ({
+      employee_id: s.employee_id,
+      template_days: s.template.days,
+      shift_name: s.template.shift_name
+    })));
+    
+    // Step 4: Get employee IDs who are scheduled today
+    const scheduledEmployeeIds = employeeSchedules.map(schedule => schedule.employee_id);
+    console.log(`📋 Scheduled employee IDs:`, scheduledEmployeeIds);
+
+    // Step 5: Find intersection - employees who are both scheduled AND clocked in
+    const eligibleEmployeeIds = clockedInEmployeeIds.filter(empId => 
+      scheduledEmployeeIds.includes(empId)
+    );
+    
+    console.log(`📊 Eligible employee IDs (scheduled AND clocked in):`, eligibleEmployeeIds);
+
+    if (eligibleEmployeeIds.length === 0) {
+      console.log(`📊 No employees are both scheduled and clocked in today`);
+      console.log(`📊 Clocked in but not scheduled:`, clockedInEmployeeIds.filter(id => !scheduledEmployeeIds.includes(id)));
+      console.log(`📊 Scheduled but not clocked in:`, scheduledEmployeeIds.filter(id => !clockedInEmployeeIds.includes(id)));
+      return res.status(200).json([]);
+    }
+
+    // Step 6: Get employee details for eligible employees
+    const eligibleEmployees = await Employee.findAll({
+      where: {
+        employee_id: {
+          [Op.in]: eligibleEmployeeIds
+        }
+      }
+    });
+
+    console.log(`📊 Found ${eligibleEmployees.length} eligible employee records`);
+
+    // Step 7: Filter out employees who already have overtime status
+    const employeesWithoutOvertime = [];
+    for (const employee of eligibleEmployees) {
+      const hasOvertime = await Attendance.findOne({
+        where: {
+          employee_id: employee.employee_id,
+          date: today,
+          status: "Overtime"
+        }
+      });
+
+      console.log(`👤 Employee ${employee.employee_id}: hasOvertime=${!!hasOvertime}`);
+
+      if (!hasOvertime) {
+        const employeeData = employee.toJSON();
+        
+        // Ensure fullname is populated
+        let fullname = employeeData.fullname;
+        if (!fullname || fullname.trim() === '' || fullname === 'null') {
+          if (employeeData.firstname && employeeData.lastname) {
+            fullname = `${employeeData.firstname} ${employeeData.lastname}`;
+          } else if (employeeData.firstname) {
+            fullname = employeeData.firstname;
+          } else {
+            fullname = `Employee ${employeeData.employee_id}`;
+          }
+        }
+
+        employeesWithoutOvertime.push({
+          ...employeeData,
+          fullname: fullname
+        });
+      }
+    }
+
+    console.log(`📊 Final result: ${employeesWithoutOvertime.length} overtime eligible employees`);
+    console.log(`📋 Eligible employees:`, employeesWithoutOvertime.map(e => `${e.employee_id} - ${e.fullname}`));
+    
+    res.status(200).json(employeesWithoutOvertime);
+  } catch (error) {
+    console.error("❌ Error fetching overtime eligible employees:", error);
+    console.error("❌ Error stack:", error.stack);
+    res.status(500).json({ error: "Failed to fetch overtime eligible employees" });
+  }
+};
+
+export const getOvertimeAssignments = async (req, res) => {
+  try {
+    const today = getCurrentDateInTimezone();
+    
+    console.log(`📅 Fetching overtime assignments for date: ${today}`);
+    
+    const overtimeAssignments = await Attendance.findAll({
+      where: { 
+        date: today,
+        status: "Overtime"
+      },
+      include: [
+        {
+          model: Employee,
+          as: 'employee',
+          attributes: ['employee_id', 'firstname', 'lastname', 'fullname', 'department', 'position'],
+          required: true
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    console.log(`📊 Found ${overtimeAssignments.length} overtime assignments for today`);
+    
+    // Format the response
+    const formattedAssignments = overtimeAssignments.map(assignment => {
+      const assignmentData = assignment.toJSON();
+      const employee = assignmentData.employee;
+      
+      let employeeName = 'Unknown Employee';
+      if (employee) {
+        if (employee.firstname && employee.lastname) {
+          employeeName = `${employee.firstname} ${employee.lastname}`;
+        } else if (employee.fullname) {
+          employeeName = employee.fullname;
+        }
+      }
+
+      return {
+        ...assignmentData,
+        employee_name: employeeName,
+        department: employee?.department || 'N/A',
+        position: employee?.position || 'N/A',
+        overtime_status: assignmentData.clock_in ? 'In Progress' : 'Assigned'
+      };
+    });
+
+    res.status(200).json(formattedAssignments);
+  } catch (error) {
+    console.error("❌ Error fetching overtime assignments:", error);
+    res.status(500).json({ error: "Failed to fetch overtime assignments" });
+  }
+};
+
+// Helper function to calculate scheduled hours for an employee on a specific date
+async function calculateScheduledHours(employeeId, date) {
+  try {
+    // Get the day of the week for the given date
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dateObj = new Date(date);
+    const dayOfWeek = dayNames[dateObj.getDay()];
+    
+    console.log(`📅 Calculating scheduled hours for ${employeeId} on ${dayOfWeek} (${date})`);
+    
+    // Find the employee's schedule for this day
+    const schedule = await EmployeeSchedule.findOne({
+      where: {
+        employee_id: employeeId
+      },
+      include: [{
+        model: ScheduleTemplate,
+        as: 'template',
+        required: true,
+        where: sequelize.literal(`JSON_CONTAINS(template.days, '"${dayOfWeek}"')`)
+      }]
+    });
+    
+    if (!schedule || !schedule.template) {
+      console.log(`⚠️ No schedule found for ${employeeId} on ${dayOfWeek}`);
+      return 8; // Default to 8 hours
+    }
+    
+    const template = schedule.template;
+    
+    // Calculate hours from start_time to end_time
+    if (template.start_time && template.end_time) {
+      const startTime = new Date(`1970-01-01T${template.start_time}`);
+      const endTime = new Date(`1970-01-01T${template.end_time}`);
+      
+      // Handle overnight shifts (end time is next day)
+      if (endTime <= startTime) {
+        endTime.setDate(endTime.getDate() + 1);
+      }
+      
+      const scheduledHours = (endTime - startTime) / (1000 * 60 * 60);
+      
+      console.log(`📊 Scheduled hours for ${employeeId}: ${scheduledHours} (${template.start_time} - ${template.end_time})`);
+      return scheduledHours;
+    }
+    
+    console.log(`⚠️ No start/end time found in schedule template for ${employeeId}`);
+    return 8; // Default to 8 hours
+    
+  } catch (error) {
+    console.error(`❌ Error calculating scheduled hours for ${employeeId}:`, error);
+    return 8; // Default to 8 hours on error
+  }
+}
+
+// Endpoint to manually update overtime hours (for admin corrections)
+export const updateOvertimeHours = async (req, res) => {
+  try {
+    const { attendance_id, overtime_hours } = req.body;
+    
+    console.log(`📥 Manual overtime hours update: attendance_id=${attendance_id}, overtime_hours=${overtime_hours}`);
+    
+    if (!attendance_id || overtime_hours === undefined) {
+      return res.status(400).json({ error: "attendance_id and overtime_hours are required" });
+    }
+    
+    // Find the attendance record
+    const attendance = await Attendance.findByPk(attendance_id, {
+      include: [{
+        model: Employee,
+        as: 'employee',
+        attributes: ['employee_id', 'fullname', 'firstname', 'lastname']
+      }]
+    });
+    
+    if (!attendance) {
+      return res.status(404).json({ error: "Attendance record not found" });
+    }
+    
+    // Only allow updating overtime hours for Overtime status records
+    if (attendance.status !== "Overtime") {
+      return res.status(400).json({ error: "Can only update overtime hours for records with Overtime status" });
+    }
+    
+    const previousHours = attendance.overtime_hours;
+    attendance.overtime_hours = parseFloat(overtime_hours);
+    await attendance.save();
+    
+    const employeeName = attendance.employee?.fullname || 
+                        `${attendance.employee?.firstname} ${attendance.employee?.lastname}` || 
+                        attendance.employee_id;
+    
+    console.log(`✅ Overtime hours updated for ${employeeName}: ${previousHours} → ${overtime_hours}`);
+    
+    res.status(200).json({
+      message: "Overtime hours updated successfully",
+      attendance: {
+        id: attendance.id,
+        employee_id: attendance.employee_id,
+        employee_name: employeeName,
+        date: attendance.date,
+        previous_overtime_hours: previousHours,
+        new_overtime_hours: parseFloat(overtime_hours)
+      }
+    });
+    
+  } catch (error) {
+    console.error("❌ Error updating overtime hours:", error);
+    res.status(500).json({ error: "Failed to update overtime hours" });
   }
 };
