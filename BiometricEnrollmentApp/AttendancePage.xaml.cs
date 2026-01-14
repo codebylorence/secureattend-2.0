@@ -23,6 +23,13 @@ namespace BiometricEnrollmentApp
         private System.Timers.Timer? _clockTimer;
         private System.Timers.Timer? _absentMarkingTimer;
         private System.Timers.Timer? _gridRefreshTimer;
+        
+        // Double-tap prevention: Track recent scans per employee
+        private static readonly Dictionary<string, DateTime> _lastScanTimes = new Dictionary<string, DateTime>();
+        private static readonly object _scanLock = new object();
+        
+        // Configuration cache
+        private static bool? _clockOutConfirmationEnabled = null;
 
         public AttendancePage() : this(new ZKTecoService()) { }
 
@@ -111,20 +118,33 @@ namespace BiometricEnrollmentApp
                     {
                         "Present" => "#4CAF50", // Green
                         "Late" => "#FF9800",    // Orange
+                        "DoubleTap" => "#FF5722", // Red for double-tap prevention
+                        "Cancelled" => "#9E9E9E", // Gray for cancelled
                         _ => "#4CAF50"          // Default green
                     };
 
-                    var actionText = status == "Present" || status == "Late" ? "Clock-in" : "Clock-out";
-                    StatusMessage.Text = $"{actionText} successful at {timeStr}";
+                    var actionText = status switch
+                    {
+                        "DoubleTap" => "Please wait before scanning again",
+                        "Cancelled" => "Clock-out cancelled",
+                        "Present" or "Late" => "Clock-in",
+                        _ => "Clock-out"
+                    };
+                    
+                    StatusMessage.Text = status == "DoubleTap" || status == "Cancelled" ? actionText : $"{actionText} successful at {timeStr}";
                     StatusMessage.Foreground = new System.Windows.Media.SolidColorBrush(
                         (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(statusColor));
                     StatusMessage.Visibility = Visibility.Visible;
 
-                    // Try to load employee photo
-                    LoadEmployeePhoto(employeeId);
+                    // Try to load employee photo (skip for double-tap prevention and cancelled)
+                    if (status != "DoubleTap" && status != "Cancelled")
+                    {
+                        LoadEmployeePhoto(employeeId);
+                    }
 
-                    // Hide the result after 5 seconds
-                    var hideTimer = new System.Timers.Timer(5000);
+                    // Hide the result after 5 seconds (or 3 seconds for double-tap/cancelled)
+                    var hideDelay = status == "DoubleTap" || status == "Cancelled" ? 3000 : 5000;
+                    var hideTimer = new System.Timers.Timer(hideDelay);
                     hideTimer.Elapsed += (_, _) => Dispatcher.Invoke(HideEmployeeResult);
                     hideTimer.AutoReset = false;
                     hideTimer.Start();
@@ -513,6 +533,38 @@ namespace BiometricEnrollmentApp
 
                 if (matched && !string.IsNullOrEmpty(matchedEmployeeId))
                 {
+                    // Double-tap prevention: Check if this employee scanned recently
+                    lock (_scanLock)
+                    {
+                        if (_lastScanTimes.ContainsKey(matchedEmployeeId))
+                        {
+                            var timeSinceLastScan = (TimezoneHelper.Now - _lastScanTimes[matchedEmployeeId]).TotalSeconds;
+                            if (timeSinceLastScan < 10) // 10 second cooldown
+                            {
+                                var waitTime = Math.Ceiling(10 - timeSinceLastScan);
+                                Dispatcher.Invoke(() => 
+                                {
+                                    UpdateStatus($"⚠️ Please wait {waitTime} seconds before scanning again");
+                                    ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "DoubleTap", TimezoneHelper.Now);
+                                });
+                                LogHelper.Write($"⚠️ Double-tap prevention: {matchedEmployeeId} scanned {timeSinceLastScan:F1}s ago, blocking");
+                                Thread.Sleep(3000);
+                                return;
+                            }
+                        }
+                        
+                        // Update last scan time for this employee
+                        _lastScanTimes[matchedEmployeeId] = TimezoneHelper.Now;
+                        
+                        // Clean up old entries (older than 30 seconds)
+                        var cutoffTime = TimezoneHelper.Now.AddSeconds(-30);
+                        var keysToRemove = _lastScanTimes.Where(kvp => kvp.Value < cutoffTime).Select(kvp => kvp.Key).ToList();
+                        foreach (var key in keysToRemove)
+                        {
+                            _lastScanTimes.Remove(key);
+                        }
+                    }
+
                     Dispatcher.Invoke(() => UpdateStatus($"✅ Identified: {matchedName} ({matchedEmployeeId})"));
                     
                     // Process attendance - clock in/out logic
@@ -523,15 +575,52 @@ namespace BiometricEnrollmentApp
 
                         if (openSessionId > 0)
                         {
-                            // clock-out the open session
+                            // Found open session - this is a clock-out request
+                            bool shouldClockOut = true; // Default to true if confirmation is disabled
+                            DateTime clockInTime = DateTime.MinValue;
+                            
+                            // Get session details
+                            var sessions = _data_service_get().GetTodaySessions();
+                            var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
+                            
+                            if (session != null && !string.IsNullOrEmpty(session.ClockIn))
+                            {
+                                clockInTime = DateTime.Parse(session.ClockIn);
+                                
+                                // Check if confirmation is enabled
+                                if (IsClockOutConfirmationEnabled())
+                                {
+                                    // Show confirmation dialog on UI thread
+                                    Dispatcher.Invoke(() =>
+                                    {
+                                        var confirmDialog = new ConfirmationDialog();
+                                        confirmDialog.SetEmployeeInfo(matchedName, matchedEmployeeId, clockInTime);
+                                        
+                                        var result = confirmDialog.ShowDialog();
+                                        shouldClockOut = result == true && confirmDialog.IsConfirmed;
+                                        
+                                        if (!shouldClockOut)
+                                        {
+                                            UpdateStatus("❌ Clock-out cancelled by user");
+                                            ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Cancelled", now);
+                                        }
+                                    });
+                                }
+                                
+                                if (!shouldClockOut)
+                                {
+                                    // User cancelled, don't process clock-out
+                                    Thread.Sleep(2000);
+                                    return;
+                                }
+                            }
+                            
+                            // User confirmed or confirmation disabled - proceed with clock-out
                             double hours = _data_service_get().SaveClockOut(openSessionId, now);
                             
                             // Send clock-out to server
-                            var sessions = _data_service_get().GetTodaySessions();
-                            var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
-                            if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
+                            if (session != null && !string.IsNullOrEmpty(session.ClockIn))
                             {
-                                DateTime clockInTime = DateTime.Parse(session.ClockIn);
                                 // Keep the original status (Present or Late) when clocking out
                                 string finalStatus = session.Status; // Will be "Present" or "Late"
                                 
@@ -720,6 +809,42 @@ namespace BiometricEnrollmentApp
         }
 
         private DataService _data_service_get() => _dataService;
+
+        private bool IsClockOutConfirmationEnabled()
+        {
+            if (_clockOutConfirmationEnabled.HasValue)
+            {
+                return _clockOutConfirmationEnabled.Value;
+            }
+
+            try
+            {
+                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
+                if (System.IO.File.Exists(configPath))
+                {
+                    var configJson = System.IO.File.ReadAllText(configPath);
+                    var config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    
+                    _clockOutConfirmationEnabled = config?.ClockOutConfirmation ?? true; // Default to true
+                    LogHelper.Write($"📋 Clock-out confirmation setting: {_clockOutConfirmationEnabled}");
+                }
+                else
+                {
+                    _clockOutConfirmationEnabled = true; // Default to enabled
+                    LogHelper.Write("📋 Config file not found, using default clock-out confirmation: enabled");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Error reading config, using default clock-out confirmation: {ex.Message}");
+                _clockOutConfirmationEnabled = true; // Default to enabled on error
+            }
+
+            return _clockOutConfirmationEnabled.Value;
+        }
 
         private void UpdateStatus(string message)
         {
@@ -1049,6 +1174,35 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write($"✅ Fallback matched {matchedEmployeeId} ({matchedName}) with score {bestScore:F4}");
             }
 
+            // Double-tap prevention: Check if this employee scanned recently
+            lock (_scanLock)
+            {
+                if (_lastScanTimes.ContainsKey(matchedEmployeeId))
+                {
+                    var timeSinceLastScan = (TimezoneHelper.Now - _lastScanTimes[matchedEmployeeId]).TotalSeconds;
+                    if (timeSinceLastScan < 10) // 10 second cooldown
+                    {
+                        var waitTime = Math.Ceiling(10 - timeSinceLastScan);
+                        window.UpdateStatus($"⚠️ Please wait {waitTime} seconds before scanning again");
+                        LogHelper.Write($"⚠️ Double-tap prevention: {matchedEmployeeId} scanned {timeSinceLastScan:F1}s ago, blocking");
+                        Thread.Sleep(3000);
+                        Dispatcher.Invoke(() => window.Close());
+                        return;
+                    }
+                }
+                
+                // Update last scan time for this employee
+                _lastScanTimes[matchedEmployeeId] = TimezoneHelper.Now;
+                
+                // Clean up old entries (older than 30 seconds)
+                var cutoffTime = TimezoneHelper.Now.AddSeconds(-30);
+                var keysToRemove = _lastScanTimes.Where(kvp => kvp.Value < cutoffTime).Select(kvp => kvp.Key).ToList();
+                foreach (var key in keysToRemove)
+                {
+                    _lastScanTimes.Remove(key);
+                }
+            }
+
             // 5) Get employee photo from backend API
             string? photoBase64 = null;
             try
@@ -1114,15 +1268,52 @@ namespace BiometricEnrollmentApp
 
                 if (openSessionId > 0)
                 {
-                    // clock-out the open session
+                    // Found open session - this is a clock-out request
+                    bool shouldClockOut = true; // Default to true if confirmation is disabled
+                    DateTime clockInTime = DateTime.MinValue;
+                    
+                    // Get session details
+                    var sessions = _data_service_get().GetTodaySessions();
+                    var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
+                    
+                    if (session != null && !string.IsNullOrEmpty(session.ClockIn))
+                    {
+                        clockInTime = DateTime.Parse(session.ClockIn);
+                        
+                        // Check if confirmation is enabled
+                        if (IsClockOutConfirmationEnabled())
+                        {
+                            // Show confirmation dialog on UI thread
+                            Dispatcher.Invoke(() =>
+                            {
+                                var confirmDialog = new ConfirmationDialog();
+                                confirmDialog.SetEmployeeInfo(matchedName, matchedEmployeeId, clockInTime);
+                                
+                                var result = confirmDialog.ShowDialog();
+                                shouldClockOut = result == true && confirmDialog.IsConfirmed;
+                                
+                                if (!shouldClockOut)
+                                {
+                                    window.UpdateStatus("❌ Clock-out cancelled by user");
+                                }
+                            });
+                        }
+                        
+                        if (!shouldClockOut)
+                        {
+                            // User cancelled, don't process clock-out
+                            Thread.Sleep(2000);
+                            Dispatcher.Invoke(() => window.Close());
+                            return;
+                        }
+                    }
+                    
+                    // User confirmed or confirmation disabled - proceed with clock-out
                     double hours = _data_service_get().SaveClockOut(openSessionId, now);
                     
                     // Send clock-out to server
-                    var sessions = _data_service_get().GetTodaySessions();
-                    var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
-                    if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
+                    if (session != null && !string.IsNullOrEmpty(session.ClockIn))
                     {
-                        DateTime clockInTime = DateTime.Parse(session.ClockIn);
                         // Keep the original status (Present or Late) when clocking out
                         string finalStatus = session.Status;
                         Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, finalStatus));
@@ -1418,5 +1609,18 @@ namespace BiometricEnrollmentApp
         }
 
 
+    }
+
+    public class SystemConfig
+    {
+        public string? SystemName { get; set; }
+        public string? PrimaryColor { get; set; }
+        public string? SecondaryColor { get; set; }
+        public string? Logo { get; set; }
+        public string? CompanyName { get; set; }
+        public string? Timezone { get; set; }
+        public int ToolboxMeetingMinutes { get; set; }
+        public bool ClockOutConfirmation { get; set; } = true;
+        public string? LastUpdated { get; set; }
     }
 }

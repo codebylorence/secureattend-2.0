@@ -40,6 +40,9 @@ namespace BiometricEnrollmentApp
                 LateThresholdInput.Text = _settingsService.GetLateThresholdMinutes().ToString();
                 ClockInGraceInput.Text = _settingsService.GetClockInGracePeriodMinutes().ToString();
                 ClockOutGraceInput.Text = _settingsService.GetClockOutGracePeriodMinutes().ToString();
+                
+                // Load clock-out confirmation setting
+                ClockOutConfirmationCheckBox.IsChecked = LoadClockOutConfirmationSetting();
             }
             catch (Exception ex)
             {
@@ -79,11 +82,15 @@ namespace BiometricEnrollmentApp
                 success &= _settingsService.SetLateThresholdMinutes(lateThreshold);
                 success &= _settingsService.SetClockInGracePeriodMinutes(clockInGrace);
                 success &= _settingsService.SetClockOutGracePeriodMinutes(clockOutGrace);
+                success &= SaveClockOutConfirmationSetting(ClockOutConfirmationCheckBox.IsChecked == true);
 
                 if (success)
                 {
                     MessageBox.Show("Attendance settings saved successfully!", "Settings Saved", MessageBoxButton.OK, MessageBoxImage.Information);
-                    LogHelper.Write($"✅ Attendance settings updated - Late: {lateThreshold}min, Clock-in Grace: {clockInGrace}min, Clock-out Grace: {clockOutGrace}min");
+                    LogHelper.Write($"✅ Attendance settings updated - Late: {lateThreshold}min, Clock-in Grace: {clockInGrace}min, Clock-out Grace: {clockOutGrace}min, Clock-out Confirmation: {ClockOutConfirmationCheckBox.IsChecked == true}");
+                    
+                    // Clear configuration cache so new settings take effect immediately
+                    ClearConfigurationCache();
                 }
                 else
                 {
@@ -234,6 +241,109 @@ namespace BiometricEnrollmentApp
                 TestConnectionBtn.Content = "🔗 Test Connection";
             }
         }
+
+        private bool LoadClockOutConfirmationSetting()
+        {
+            try
+            {
+                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
+                if (System.IO.File.Exists(configPath))
+                {
+                    var configJson = System.IO.File.ReadAllText(configPath);
+                    var config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    
+                    return config?.ClockOutConfirmation ?? true; // Default to true
+                }
+                else
+                {
+                    LogHelper.Write("📋 Config file not found, using default clock-out confirmation: enabled");
+                    return true; // Default to enabled
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Error reading clock-out confirmation setting: {ex.Message}");
+                return true; // Default to enabled on error
+            }
+        }
+
+        private bool SaveClockOutConfirmationSetting(bool enabled)
+        {
+            try
+            {
+                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
+                
+                SystemConfig config;
+                if (System.IO.File.Exists(configPath))
+                {
+                    var configJson = System.IO.File.ReadAllText(configPath);
+                    config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    }) ?? new SystemConfig();
+                }
+                else
+                {
+                    config = new SystemConfig();
+                }
+                
+                config.ClockOutConfirmation = enabled;
+                config.LastUpdated = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                
+                var updatedJson = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions 
+                { 
+                    WriteIndented = true,
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+                });
+                
+                System.IO.File.WriteAllText(configPath, updatedJson);
+                LogHelper.Write($"📋 Clock-out confirmation setting saved: {enabled}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error saving clock-out confirmation setting: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void ClearConfigurationCache()
+        {
+            try
+            {
+                // Use reflection to clear the static cache in AttendancePage
+                var attendancePageType = typeof(AttendancePage);
+                var cacheField = attendancePageType.GetField("_clockOutConfirmationEnabled", 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                
+                if (cacheField != null)
+                {
+                    cacheField.SetValue(null, null);
+                    LogHelper.Write("🔄 Configuration cache cleared - new settings will take effect immediately");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Could not clear configuration cache: {ex.Message}");
+            }
+        }
+    }
+
+    public class SystemConfig
+    {
+        public string? SystemName { get; set; }
+        public string? PrimaryColor { get; set; }
+        public string? SecondaryColor { get; set; }
+        public string? Logo { get; set; }
+        public string? CompanyName { get; set; }
+        public string? Timezone { get; set; }
+        public int ToolboxMeetingMinutes { get; set; }
+        public bool ClockOutConfirmation { get; set; } = true;
+        public string? LastUpdated { get; set; }
+    }
 
         private void BackupDbBtn_Click(object sender, RoutedEventArgs e)
         {
