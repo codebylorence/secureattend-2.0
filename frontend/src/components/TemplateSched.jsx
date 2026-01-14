@@ -2,6 +2,7 @@ import { MdAddCircle, MdDelete, MdEdit } from "react-icons/md";
 import { useState, useEffect } from "react";
 import { fetchDepartments } from "../api/DepartmentApi";
 import { createTemplate, getTemplates, deleteTemplate } from "../api/ScheduleApi";
+import ConfirmationModal from "./ConfirmationModal";
 
 export default function TemplateSched() {
   const [templates, setTemplates] = useState([]);
@@ -14,6 +15,11 @@ export default function TemplateSched() {
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [editingShiftIndex, setEditingShiftIndex] = useState(null);
   const [shiftForm, setShiftForm] = useState({ name: "", start: "", end: "" });
+  const [showDeleteShiftModal, setShowDeleteShiftModal] = useState(false);
+  const [shiftToDelete, setShiftToDelete] = useState(null);
+  const [showDeleteTemplateModal, setShowDeleteTemplateModal] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -139,8 +145,16 @@ export default function TemplateSched() {
   };
 
   const handleDeleteShiftTemplate = (index) => {
-    if (!window.confirm("Delete this shift template?")) return;
-    setShiftTemplates(shiftTemplates.filter((_, i) => i !== index));
+    setShiftToDelete({ index, template: shiftTemplates[index] });
+    setShowDeleteShiftModal(true);
+  };
+
+  const confirmDeleteShiftTemplate = () => {
+    if (shiftToDelete) {
+      setShiftTemplates(shiftTemplates.filter((_, i) => i !== shiftToDelete.index));
+      setShowDeleteShiftModal(false);
+      setShiftToDelete(null);
+    }
   };
 
   const handleAddTemplate = async (e) => {
@@ -198,22 +212,44 @@ export default function TemplateSched() {
 
   const handleDelete = async (id) => {
     const template = templates.find(t => t.id === id);
-    const confirmMessage = template 
-      ? `⚠️ Delete Schedule Template?\n\n` +
-        `Template: ${template.shift_name}\n` +
-        `Department: ${template.department}\n\n` +
-        `Are you sure you want to continue?`
-      : "Are you sure you want to delete this template?";
-    
-    if (!window.confirm(confirmMessage)) return;
-    
+    setTemplateToDelete({ id, template });
+    setShowDeleteTemplateModal(true);
+  };
+
+  const handleBulkDelete = async (templateGroup) => {
+    setTemplateToDelete({ 
+      id: null, 
+      template: templateGroup, 
+      isBulk: true,
+      templateIds: templateGroup.templateIds 
+    });
+    setShowDeleteTemplateModal(true);
+  };
+
+  const confirmDeleteTemplate = async () => {
+    if (!templateToDelete) return;
+
+    setDeleteLoading(true);
     try {
-      await deleteTemplate(id);
-      alert(`✅ Template deleted successfully!`);
+      if (templateToDelete.isBulk) {
+        // Bulk delete
+        for (const id of templateToDelete.templateIds) {
+          await deleteTemplate(id);
+        }
+        alert(`✅ Template deleted successfully! Removed ${templateToDelete.templateIds.length} template record(s).`);
+      } else {
+        // Single delete
+        await deleteTemplate(templateToDelete.id);
+        alert(`✅ Template deleted successfully!`);
+      }
       fetchTemplatesData();
+      setShowDeleteTemplateModal(false);
+      setTemplateToDelete(null);
     } catch (error) {
       console.error("Error deleting template:", error);
       alert("Failed to delete template");
+    } finally {
+      setDeleteLoading(false);
     }
   };
   return (
@@ -546,14 +582,7 @@ export default function TemplateSched() {
                   </p>
                 </div>
                 <button
-                  onClick={async () => {
-                    // Delete all templates in this group
-                    if (window.confirm(`Delete this template? This will remove ${template.templateIds.length} template record(s).`)) {
-                      for (const id of template.templateIds) {
-                        await handleDelete(id);
-                      }
-                    }
-                  }}
+                  onClick={() => handleBulkDelete(template)}
                   className="text-red-600 hover:text-red-800 p-2"
                   title="Delete Template"
                 >
@@ -564,6 +593,54 @@ export default function TemplateSched() {
           </div>
         )}
       </div>
+      {/* Delete Shift Template Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteShiftModal}
+        onClose={() => {
+          setShowDeleteShiftModal(false);
+          setShiftToDelete(null);
+        }}
+        onConfirm={confirmDeleteShiftTemplate}
+        title="Delete Shift Template"
+        message="Are you sure you want to delete this shift template?"
+        confirmText="Delete Template"
+        cancelText="Cancel"
+        type="danger"
+        itemDetails={shiftToDelete ? {
+          name: shiftToDelete.template.name,
+          'time range': `${shiftToDelete.template.start} - ${shiftToDelete.template.end}`
+        } : null}
+      />
+
+      {/* Delete Schedule Template Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteTemplateModal}
+        onClose={() => {
+          setShowDeleteTemplateModal(false);
+          setTemplateToDelete(null);
+        }}
+        onConfirm={confirmDeleteTemplate}
+        title={templateToDelete?.isBulk ? "Delete Template Group" : "Delete Schedule Template"}
+        message={
+          templateToDelete?.isBulk 
+            ? `Are you sure you want to delete this template? This will remove ${templateToDelete.templateIds?.length} template record(s).`
+            : "Are you sure you want to delete this schedule template?"
+        }
+        confirmText="Delete Template"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleteLoading}
+        itemDetails={templateToDelete ? (
+          templateToDelete.isBulk ? {
+            name: templateToDelete.template.shift_name,
+            department: templateToDelete.template.department,
+            'records to delete': templateToDelete.templateIds?.length
+          } : {
+            name: templateToDelete.template?.shift_name || 'Unknown',
+            department: templateToDelete.template?.department || 'Unknown'
+          }
+        ) : null}
+      />
     </>
   );
 }

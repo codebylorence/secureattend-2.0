@@ -3,6 +3,7 @@ import { FaEdit, FaEye } from "react-icons/fa";
 import { MdManageAccounts, MdDelete, MdClose } from "react-icons/md";
 import { fetchDepartments, deleteDepartment, updateDepartment } from "../api/DepartmentApi";
 import { fetchTeamLeaders } from "../api/UserApi";
+import ConfirmationModal from "./ConfirmationModal";
 import axios from "axios";
 import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
@@ -18,6 +19,9 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
   const [departmentMembers, setDepartmentMembers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [departmentToDelete, setDepartmentToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     loadDepartments();
@@ -120,18 +124,38 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
 
   const handleDelete = async (id, name, employeeCount) => {
     if (employeeCount > 0) {
-      alert(`Cannot delete ${name}. ${employeeCount} employee(s) are assigned to this department.`);
+      // Show modal even for departments with employees, but with different message
+      const dept = departments.find(d => d.id === id);
+      setDepartmentToDelete({ ...dept, id, name, employeeCount });
+      setShowDeleteModal(true);
       return;
     }
 
-    if (window.confirm(`Are you sure you want to delete ${name}?`)) {
-      try {
-        await deleteDepartment(id);
-        loadDepartments();
-      } catch (error) {
-        console.error("Error deleting department:", error);
-        alert(error.response?.data?.error || "Failed to delete department");
-      }
+    const dept = departments.find(d => d.id === id);
+    setDepartmentToDelete({ ...dept, id, name, employeeCount });
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteDepartment = async () => {
+    if (!departmentToDelete) return;
+
+    if (departmentToDelete.employeeCount > 0) {
+      setShowDeleteModal(false);
+      setDepartmentToDelete(null);
+      return;
+    }
+
+    setDeleteLoading(true);
+    try {
+      await deleteDepartment(departmentToDelete.id);
+      loadDepartments();
+      setShowDeleteModal(false);
+      setDepartmentToDelete(null);
+    } catch (error) {
+      console.error("Error deleting department:", error);
+      alert(error.response?.data?.error || "Failed to delete department");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -606,6 +630,32 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setDepartmentToDelete(null);
+        }}
+        onConfirm={confirmDeleteDepartment}
+        title="Delete Department"
+        message={
+          departmentToDelete?.employeeCount > 0
+            ? `Cannot delete this department because ${departmentToDelete.employeeCount} employee(s) are currently assigned to it. Please reassign or remove these employees first.`
+            : "Are you sure you want to delete this department? This action cannot be undone."
+        }
+        confirmText={departmentToDelete?.employeeCount > 0 ? "Understood" : "Delete Department"}
+        cancelText="Cancel"
+        type="danger"
+        loading={deleteLoading}
+        itemDetails={departmentToDelete ? {
+          name: departmentToDelete.name,
+          description: departmentToDelete.description || 'No description',
+          manager: departmentToDelete.manager || 'No manager assigned',
+          'employees assigned': departmentToDelete.employeeCount
+        } : null}
+      />
     </>
   );
 }

@@ -9,12 +9,16 @@ import {
   FaBriefcase,
   FaUsers
 } from 'react-icons/fa';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 export default function PositionManagementNew() {
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPosition, setEditingPosition] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [positionToDelete, setPositionToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: ''
@@ -161,13 +165,17 @@ export default function PositionManagementNew() {
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to delete "${position.name}"?`)) {
-      return;
-    }
+    setPositionToDelete(position);
+    setShowDeleteModal(true);
+  };
 
+  const confirmDeletePosition = async () => {
+    if (!positionToDelete) return;
+
+    setDeleteLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/positions/${position.id}`, {
+      const response = await fetch(`http://localhost:5000/api/positions/${positionToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -176,8 +184,10 @@ export default function PositionManagementNew() {
       });
 
       if (response.ok) {
-        setPositions(prev => prev.filter(pos => pos.id !== position.id));
+        setPositions(prev => prev.filter(pos => pos.id !== positionToDelete.id));
         toast.success('Position deleted successfully!');
+        setShowDeleteModal(false);
+        setPositionToDelete(null);
       } else {
         const data = await response.json();
         toast.error(data.error || 'Failed to delete position');
@@ -185,6 +195,8 @@ export default function PositionManagementNew() {
     } catch (error) {
       console.error('Error deleting position:', error);
       toast.error('Network error. Please try again.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -199,13 +211,9 @@ export default function PositionManagementNew() {
   const closeModals = () => {
     setShowAddModal(false);
     setEditingPosition(null);
+    setShowDeleteModal(false);
+    setPositionToDelete(null);
     setFormData({ name: '', description: '' });
-  };
-
-  const getStatusBadge = (status) => {
-    return status === 'Active' 
-      ? 'bg-green-100 text-green-800' 
-      : 'bg-red-100 text-red-800';
   };
 
   if (loading) {
@@ -271,9 +279,6 @@ export default function PositionManagementNew() {
                     Position
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Employees
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -295,11 +300,6 @@ export default function PositionManagementNew() {
                           </div>
                         )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(position.status)}`}>
-                        {position.status}
-                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <div className="flex items-center gap-1">
@@ -463,6 +463,31 @@ export default function PositionManagementNew() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setPositionToDelete(null);
+        }}
+        onConfirm={confirmDeletePosition}
+        title="Delete Position"
+        message={
+          positionToDelete?.employeeCount > 0
+            ? `Cannot delete this position because ${positionToDelete.employeeCount} employee(s) are currently using it.`
+            : "Are you sure you want to delete this position? This action cannot be undone."
+        }
+        confirmText={positionToDelete?.employeeCount > 0 ? "Understood" : "Delete Position"}
+        cancelText="Cancel"
+        type="danger"
+        loading={deleteLoading}
+        itemDetails={positionToDelete ? {
+          name: positionToDelete.name,
+          description: positionToDelete.description || 'No description',
+          'employees using': positionToDelete.employeeCount
+        } : null}
+      />
     </div>
   );
 }

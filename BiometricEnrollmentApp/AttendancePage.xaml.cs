@@ -23,6 +23,13 @@ namespace BiometricEnrollmentApp
         private System.Timers.Timer? _clockTimer;
         private System.Timers.Timer? _absentMarkingTimer;
         private System.Timers.Timer? _gridRefreshTimer;
+        
+        // Double-tap prevention: Track recent scans per employee
+        private static readonly Dictionary<string, DateTime> _lastScanTimes = new Dictionary<string, DateTime>();
+        private static readonly object _scanLock = new object();
+        
+        // Configuration cache
+        private static bool? _clockOutConfirmationEnabled = null;
 
         public AttendancePage() : this(new ZKTecoService()) { }
 
@@ -33,6 +40,10 @@ namespace BiometricEnrollmentApp
             _dataService = new DataService();
             _apiService = new ApiService();
             _syncService = new SyncService(_dataService, _apiService);
+
+            // Clear configuration cache to ensure fresh settings are loaded
+            _clockOutConfirmationEnabled = null;
+            LogHelper.Write("🔄 Configuration cache cleared on AttendancePage initialization");
 
             _zkService.OnStatus += (msg) => Dispatcher.Invoke(() => UpdateStatus(msg));
             Loaded += AttendancePage_Loaded;
@@ -111,20 +122,33 @@ namespace BiometricEnrollmentApp
                     {
                         "Present" => "#4CAF50", // Green
                         "Late" => "#FF9800",    // Orange
+                        "DoubleTap" => "#FF5722", // Red for double-tap prevention
+                        "Cancelled" => "#9E9E9E", // Gray for cancelled
                         _ => "#4CAF50"          // Default green
                     };
 
-                    var actionText = status == "Present" || status == "Late" ? "Clock-in" : "Clock-out";
-                    StatusMessage.Text = $"{actionText} successful at {timeStr}";
+                    var actionText = status switch
+                    {
+                        "DoubleTap" => "Please wait before scanning again",
+                        "Cancelled" => "Clock-out cancelled",
+                        "Present" or "Late" => "Clock-in",
+                        _ => "Clock-out"
+                    };
+                    
+                    StatusMessage.Text = status == "DoubleTap" || status == "Cancelled" ? actionText : $"{actionText} successful at {timeStr}";
                     StatusMessage.Foreground = new System.Windows.Media.SolidColorBrush(
                         (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(statusColor));
                     StatusMessage.Visibility = Visibility.Visible;
 
-                    // Try to load employee photo
-                    LoadEmployeePhoto(employeeId);
+                    // Try to load employee photo (skip for double-tap prevention and cancelled)
+                    if (status != "DoubleTap" && status != "Cancelled")
+                    {
+                        LoadEmployeePhoto(employeeId);
+                    }
 
-                    // Hide the result after 5 seconds
-                    var hideTimer = new System.Timers.Timer(5000);
+                    // Hide the result after 5 seconds (or 3 seconds for double-tap/cancelled)
+                    var hideDelay = status == "DoubleTap" || status == "Cancelled" ? 3000 : 5000;
+                    var hideTimer = new System.Timers.Timer(hideDelay);
                     hideTimer.Elapsed += (_, _) => Dispatcher.Invoke(HideEmployeeResult);
                     hideTimer.AutoReset = false;
                     hideTimer.Start();
@@ -513,6 +537,38 @@ namespace BiometricEnrollmentApp
 
                 if (matched && !string.IsNullOrEmpty(matchedEmployeeId))
                 {
+                    // Double-tap prevention: Check if this employee scanned recently
+                    lock (_scanLock)
+                    {
+                        if (_lastScanTimes.ContainsKey(matchedEmployeeId))
+                        {
+                            var timeSinceLastScan = (TimezoneHelper.Now - _lastScanTimes[matchedEmployeeId]).TotalSeconds;
+                            if (timeSinceLastScan < 10) // 10 second cooldown
+                            {
+                                var waitTime = Math.Ceiling(10 - timeSinceLastScan);
+                                Dispatcher.Invoke(() => 
+                                {
+                                    UpdateStatus($"⚠️ Please wait {waitTime} seconds before scanning again");
+                                    ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "DoubleTap", TimezoneHelper.Now);
+                                });
+                                LogHelper.Write($"⚠️ Double-tap prevention: {matchedEmployeeId} scanned {timeSinceLastScan:F1}s ago, blocking");
+                                Thread.Sleep(3000);
+                                return;
+                            }
+                        }
+                        
+                        // Update last scan time for this employee
+                        _lastScanTimes[matchedEmployeeId] = TimezoneHelper.Now;
+                        
+                        // Clean up old entries (older than 30 seconds)
+                        var cutoffTime = TimezoneHelper.Now.AddSeconds(-30);
+                        var keysToRemove = _lastScanTimes.Where(kvp => kvp.Value < cutoffTime).Select(kvp => kvp.Key).ToList();
+                        foreach (var key in keysToRemove)
+                        {
+                            _lastScanTimes.Remove(key);
+                        }
+                    }
+
                     Dispatcher.Invoke(() => UpdateStatus($"✅ Identified: {matchedName} ({matchedEmployeeId})"));
                     
                     // Process attendance - clock in/out logic
@@ -523,15 +579,86 @@ namespace BiometricEnrollmentApp
 
                         if (openSessionId > 0)
                         {
-                            // clock-out the open session
+                            LogHelper.Write($"🔍 Found open session {openSessionId} for {matchedEmployeeId} - processing clock-out");
+                            
+                            // Found open session - this is a clock-out request
+                            DateTime clockInTime = DateTime.MinValue;
+                            
+                            // Get session details
+                            var sessions = _data_service_get().GetTodaySessions();
+                            var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
+                            
+                            if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
+                            {
+                                clockInTime = DateTime.Parse(session.ClockIn);
+                                LogHelper.Write($"🔍 Session found - Clock-in: {clockInTime}, checking confirmation setting...");
+                                
+                                // Check if confirmation is enabled
+                                if (IsClockOutConfirmationEnabled())
+                                {
+                                    LogHelper.Write("🔍 Clock-out confirmation is ENABLED - showing dialog");
+                                    
+                                    // Show confirmation dialog on UI thread and wait for result
+                                    bool shouldClockOut = false;
+                                    Dispatcher.Invoke(() =>
+                                    {
+                                        LogHelper.Write("🔍 Creating and showing confirmation dialog...");
+                                        var confirmDialog = new ConfirmationDialog();
+                                        
+                                        // Set proper window ownership for modal behavior
+                                        var parentWindow = Application.Current.MainWindow;
+                                        if (parentWindow != null)
+                                        {
+                                            confirmDialog.Owner = parentWindow;
+                                            LogHelper.Write("🔍 Set dialog owner to main window");
+                                        }
+                                        else
+                                        {
+                                            LogHelper.Write("🔍 WARNING - No main window found, dialog may appear behind");
+                                        }
+                                        
+                                        // Ensure dialog appears on top and centered
+                                        confirmDialog.Topmost = true;
+                                        confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                                        
+                                        confirmDialog.SetEmployeeInfo(matchedName, matchedEmployeeId, clockInTime);
+                                        
+                                        LogHelper.Write("🔍 About to show confirmation dialog");
+                                        var result = confirmDialog.ShowDialog();
+                                        shouldClockOut = result == true && confirmDialog.IsConfirmed;
+                                        
+                                        LogHelper.Write($"🔍 Dialog result: {result}, IsConfirmed: {confirmDialog.IsConfirmed}, shouldClockOut: {shouldClockOut}");
+                                        
+                                        if (!shouldClockOut)
+                                        {
+                                            UpdateStatus("❌ Clock-out cancelled by user");
+                                            ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Cancelled", now);
+                                        }
+                                    });
+                                    
+                                    if (!shouldClockOut)
+                                    {
+                                        LogHelper.Write("❌ User cancelled clock-out - stopping process");
+                                        // User cancelled, don't process clock-out
+                                        Thread.Sleep(2000);
+                                        return;
+                                    }
+                                    
+                                    LogHelper.Write("✅ User confirmed clock-out - proceeding");
+                                }
+                                else
+                                {
+                                    LogHelper.Write("🔍 Clock-out confirmation is DISABLED - proceeding directly");
+                                }
+                            }
+                            
+                            // User confirmed or confirmation disabled - proceed with clock-out
+                            LogHelper.Write("💾 Saving clock-out to database...");
                             double hours = _data_service_get().SaveClockOut(openSessionId, now);
                             
                             // Send clock-out to server
-                            var sessions = _data_service_get().GetTodaySessions();
-                            var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
                             if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                             {
-                                DateTime clockInTime = DateTime.Parse(session.ClockIn);
                                 // Keep the original status (Present or Late) when clocking out
                                 string finalStatus = session.Status; // Will be "Present" or "Late"
                                 
@@ -720,6 +847,198 @@ namespace BiometricEnrollmentApp
         }
 
         private DataService _data_service_get() => _dataService;
+
+        private bool IsClockOutConfirmationEnabled()
+        {
+            if (_clockOutConfirmationEnabled.HasValue)
+            {
+                LogHelper.Write($"📋 Using cached clock-out confirmation setting: {_clockOutConfirmationEnabled.Value}");
+                return _clockOutConfirmationEnabled.Value;
+            }
+
+            try
+            {
+                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
+                LogHelper.Write($"📋 Reading config from: {configPath}");
+                
+                if (System.IO.File.Exists(configPath))
+                {
+                    var configJson = System.IO.File.ReadAllText(configPath);
+                    LogHelper.Write($"📋 Config JSON: {configJson}");
+                    
+                    var config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    
+                    _clockOutConfirmationEnabled = config?.ClockOutConfirmation ?? true; // Default to true
+                    LogHelper.Write($"📋 Clock-out confirmation setting loaded: {_clockOutConfirmationEnabled}");
+                }
+                else
+                {
+                    _clockOutConfirmationEnabled = true; // Default to enabled
+                    LogHelper.Write("📋 Config file not found, using default clock-out confirmation: enabled");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Error reading config, using default clock-out confirmation: {ex.Message}");
+                _clockOutConfirmationEnabled = true; // Default to enabled on error
+            }
+
+            return _clockOutConfirmationEnabled.Value;
+        }
+
+        private void TestClockOutBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                LogHelper.Write("🧪 TEST: Starting clock-out confirmation test - BUTTON CLICKED!");
+                UpdateStatus("🧪 TEST: Button clicked - starting test...");
+                
+                // Create a test session for employee 001 (Lorence Rodriguez)
+                var testEmployeeId = "001";
+                var testEmployeeName = "Lorence Rodriguez";
+                var testClockInTime = TimezoneHelper.Now.AddHours(-2); // 2 hours ago
+                
+                // Create a test session in the database
+                var sessionId = _dataService.SaveClockIn(testEmployeeId, testClockInTime, "Present");
+                LogHelper.Write($"🧪 TEST: Created test session {sessionId} for {testEmployeeId}");
+                
+                // Now simulate the clock-out process
+                var now = TimezoneHelper.Now;
+                LogHelper.Write($"🧪 TEST: Simulating clock-out for session {sessionId}");
+                
+                // Check if confirmation is enabled
+                if (IsClockOutConfirmationEnabled())
+                {
+                    LogHelper.Write("🧪 TEST: Clock-out confirmation is ENABLED - showing dialog");
+                    UpdateStatus("🧪 TEST: Showing confirmation dialog...");
+                    
+                    try
+                    {
+                        // Show confirmation dialog with proper window ownership
+                        var confirmDialog = new ConfirmationDialog();
+                        
+                        // Set the owner to ensure proper modal behavior
+                        var parentWindow = Window.GetWindow(this);
+                        if (parentWindow != null)
+                        {
+                            confirmDialog.Owner = parentWindow;
+                            LogHelper.Write("🧪 TEST: Set dialog owner to parent window");
+                        }
+                        else
+                        {
+                            LogHelper.Write("🧪 TEST: WARNING - No parent window found, dialog may appear behind");
+                        }
+                        
+                        // Ensure dialog appears on top
+                        confirmDialog.Topmost = true;
+                        confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                        
+                        LogHelper.Write("🧪 TEST: Setting employee info on dialog");
+                        confirmDialog.SetEmployeeInfo(testEmployeeName, testEmployeeId, testClockInTime);
+                        
+                        LogHelper.Write("🧪 TEST: About to show dialog - this should be visible!");
+                        
+                        // Show modal dialog properly
+                        var result = confirmDialog.ShowDialog();
+                        bool shouldClockOut = result == true && confirmDialog.IsConfirmed;
+                        
+                        LogHelper.Write($"🧪 TEST: Dialog result: {result}, IsConfirmed: {confirmDialog.IsConfirmed}, shouldClockOut: {shouldClockOut}");
+                        
+                        if (shouldClockOut)
+                        {
+                            // User confirmed - proceed with clock-out
+                            double hours = _dataService.SaveClockOut(sessionId, now);
+                            LogHelper.Write($"🧪 TEST: Clock-out confirmed and saved. Hours: {hours:F2}");
+                            UpdateStatus($"✅ TEST: Clock-out confirmed! Hours worked: {hours:F2}");
+                            ShowEmployeeAttendanceResult(testEmployeeId, testEmployeeName, "Clock-out", now);
+                        }
+                        else
+                        {
+                            // User cancelled
+                            LogHelper.Write("🧪 TEST: Clock-out cancelled by user");
+                            UpdateStatus("❌ TEST: Clock-out cancelled by user");
+                            ShowEmployeeAttendanceResult(testEmployeeId, testEmployeeName, "Cancelled", now);
+                            
+                            // Clean up the test session
+                            LogHelper.Write($"🧪 TEST: Would clean up test session {sessionId} (delete method needed)");
+                        }
+                    }
+                    catch (Exception dialogEx)
+                    {
+                        LogHelper.Write($"🧪 TEST: Dialog error: {dialogEx.Message}");
+                        LogHelper.Write($"🧪 TEST: Dialog stack trace: {dialogEx.StackTrace}");
+                        UpdateStatus($"❌ TEST: Dialog error - {dialogEx.Message}");
+                    }
+                }
+                else
+                {
+                    LogHelper.Write("🧪 TEST: Clock-out confirmation is DISABLED");
+                    UpdateStatus("⚠️ TEST: Clock-out confirmation is disabled in settings");
+                    
+                    // Clean up the test session
+                    LogHelper.Write($"🧪 TEST: Would clean up test session {sessionId} (delete method needed)");
+                }
+                
+                // Refresh the attendance grid
+                RefreshAttendances();
+                
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"🧪 TEST ERROR: {ex.Message}");
+                LogHelper.Write($"🧪 TEST ERROR STACK: {ex.StackTrace}");
+                UpdateStatus($"❌ TEST ERROR: {ex.Message}");
+            }
+        }
+
+        private void SimpleTestBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                LogHelper.Write("🔍 SIMPLE TEST: Button clicked!");
+                UpdateStatus("🔍 SIMPLE TEST: Showing basic dialog...");
+                
+                // Create and show a simple confirmation dialog
+                var confirmDialog = new ConfirmationDialog();
+                
+                // Set the owner to ensure proper modal behavior
+                var parentWindow = Window.GetWindow(this);
+                if (parentWindow != null)
+                {
+                    confirmDialog.Owner = parentWindow;
+                    LogHelper.Write("🔍 SIMPLE TEST: Set dialog owner");
+                }
+                
+                // Set test employee info
+                confirmDialog.SetEmployeeInfo("Test Employee", "TEST001", TimezoneHelper.Now.AddHours(-1));
+                
+                LogHelper.Write("🔍 SIMPLE TEST: About to show dialog");
+                
+                // Show the dialog
+                var result = confirmDialog.ShowDialog();
+                
+                LogHelper.Write($"🔍 SIMPLE TEST: Dialog closed with result: {result}");
+                UpdateStatus($"🔍 SIMPLE TEST: Dialog result = {result}");
+                
+                if (result == true)
+                {
+                    UpdateStatus("✅ SIMPLE TEST: User clicked Confirm");
+                }
+                else
+                {
+                    UpdateStatus("❌ SIMPLE TEST: User clicked Cancel or closed dialog");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"🔍 SIMPLE TEST ERROR: {ex.Message}");
+                LogHelper.Write($"🔍 SIMPLE TEST STACK: {ex.StackTrace}");
+                UpdateStatus($"❌ SIMPLE TEST ERROR: {ex.Message}");
+            }
+        }
 
         private void UpdateStatus(string message)
         {
@@ -1049,6 +1368,35 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write($"✅ Fallback matched {matchedEmployeeId} ({matchedName}) with score {bestScore:F4}");
             }
 
+            // Double-tap prevention: Check if this employee scanned recently
+            lock (_scanLock)
+            {
+                if (_lastScanTimes.ContainsKey(matchedEmployeeId))
+                {
+                    var timeSinceLastScan = (TimezoneHelper.Now - _lastScanTimes[matchedEmployeeId]).TotalSeconds;
+                    if (timeSinceLastScan < 10) // 10 second cooldown
+                    {
+                        var waitTime = Math.Ceiling(10 - timeSinceLastScan);
+                        window.UpdateStatus($"⚠️ Please wait {waitTime} seconds before scanning again");
+                        LogHelper.Write($"⚠️ Double-tap prevention: {matchedEmployeeId} scanned {timeSinceLastScan:F1}s ago, blocking");
+                        Thread.Sleep(3000);
+                        Dispatcher.Invoke(() => window.Close());
+                        return;
+                    }
+                }
+                
+                // Update last scan time for this employee
+                _lastScanTimes[matchedEmployeeId] = TimezoneHelper.Now;
+                
+                // Clean up old entries (older than 30 seconds)
+                var cutoffTime = TimezoneHelper.Now.AddSeconds(-30);
+                var keysToRemove = _lastScanTimes.Where(kvp => kvp.Value < cutoffTime).Select(kvp => kvp.Key).ToList();
+                foreach (var key in keysToRemove)
+                {
+                    _lastScanTimes.Remove(key);
+                }
+            }
+
             // 5) Get employee photo from backend API
             string? photoBase64 = null;
             try
@@ -1114,15 +1462,73 @@ namespace BiometricEnrollmentApp
 
                 if (openSessionId > 0)
                 {
-                    // clock-out the open session
+                    // Found open session - this is a clock-out request
+                    DateTime clockInTime = DateTime.MinValue;
+                    
+                    // Get session details
+                    var sessions = _data_service_get().GetTodaySessions();
+                    var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
+                    
+                    if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
+                    {
+                        clockInTime = DateTime.Parse(session.ClockIn);
+                        
+                        // Check if confirmation is enabled
+                        if (IsClockOutConfirmationEnabled())
+                        {
+                            // Show confirmation dialog on UI thread and wait for result
+                            bool shouldClockOut = false;
+                            Dispatcher.Invoke(() =>
+                            {
+                                LogHelper.Write("🔍 Creating confirmation dialog in CaptureIdentifyAndProcess");
+                                var confirmDialog = new ConfirmationDialog();
+                                
+                                // Set proper window ownership for modal behavior
+                                var parentWindow = Application.Current.MainWindow;
+                                if (parentWindow != null)
+                                {
+                                    confirmDialog.Owner = parentWindow;
+                                    LogHelper.Write("🔍 Set dialog owner to main window");
+                                }
+                                else
+                                {
+                                    LogHelper.Write("🔍 WARNING - No main window found, dialog may appear behind");
+                                }
+                                
+                                // Ensure dialog appears on top and centered
+                                confirmDialog.Topmost = true;
+                                confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                                
+                                confirmDialog.SetEmployeeInfo(matchedName, matchedEmployeeId, clockInTime);
+                                
+                                LogHelper.Write("🔍 About to show confirmation dialog in CaptureIdentifyAndProcess");
+                                var result = confirmDialog.ShowDialog();
+                                shouldClockOut = result == true && confirmDialog.IsConfirmed;
+                                
+                                LogHelper.Write($"🔍 CaptureIdentifyAndProcess dialog result: {result}, IsConfirmed: {confirmDialog.IsConfirmed}");
+                                
+                                if (!shouldClockOut)
+                                {
+                                    window.UpdateStatus("❌ Clock-out cancelled by user");
+                                }
+                            });
+                            
+                            if (!shouldClockOut)
+                            {
+                                // User cancelled, don't process clock-out
+                                Thread.Sleep(2000);
+                                Dispatcher.Invoke(() => window.Close());
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // User confirmed or confirmation disabled - proceed with clock-out
                     double hours = _data_service_get().SaveClockOut(openSessionId, now);
                     
                     // Send clock-out to server
-                    var sessions = _data_service_get().GetTodaySessions();
-                    var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                     {
-                        DateTime clockInTime = DateTime.Parse(session.ClockIn);
                         // Keep the original status (Present or Late) when clocking out
                         string finalStatus = session.Status;
                         Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, finalStatus));
@@ -1418,5 +1824,18 @@ namespace BiometricEnrollmentApp
         }
 
 
+    }
+
+    public class SystemConfig
+    {
+        public string? SystemName { get; set; }
+        public string? PrimaryColor { get; set; }
+        public string? SecondaryColor { get; set; }
+        public string? Logo { get; set; }
+        public string? CompanyName { get; set; }
+        public string? Timezone { get; set; }
+        public int ToolboxMeetingMinutes { get; set; }
+        public bool ClockOutConfirmation { get; set; } = true;
+        public string? LastUpdated { get; set; }
     }
 }
