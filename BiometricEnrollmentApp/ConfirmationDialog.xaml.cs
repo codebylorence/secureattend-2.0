@@ -19,10 +19,20 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write("🔍 ConfirmationDialog loaded event fired");
                 this.Activate();
                 this.Focus();
+                this.Topmost = true;
+                
+                // Force window to front
+                this.WindowState = WindowState.Normal;
+                this.BringIntoView();
             };
             
             this.Activated += (s, e) => LogHelper.Write("🔍 ConfirmationDialog activated");
             this.Deactivated += (s, e) => LogHelper.Write("🔍 ConfirmationDialog deactivated");
+            
+            // Set initial properties to ensure visibility
+            this.Topmost = true;
+            this.ShowInTaskbar = true;
+            this.WindowState = WindowState.Normal;
         }
         
         public void SetEmployeeInfo(string employeeName, string employeeId, DateTime clockInTime)

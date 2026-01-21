@@ -600,41 +600,82 @@ namespace BiometricEnrollmentApp
                                     
                                     // Show confirmation dialog on UI thread and wait for result
                                     bool shouldClockOut = false;
-                                    Dispatcher.Invoke(() =>
+                                    
+                                    // Use ManualResetEventSlim for proper synchronization
+                                    using (var dialogCompleted = new System.Threading.ManualResetEventSlim(false))
                                     {
-                                        LogHelper.Write("🔍 Creating and showing confirmation dialog...");
-                                        var confirmDialog = new ConfirmationDialog();
-                                        
-                                        // Set proper window ownership for modal behavior
-                                        var parentWindow = Application.Current.MainWindow;
-                                        if (parentWindow != null)
+                                        Dispatcher.Invoke(() =>
                                         {
-                                            confirmDialog.Owner = parentWindow;
-                                            LogHelper.Write("🔍 Set dialog owner to main window");
-                                        }
-                                        else
-                                        {
-                                            LogHelper.Write("🔍 WARNING - No main window found, dialog may appear behind");
-                                        }
+                                            try
+                                            {
+                                                LogHelper.Write("🔍 Creating and showing confirmation dialog...");
+                                                var confirmDialog = new ConfirmationDialog();
+                                                
+                                                // Find the correct parent window
+                                                Window parentWindow = null;
+                                                
+                                                // Try to find the window that contains this page
+                                                var currentElement = this as FrameworkElement;
+                                                while (currentElement != null && parentWindow == null)
+                                                {
+                                                    parentWindow = Window.GetWindow(currentElement);
+                                                    if (parentWindow != null) break;
+                                                    currentElement = currentElement.Parent as FrameworkElement;
+                                                }
+                                                
+                                                // Fallback to main window
+                                                if (parentWindow == null)
+                                                {
+                                                    parentWindow = Application.Current.MainWindow;
+                                                }
+                                                
+                                                if (parentWindow != null)
+                                                {
+                                                    confirmDialog.Owner = parentWindow;
+                                                    LogHelper.Write($"🔍 Set dialog owner to: {parentWindow.GetType().Name}");
+                                                }
+                                                else
+                                                {
+                                                    LogHelper.Write("🔍 WARNING - No parent window found, dialog may appear behind");
+                                                }
+                                                
+                                                // Ensure dialog appears on top and centered
+                                                confirmDialog.Topmost = true;
+                                                confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                                                confirmDialog.ShowInTaskbar = true;
+                                                confirmDialog.WindowState = WindowState.Normal;
+                                                
+                                                confirmDialog.SetEmployeeInfo(matchedName, matchedEmployeeId, clockInTime);
+                                                
+                                                LogHelper.Write("🔍 About to show confirmation dialog");
+                                                
+                                                // Show as modal dialog
+                                                var result = confirmDialog.ShowDialog();
+                                                shouldClockOut = result == true && confirmDialog.IsConfirmed;
+                                                
+                                                LogHelper.Write($"🔍 Dialog result: {result}, IsConfirmed: {confirmDialog.IsConfirmed}, shouldClockOut: {shouldClockOut}");
+                                                
+                                                if (!shouldClockOut)
+                                                {
+                                                    UpdateStatus("❌ Clock-out cancelled by user");
+                                                    ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Cancelled", now);
+                                                }
+                                            }
+                                            catch (Exception dialogEx)
+                                            {
+                                                LogHelper.Write($"🔍 Dialog error: {dialogEx.Message}");
+                                                LogHelper.Write($"🔍 Dialog stack trace: {dialogEx.StackTrace}");
+                                                shouldClockOut = false;
+                                            }
+                                            finally
+                                            {
+                                                dialogCompleted.Set();
+                                            }
+                                        });
                                         
-                                        // Ensure dialog appears on top and centered
-                                        confirmDialog.Topmost = true;
-                                        confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-                                        
-                                        confirmDialog.SetEmployeeInfo(matchedName, matchedEmployeeId, clockInTime);
-                                        
-                                        LogHelper.Write("🔍 About to show confirmation dialog");
-                                        var result = confirmDialog.ShowDialog();
-                                        shouldClockOut = result == true && confirmDialog.IsConfirmed;
-                                        
-                                        LogHelper.Write($"🔍 Dialog result: {result}, IsConfirmed: {confirmDialog.IsConfirmed}, shouldClockOut: {shouldClockOut}");
-                                        
-                                        if (!shouldClockOut)
-                                        {
-                                            UpdateStatus("❌ Clock-out cancelled by user");
-                                            ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Cancelled", now);
-                                        }
-                                    });
+                                        // Wait for dialog to complete
+                                        dialogCompleted.Wait();
+                                    }
                                     
                                     if (!shouldClockOut)
                                     {
@@ -920,12 +961,28 @@ namespace BiometricEnrollmentApp
                         // Show confirmation dialog with proper window ownership
                         var confirmDialog = new ConfirmationDialog();
                         
-                        // Set the owner to ensure proper modal behavior
-                        var parentWindow = Window.GetWindow(this);
+                        // Find the correct parent window
+                        Window parentWindow = null;
+                        
+                        // Try to find the window that contains this page
+                        var currentElement = this as FrameworkElement;
+                        while (currentElement != null && parentWindow == null)
+                        {
+                            parentWindow = Window.GetWindow(currentElement);
+                            if (parentWindow != null) break;
+                            currentElement = currentElement.Parent as FrameworkElement;
+                        }
+                        
+                        // Fallback to main window
+                        if (parentWindow == null)
+                        {
+                            parentWindow = Application.Current.MainWindow;
+                        }
+                        
                         if (parentWindow != null)
                         {
                             confirmDialog.Owner = parentWindow;
-                            LogHelper.Write("🧪 TEST: Set dialog owner to parent window");
+                            LogHelper.Write($"🧪 TEST: Set dialog owner to: {parentWindow.GetType().Name}");
                         }
                         else
                         {
@@ -935,6 +992,8 @@ namespace BiometricEnrollmentApp
                         // Ensure dialog appears on top
                         confirmDialog.Topmost = true;
                         confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                        confirmDialog.ShowInTaskbar = true;
+                        confirmDialog.WindowState = WindowState.Normal;
                         
                         LogHelper.Write("🧪 TEST: Setting employee info on dialog");
                         confirmDialog.SetEmployeeInfo(testEmployeeName, testEmployeeId, testClockInTime);
@@ -1004,13 +1063,35 @@ namespace BiometricEnrollmentApp
                 // Create and show a simple confirmation dialog
                 var confirmDialog = new ConfirmationDialog();
                 
-                // Set the owner to ensure proper modal behavior
-                var parentWindow = Window.GetWindow(this);
+                // Find the correct parent window
+                Window parentWindow = null;
+                
+                // Try to find the window that contains this page
+                var currentElement = this as FrameworkElement;
+                while (currentElement != null && parentWindow == null)
+                {
+                    parentWindow = Window.GetWindow(currentElement);
+                    if (parentWindow != null) break;
+                    currentElement = currentElement.Parent as FrameworkElement;
+                }
+                
+                // Fallback to main window
+                if (parentWindow == null)
+                {
+                    parentWindow = Application.Current.MainWindow;
+                }
+                
                 if (parentWindow != null)
                 {
                     confirmDialog.Owner = parentWindow;
-                    LogHelper.Write("🔍 SIMPLE TEST: Set dialog owner");
+                    LogHelper.Write($"🔍 SIMPLE TEST: Set dialog owner to: {parentWindow.GetType().Name}");
                 }
+                
+                // Ensure dialog appears on top
+                confirmDialog.Topmost = true;
+                confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                confirmDialog.ShowInTaskbar = true;
+                confirmDialog.WindowState = WindowState.Normal;
                 
                 // Set test employee info
                 confirmDialog.SetEmployeeInfo("Test Employee", "TEST001", TimezoneHelper.Now.AddHours(-1));

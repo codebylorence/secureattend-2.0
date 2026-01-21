@@ -9,28 +9,30 @@ export default function AdminLayout() {
   // Get user role from localStorage
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userRole = user.role || "admin";
-  
-  // Set title based on role
-  const title = userRole === "supervisor" ? "Supervisor Dashboard" : 
-                userRole === "superadmin" ? "Super Admin Dashboard" : "Admin Dashboard";
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar 
         role={userRole} 
         isCollapsed={isCollapsed}
         onToggle={toggle}
       />
-      <div className={`flex-1 flex flex-col transition-all duration-300 ${
-        // Desktop: adjust margin based on sidebar state
-        // Mobile: no margin (sidebar is overlay)
-        isCollapsed 
-          ? 'lg:ml-16 ml-0' 
-          : 'lg:ml-60 ml-0'
-      }`}>
+      
+      <div 
+        className={`flex-1 flex flex-col h-screen transition-all duration-300 ease-in-out ${
+          isCollapsed ? 'lg:ml-20 ml-0' : 'lg:ml-72 ml-0'
+        }`}
+      >
+        {/* Navbar - Fixed positioning is handled within the Navbar component */}
         <Navbar role={userRole} />
-        <main className="flex-1 overflow-auto pt-20 p-6">
-          <Outlet /> {/* This is where your pages render */}
+
+        {/* Main Content -
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 pt-16 p-4 md:p-6 lg:mt-[60px]">
+          <div className="max-w-full mx-auto">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
