@@ -12,6 +12,12 @@ const defaultPositions = [
   { name: "Marketing Specialist", description: "Develops and executes marketing strategies" },
   { name: "Team Leader", description: "Leads and manages team operations" },
   { name: "Department Manager", description: "Manages department operations and staff" },
+  { name: "Supervisor", description: "Supervises and oversees team operations" },
+  { name: "Admin", description: "Administrative role with system access" },
+  { name: "System Admin", description: "System administrator with full access" },
+  { name: "HR Manager", description: "Manages human resources department" },
+  { name: "Finance Manager", description: "Manages finance department operations" },
+  { name: "Operations Manager", description: "Manages daily operations" },
   { name: "Director", description: "Senior leadership role overseeing multiple departments" }
 ];
 

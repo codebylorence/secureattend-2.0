@@ -23,6 +23,13 @@ export const getAllEmployees = async () => {
 export const createEmployee = async (employeeData) => {
   console.log("🔍 Creating employee with data:", JSON.stringify(employeeData, null, 2));
   
+  // Validate Employee ID format (TSI followed by 5 digits)
+  const employeeIdPattern = /^TSI\d{5}$/;
+  if (!employeeIdPattern.test(employeeData.employee_id)) {
+    console.log("❌ Invalid Employee ID format:", employeeData.employee_id);
+    throw new Error("Employee ID must be in format TSI00123 (TSI followed by 5 digits)");
+  }
+  
   // Handle both old and new data formats
   const processedData = { ...employeeData };
   

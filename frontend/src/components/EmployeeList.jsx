@@ -201,7 +201,13 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {emp.department}
+                    {emp.department === 'Company-wide' ? (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        Company-wide
+                      </span>
+                    ) : (
+                      emp.department
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {emp.position}

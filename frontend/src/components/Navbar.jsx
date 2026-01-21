@@ -4,12 +4,15 @@ import { IoNotifications } from "react-icons/io5";
 import { FaTimes } from "react-icons/fa";
 import { MdCheckCircle, MdDelete, MdEdit } from "react-icons/md";
 import { getUserNotifications, getUnreadCount, markAsRead, markAllAsRead, clearAllNotifications } from "../api/NotificationApi";
+import ConfirmationModal from "./ConfirmationModal";
 
 export default function Navbar({ role }) {
   const { systemConfig } = useSystemConfig();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
   const notificationRef = useRef(null);
 
   // Get user data
@@ -86,17 +89,21 @@ export default function Navbar({ role }) {
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm("Clear all notifications? This action cannot be undone.")) {
-      return;
-    }
-    
+    setShowClearModal(true);
+  };
+
+  const confirmClearAll = async () => {
+    setClearLoading(true);
     try {
       await clearAllNotifications(userId);
       setNotifications([]);
       setUnreadCount(0);
+      setShowClearModal(false);
     } catch (error) {
       console.error("Error clearing all notifications:", error);
       alert("Failed to clear notifications. Please try again.");
+    } finally {
+      setClearLoading(false);
     }
   };
 
@@ -280,6 +287,19 @@ export default function Navbar({ role }) {
         </div>
       )}
 
+      {/* Clear All Notifications Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showClearModal}
+        onClose={() => setShowClearModal(false)}
+        onConfirm={confirmClearAll}
+        title="Clear All Notifications"
+        message="Are you sure you want to clear all notifications? This action cannot be undone."
+        confirmText="Clear All"
+        cancelText="Cancel"
+        type="warning"
+        loading={clearLoading}
+        itemDetails={`${notifications.length} notification${notifications.length !== 1 ? 's' : ''} will be permanently deleted`}
+      />
     </>
   );
 }

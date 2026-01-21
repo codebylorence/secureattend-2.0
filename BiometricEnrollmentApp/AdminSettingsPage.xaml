@@ -229,6 +229,30 @@
                                        FontSize="12" Foreground="#9CA3AF" Margin="0,5,0,0" TextWrapping="Wrap"/>
                         </Grid>
                         
+                        <!-- Clock-Out Confirmation -->
+                        <Grid Margin="0,0,0,20">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Clock-Out Confirmation:" 
+                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Row="0" Grid.Column="1" x:Name="ClockOutConfirmationCheckBox" 
+                                      IsChecked="True" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Show confirmation dialog before clocking out" 
+                                       Foreground="#6B7280" VerticalAlignment="Center"/>
+                            
+                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" 
+                                       Text="When enabled, employees will see a confirmation dialog showing their clock-in time and working hours before clocking out."
+                                       FontSize="12" Foreground="#9CA3AF" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        </Grid>
+                        
                         <!-- Save Button -->
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button x:Name="SaveAttendanceSettingsBtn" Content="💾 Save Attendance Settings" 

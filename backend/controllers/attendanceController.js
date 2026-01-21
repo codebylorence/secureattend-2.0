@@ -32,6 +32,28 @@ export const recordAttendance = async (req, res) => {
       return res.status(404).json({ error: "Employee not found" });
     }
 
+    // Double-tap prevention: Check for recent attendance activity (within last 10 seconds)
+    const tenSecondsAgo = new Date(Date.now() - 10000);
+    const recentAttendance = await Attendance.findOne({
+      where: {
+        employee_id,
+        updatedAt: {
+          [Op.gte]: tenSecondsAgo
+        }
+      },
+      order: [['updatedAt', 'DESC']]
+    });
+
+    if (recentAttendance) {
+      const timeDiff = (Date.now() - new Date(recentAttendance.updatedAt).getTime()) / 1000;
+      console.log(`⚠️ Double-tap prevention: Recent attendance found for ${employee_id} (${timeDiff.toFixed(1)}s ago)`);
+      return res.status(429).json({ 
+        error: "Please wait before scanning again", 
+        message: `Recent attendance activity detected. Please wait ${Math.ceil(10 - timeDiff)} more seconds.`,
+        waitTime: Math.ceil(10 - timeDiff)
+      });
+    }
+
     // For absent records, use today's date; for others, parse clock_in
     let clockInDate;
     let clockOutDate;

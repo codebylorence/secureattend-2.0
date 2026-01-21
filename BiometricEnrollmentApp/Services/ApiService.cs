@@ -112,6 +112,30 @@ namespace BiometricEnrollmentApp.Services
                         LogHelper.Write($"❌ Attempt {attempt}/{maxRetries} failed: {response.StatusCode}");
                         LogHelper.Write($"   Error details: {errorContent}");
                         
+                        // Handle double-tap prevention (429 Too Many Requests)
+                        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                        {
+                            try
+                            {
+                                var errorResponse = JsonSerializer.Deserialize<DoubleTapResponse>(errorContent, new JsonSerializerOptions 
+                                { 
+                                    PropertyNameCaseInsensitive = true 
+                                });
+                                
+                                if (errorResponse?.WaitTime > 0)
+                                {
+                                    LogHelper.Write($"⚠️ Double-tap prevention: Waiting {errorResponse.WaitTime} seconds before allowing next scan");
+                                    // Don't retry immediately for double-tap prevention
+                                    return false;
+                                }
+                            }
+                            catch (Exception parseEx)
+                            {
+                                LogHelper.Write($"⚠️ Could not parse double-tap response: {parseEx.Message}");
+                            }
+                            return false;
+                        }
+                        
                         // Don't retry on client errors (4xx), only server errors (5xx) and network issues
                         if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
                         {
@@ -421,5 +445,12 @@ namespace BiometricEnrollmentApp.Services
         public bool Success { get; set; }
         public List<ScheduleNotification>? Notifications { get; set; }
         public int Count { get; set; }
+    }
+
+    public class DoubleTapResponse
+    {
+        public string? Error { get; set; }
+        public string? Message { get; set; }
+        public int WaitTime { get; set; }
     }
 }

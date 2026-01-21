@@ -479,5 +479,94 @@ namespace BiometricEnrollmentApp
                 ClearNotificationsBtn.Content = "Clear All";
             }
         }
+
+        private bool LoadClockOutConfirmationSetting()
+        {
+            try
+            {
+                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
+                if (System.IO.File.Exists(configPath))
+                {
+                    var configJson = System.IO.File.ReadAllText(configPath);
+                    var config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                    
+                    return config?.ClockOutConfirmation ?? true; // Default to true
+                }
+                else
+                {
+                    LogHelper.Write("📋 Config file not found, using default clock-out confirmation: enabled");
+                    return true; // Default to enabled
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Error reading clock-out confirmation setting: {ex.Message}");
+                return true; // Default to enabled on error
+            }
+        }
+
+        private bool SaveClockOutConfirmationSetting(bool enabled)
+        {
+            try
+            {
+                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
+                
+                SystemConfig config;
+                if (System.IO.File.Exists(configPath))
+                {
+                    var configJson = System.IO.File.ReadAllText(configPath);
+                    config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    }) ?? new SystemConfig();
+                }
+                else
+                {
+                    config = new SystemConfig();
+                }
+                
+                config.ClockOutConfirmation = enabled;
+                config.LastUpdated = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                
+                var updatedJson = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions 
+                { 
+                    WriteIndented = true,
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+                });
+                
+                System.IO.File.WriteAllText(configPath, updatedJson);
+                LogHelper.Write($"📋 Clock-out confirmation setting saved: {enabled}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error saving clock-out confirmation setting: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void ClearConfigurationCache()
+        {
+            try
+            {
+                // Use reflection to clear the static cache in AttendancePage
+                var attendancePageType = typeof(AttendancePage);
+                var cacheField = attendancePageType.GetField("_clockOutConfirmationEnabled", 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                
+                if (cacheField != null)
+                {
+                    cacheField.SetValue(null, null);
+                    LogHelper.Write("🔄 Configuration cache cleared - new settings will take effect immediately");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Could not clear configuration cache: {ex.Message}");
+            }
+        }
     }
 }

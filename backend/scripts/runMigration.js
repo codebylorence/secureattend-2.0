@@ -1,27 +1,22 @@
-import sequelize from "../config/database.js";
+import sequelize from '../config/database.js';
+import { up } from '../migrations/20250121_update_department_nullable.js';
 
 async function runMigration() {
   try {
-    console.log("🔄 Running migration: Add name field to Users table...");
+    console.log('🔄 Starting database migration...');
     
-    // Add the name column to Users table
-    await sequelize.getQueryInterface().addColumn('Users', 'name', {
-      type: sequelize.Sequelize.STRING,
-      allowNull: true,
-      after: 'username'
-    });
+    // Test database connection
+    await sequelize.authenticate();
+    console.log('✅ Database connection established');
     
-    console.log("✅ Migration completed successfully!");
-    console.log("📝 Added 'name' column to Users table");
+    // Run the migration
+    await up(sequelize.getQueryInterface(), sequelize);
     
+    console.log('✅ Migration completed successfully');
+    process.exit(0);
   } catch (error) {
-    if (error.message.includes("Duplicate column name")) {
-      console.log("ℹ️ Column 'name' already exists in Users table");
-    } else {
-      console.error("❌ Migration failed:", error.message);
-    }
-  } finally {
-    await sequelize.close();
+    console.error('❌ Migration failed:', error);
+    process.exit(1);
   }
 }
 

@@ -7,7 +7,7 @@ import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
 export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   const [formData, setFormData] = useState({
-    employee_id: "",
+    employee_id: "TSI",
     firstname: "",
     lastname: "",
     department: "No Department",
@@ -31,7 +31,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
       loadPositions();
       // Reset form when modal opens
       setFormData({
-        employee_id: "",
+        employee_id: "TSI",
         firstname: "",
         lastname: "",
         department: "No Department",
@@ -118,7 +118,34 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    
+    // Handle Employee ID format validation
+    if (name === 'employee_id') {
+      // Remove any non-alphanumeric characters and convert to uppercase
+      let formattedValue = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      
+      // Enforce TSI prefix
+      if (!formattedValue.startsWith('TSI')) {
+        if (formattedValue.length === 0) {
+          formattedValue = 'TSI';
+        } else if (formattedValue.length <= 3) {
+          formattedValue = 'TSI';
+        } else {
+          // If user typed something else, prepend TSI
+          formattedValue = 'TSI' + formattedValue.substring(3);
+        }
+      }
+      
+      // Limit to TSI + 5 digits (TSI00123)
+      if (formattedValue.length > 8) {
+        formattedValue = formattedValue.substring(0, 8);
+      }
+      
+      setFormData({ ...formData, [name]: formattedValue });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -127,6 +154,12 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     setError("");
     
     try {
+      // Validate Employee ID format
+      const employeeIdPattern = /^TSI\d{5}$/;
+      if (!employeeIdPattern.test(formData.employee_id)) {
+        throw new Error("Employee ID must be in format TSI00123 (TSI followed by 5 digits)");
+      }
+      
       // Validate password length
       if (formData.password.length < 6) {
         throw new Error("Password must be at least 6 characters long");
@@ -186,7 +219,12 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
               onChange={handleChange}
               required
               className="w-full border border-gray-300 rounded-md p-2"
+              placeholder="TSI00123"
+              maxLength={8}
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Format: TSI followed by 5 digits (e.g., TSI00123)
+            </p>
           </div>
 
           {/* First Name */}

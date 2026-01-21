@@ -12,6 +12,7 @@ export default function RegistrationRequests() {
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -42,11 +43,13 @@ export default function RegistrationRequests() {
     }
   };
 
-  const handleApprove = async (requestId) => {
+  const handleApprove = async () => {
+    if (!selectedRequest) return;
+    
     setActionLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/registration/approve/${requestId}`, {
+      const response = await fetch(`http://localhost:5000/api/registration/approve/${selectedRequest.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -56,7 +59,9 @@ export default function RegistrationRequests() {
 
       if (response.ok) {
         // Remove approved request from list
-        setRequests(prev => prev.filter(req => req.id !== requestId));
+        setRequests(prev => prev.filter(req => req.id !== selectedRequest.id));
+        setShowApprovalModal(false);
+        setSelectedRequest(null);
         toast.success('Registration request approved successfully!');
       } else {
         const data = await response.json();
@@ -109,6 +114,11 @@ export default function RegistrationRequests() {
     }
   };
 
+  const openApprovalModal = (request) => {
+    setSelectedRequest(request);
+    setShowApprovalModal(true);
+  };
+
   const openRejectModal = (request) => {
     setSelectedRequest(request);
     setShowModal(true);
@@ -116,6 +126,7 @@ export default function RegistrationRequests() {
 
   const closeModal = () => {
     setShowModal(false);
+    setShowApprovalModal(false);
     setSelectedRequest(null);
     setRejectionReason('');
   };
@@ -157,6 +168,9 @@ export default function RegistrationRequests() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Employee
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Department
@@ -204,8 +218,27 @@ export default function RegistrationRequests() {
                       </div>
                     </div>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      (request.role === 'admin' || request.position?.toLowerCase().includes('admin')) ? 'bg-purple-100 text-purple-800' :
+                      (request.role === 'supervisor' || request.position?.toLowerCase().includes('supervisor') || request.position?.toLowerCase().includes('manager')) ? 'bg-blue-100 text-blue-800' :
+                      (request.role === 'teamleader' || request.position?.toLowerCase().includes('team leader') || request.position?.toLowerCase().includes('lead')) ? 'bg-green-100 text-green-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {request.role === 'teamleader' ? 'Team Leader' : 
+                       request.role?.charAt(0).toUpperCase() + request.role?.slice(1) || 'Employee'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {request.department}
+                    {request.department === 'Company-wide' ? (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        Company-wide
+                      </span>
+                    ) : request.department ? (
+                      request.department
+                    ) : (
+                      <span className="text-gray-400 italic">Not specified</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {request.position}
@@ -226,7 +259,7 @@ export default function RegistrationRequests() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleApprove(request.id)}
+                        onClick={() => openApprovalModal(request)}
                         disabled={actionLoading}
                         className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Approve request"
@@ -287,6 +320,51 @@ export default function RegistrationRequests() {
                 className="flex-1 bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {actionLoading ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
+              <button
+                onClick={closeModal}
+                disabled={actionLoading}
+                className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Modal */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Approve Registration Request
+            </h3>
+            
+            <p className="text-gray-600 mb-4">
+              You are about to approve the registration request for:
+            </p>
+            
+            <div className="bg-green-50 p-3 rounded-md mb-4 border border-green-200">
+              <p className="font-semibold text-green-800">{selectedRequest?.firstname} {selectedRequest?.lastname}</p>
+              <p className="text-sm text-green-600">Employee ID: {selectedRequest?.employee_id}</p>
+              <p className="text-sm text-green-600">Department: {selectedRequest?.department}</p>
+              <p className="text-sm text-green-600">Position: {selectedRequest?.position}</p>
+            </div>
+
+            <div className="bg-yellow-50 p-3 rounded-md mb-4 border border-yellow-200">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> Approving this request will create a new employee account and send login credentials to their email address.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleApprove}
+                disabled={actionLoading}
+                className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading ? 'Approving...' : 'Confirm Approval'}
               </button>
               <button
                 onClick={closeModal}
