@@ -134,13 +134,15 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
           icon: FaBuilding,
           path: "/admin/departments"
         },
-        ...(role === "admin" ? [
+        ...(role === "admin" || role === "supervisor" ? [
           {
             key: "reports",
             label: "Reports",
             icon: FaChartBar,
             path: "/admin/attendance-reports"
-          },
+          }
+        ] : []),
+        ...(role === "admin" ? [
           {
             key: "positions",
             label: "Positions",

@@ -97,7 +97,11 @@ export default function EmployeeRegistration() {
           { id: 5, name: 'System Administrator' },
           { id: 6, name: 'HR Specialist' },
           { id: 7, name: 'Accountant' },
-          { id: 8, name: 'Marketing Specialist' }
+          { id: 8, name: 'Marketing Specialist' },
+          { id: 9, name: 'Team Leader' },
+          { id: 10, name: 'Supervisor' },
+          { id: 11, name: 'Admin' },
+          { id: 12, name: 'Manager' }
         ]);
       }
     } catch (error) {
@@ -112,19 +116,60 @@ export default function EmployeeRegistration() {
         { id: 5, name: 'System Administrator' },
         { id: 6, name: 'HR Specialist' },
         { id: 7, name: 'Accountant' },
-        { id: 8, name: 'Marketing Specialist' }
+        { id: 8, name: 'Marketing Specialist' },
+        { id: 9, name: 'Team Leader' },
+        { id: 10, name: 'Supervisor' },
+        { id: 11, name: 'Admin' },
+        { id: 12, name: 'Manager' }
       ]);
     } finally {
       setPositionsLoading(false);
     }
   };
 
+  // Function to determine role based on position
+  const getRoleFromPosition = (position) => {
+    const positionLower = position.toLowerCase();
+    if (positionLower.includes('admin')) {
+      return 'admin';
+    } else if (positionLower.includes('supervisor') || positionLower.includes('manager')) {
+      return 'supervisor';
+    } else if (positionLower.includes('team leader') || positionLower.includes('lead')) {
+      return 'teamleader';
+    } else {
+      return 'employee';
+    }
+  };
+
+  // Function to check if department is required based on position
+  const isDepartmentRequired = (position) => {
+    const role = getRoleFromPosition(position);
+    return role === 'employee' || role === 'teamleader';
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    
+    // If position changes, automatically set department for admin/supervisor roles
+    if (name === 'position') {
+      const role = getRoleFromPosition(value);
+      const updatedFormData = {
+        ...formData,
+        [name]: value
+      };
+      
+      // Auto-set department to "Company-wide" for admin and supervisor roles
+      if (role === 'admin' || role === 'supervisor') {
+        updatedFormData.department = 'Company-wide';
+      }
+      
+      setFormData(updatedFormData);
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handlePhotoChange = (e) => {
@@ -161,12 +206,13 @@ export default function EmployeeRegistration() {
       toast.error('Last name is required');
       return false;
     }
-    if (!formData.department.trim()) {
-      toast.error('Department is required');
+    if (!formData.position.trim()) {
+      toast.error('Position is required');
       return false;
     }
-    if (!formData.position.trim()) {
-      toast.error('Positieon is required');
+    // Department is only required for employees and team leaders based on position
+    if (isDepartmentRequired(formData.position) && !formData.department.trim()) {
+      toast.error('Department is required for this position');
       return false;
     }
     if (!formData.contact_number.trim()) {
@@ -210,13 +256,14 @@ export default function EmployeeRegistration() {
           employee_id: formData.employee_id,
           firstname: formData.firstname,
           lastname: formData.lastname,
-          department: formData.department,
+          department: formData.department || null, // Allow null for supervisors/admins
           position: formData.position,
           contact_number: formData.contact_number,
           email: formData.email,
           username: formData.username,
           password: formData.password,
-          photo: formData.photo
+          photo: formData.photo,
+          role: getRoleFromPosition(formData.position) // Derive role from position
         }),
       });
 
@@ -359,30 +406,6 @@ export default function EmployeeRegistration() {
               </div>
             </div>
 
-            {/* Department */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Department *
-              </label>
-              <select
-                name="department"
-                value={formData.department}
-                onChange={handleInputChange}
-                required
-                disabled={departmentsLoading}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option value="">
-                  {departmentsLoading ? 'Loading departments...' : 'Select Department'}
-                </option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.name}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* Position */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -405,6 +428,45 @@ export default function EmployeeRegistration() {
                   </option>
                 ))}
               </select>
+              {formData.position && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {isDepartmentRequired(formData.position) 
+                    ? 'Department selection is required for this position' 
+                    : 'Department will be automatically set to "Company-wide" for this position'}
+                </p>
+              )}
+            </div>
+
+            {/* Department */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Department {isDepartmentRequired(formData.position) ? '*' : '(Auto-assigned)'}
+              </label>
+              <select
+                name="department"
+                value={formData.department}
+                onChange={handleInputChange}
+                required={isDepartmentRequired(formData.position)}
+                disabled={departmentsLoading || !isDepartmentRequired(formData.position)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100"
+              >
+                <option value="">
+                  {departmentsLoading ? 'Loading departments...' : 'Select Department'}
+                </option>
+                {!isDepartmentRequired(formData.position) && (
+                  <option value="Company-wide">Company-wide</option>
+                )}
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.name}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+              {!isDepartmentRequired(formData.position) && formData.position && (
+                <p className="text-xs text-green-600 mt-1">
+                  ✓ Department automatically set to "Company-wide" for this position
+                </p>
+              )}
             </div>
 
             {/* Contact Number */}

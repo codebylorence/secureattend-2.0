@@ -29,25 +29,61 @@ router.post("/register", async (req, res) => {
       email,
       username,
       password,
-      photo
+      photo,
+      role // This will be derived from position on frontend, but we'll also derive it here as backup
     } = req.body;
 
+    // Function to determine role based on position
+    const getRoleFromPosition = (position) => {
+      const positionLower = position.toLowerCase();
+      if (positionLower.includes('admin')) {
+        return 'admin';
+      } else if (positionLower.includes('supervisor') || positionLower.includes('manager')) {
+        return 'supervisor';
+      } else if (positionLower.includes('team leader') || positionLower.includes('lead')) {
+        return 'teamleader';
+      } else {
+        return 'employee';
+      }
+    };
+
+    // Derive role from position (use frontend role as fallback)
+    const derivedRole = role || getRoleFromPosition(position);
+
+    // Auto-set department to "Company-wide" for admin and supervisor roles
+    let finalDepartment = department;
+    if ((derivedRole === 'admin' || derivedRole === 'supervisor') && !department) {
+      finalDepartment = 'Company-wide';
+    }
+
     // Validate required fields
-    if (!employee_id || !firstname || !lastname || !department || !position || !contact_number || !email || !username || !password) {
-      console.log("❌ Missing required fields");
+    const requiredFields = ['employee_id', 'firstname', 'lastname', 'position', 'contact_number', 'email', 'username', 'password'];
+    
+    // Department is only required for employees and team leaders (admin/supervisor get "Company-wide")
+    if (derivedRole === 'employee' || derivedRole === 'teamleader') {
+      if (!finalDepartment) {
+        requiredFields.push('department');
+      }
+    }
+
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    
+    if (missingFields.length > 0) {
+      console.log("❌ Missing required fields:", missingFields);
       console.log("Field validation:", {
         employee_id: !!employee_id,
         firstname: !!firstname,
         lastname: !!lastname,
-        department: !!department,
+        department: !!finalDepartment,
         position: !!position,
         contact_number: !!contact_number,
         email: !!email,
         username: !!username,
-        password: !!password
+        password: !!password,
+        derivedRole: derivedRole
       });
       return res.status(400).json({
-        message: "All required fields must be provided"
+        message: `Missing required fields: ${missingFields.join(', ')}`
       });
     }
 
@@ -121,8 +157,9 @@ router.post("/register", async (req, res) => {
       employee_id,
       firstname,
       lastname,
-      department,
+      department: finalDepartment,
       position,
+      role: derivedRole,
       contact_number,
       email,
       username,
@@ -135,8 +172,9 @@ router.post("/register", async (req, res) => {
       employee_id,
       firstname,
       lastname,
-      department,
+      department: finalDepartment, // Use finalDepartment which includes "Company-wide" for admin/supervisor
       position,
+      role: derivedRole,
       contact_number,
       email,
       username,
@@ -151,7 +189,7 @@ router.post("/register", async (req, res) => {
     try {
       const { notifyAdmins } = await import("../services/notificationService.js");
       
-      const message = `New registration request from ${firstname} ${lastname} (${employee_id}) for ${department} department`;
+      const message = `New registration request from ${firstname} ${lastname} (${employee_id}) for ${derivedRole} role in ${finalDepartment}`;
       
       await notifyAdmins(
         "New Registration Request",
@@ -174,7 +212,8 @@ router.post("/register", async (req, res) => {
       firstname,
       lastname,
       employee_id,
-      department
+      department: finalDepartment,
+      role: derivedRole
     });
 
     res.status(201).json({
@@ -266,7 +305,7 @@ router.post("/approve/:id", authenticateToken, requireAdmin, async (req, res) =>
       employee_id: registrationRequest.employee_id,
       firstname: registrationRequest.firstname,
       lastname: registrationRequest.lastname,
-      department: registrationRequest.department,
+      department: registrationRequest.department, // This will be "Company-wide" for admin/supervisor
       position: registrationRequest.position,
       contact_number: registrationRequest.contact_number,
       email: registrationRequest.email,
@@ -277,9 +316,9 @@ router.post("/approve/:id", authenticateToken, requireAdmin, async (req, res) =>
     console.log(`✅ Employee created with ID: ${employee.id}`);
     console.log(`🔐 Creating user account with username: ${registrationRequest.username}`);
 
-    // Determine user role based on position
-    const userRole = registrationRequest.position === "Team Leader" ? "teamleader" : "employee";
-    console.log(`👤 Setting user role to: ${userRole} (position: ${registrationRequest.position})`);
+    // Use the role from the registration request
+    const userRole = registrationRequest.role;
+    console.log(`👤 Setting user role to: ${userRole}`);
 
     // Create user account
     const user = await User.create({
@@ -315,10 +354,13 @@ router.post("/approve/:id", authenticateToken, requireAdmin, async (req, res) =>
     try {
       const { notifySupervisors } = await import("../services/notificationService.js");
       
-      const message = `Registration approved: ${registrationRequest.firstname} ${registrationRequest.lastname} (${registrationRequest.employee_id}) has been added to ${registrationRequest.department}`;
+      const message = `Registration approved: ${registrationRequest.firstname} ${registrationRequest.lastname} (${registrationRequest.employee_id}) has been added as ${registrationRequest.role} in ${registrationRequest.department}`;
+      
+      // Only notify supervisors if it's a specific department (not Company-wide)
+      const departmentsToNotify = registrationRequest.department === 'Company-wide' ? [] : [registrationRequest.department];
       
       await notifySupervisors(
-        [registrationRequest.department],
+        departmentsToNotify,
         "Registration Approved",
         message,
         "general",
@@ -393,10 +435,13 @@ router.post("/reject/:id", authenticateToken, requireAdmin, async (req, res) => 
     try {
       const { notifySupervisors } = await import("../services/notificationService.js");
       
-      const message = `Registration rejected: ${registrationRequest.firstname} ${registrationRequest.lastname} (${registrationRequest.employee_id}) for ${registrationRequest.department}. Reason: ${rejection_reason}`;
+      const message = `Registration rejected: ${registrationRequest.firstname} ${registrationRequest.lastname} (${registrationRequest.employee_id}) for ${registrationRequest.role} role in ${registrationRequest.department}. Reason: ${rejection_reason}`;
+      
+      // Only notify supervisors if it's a specific department (not Company-wide)
+      const departmentsToNotify = registrationRequest.department === 'Company-wide' ? [] : [registrationRequest.department];
       
       await notifySupervisors(
-        [registrationRequest.department],
+        departmentsToNotify,
         "Registration Rejected",
         message,
         "general",

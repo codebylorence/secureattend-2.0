@@ -108,9 +108,13 @@ export default function AppRouter() {
               <Route path="/superadmin/profile" element={<SuperAdminProfile />} />
             </Route>
             
+            {/* Admin and Supervisor routes */}
+            <Route element={<PrivateRoute allowedRole={["admin", "supervisor"]} />}>
+              <Route path="/admin/attendance-reports" element={<AttendanceReports />} />
+            </Route>
+            
             {/* Admin-only routes */}
             <Route element={<PrivateRoute allowedRole="admin" />}>
-              <Route path="/admin/attendance-reports" element={<AttendanceReports />} />
               <Route path="/admin/positions" element={<PositionManagement />} />
               <Route path="/admin/registrations" element={<RegistrationManagement />} />
               <Route path="/admin/settings" element={<Settings />} />

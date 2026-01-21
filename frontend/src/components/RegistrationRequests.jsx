@@ -170,6 +170,9 @@ export default function RegistrationRequests() {
                   Employee
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Department
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -215,8 +218,27 @@ export default function RegistrationRequests() {
                       </div>
                     </div>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      (request.role === 'admin' || request.position?.toLowerCase().includes('admin')) ? 'bg-purple-100 text-purple-800' :
+                      (request.role === 'supervisor' || request.position?.toLowerCase().includes('supervisor') || request.position?.toLowerCase().includes('manager')) ? 'bg-blue-100 text-blue-800' :
+                      (request.role === 'teamleader' || request.position?.toLowerCase().includes('team leader') || request.position?.toLowerCase().includes('lead')) ? 'bg-green-100 text-green-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {request.role === 'teamleader' ? 'Team Leader' : 
+                       request.role?.charAt(0).toUpperCase() + request.role?.slice(1) || 'Employee'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {request.department}
+                    {request.department === 'Company-wide' ? (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        Company-wide
+                      </span>
+                    ) : request.department ? (
+                      request.department
+                    ) : (
+                      <span className="text-gray-400 italic">Not specified</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {request.position}

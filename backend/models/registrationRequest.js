@@ -22,11 +22,16 @@ const RegistrationRequest = sequelize.define("RegistrationRequest", {
   },
   department: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true, // Make department optional
   },
   position: {
     type: DataTypes.STRING,
     allowNull: false,
+  },
+  role: {
+    type: DataTypes.ENUM("employee", "teamleader", "supervisor", "admin"),
+    allowNull: false,
+    defaultValue: "employee",
   },
   contact_number: {
     type: DataTypes.STRING,
