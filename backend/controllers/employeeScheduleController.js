@@ -9,6 +9,11 @@ import {
   regenerateWeeklySchedules,
   getScheduleById,
 } from "../services/employeeScheduleService.js";
+import { 
+  getEmployeeSchedulesFromTemplates, 
+  getTodaysScheduleFromTemplates,
+  assignEmployeesToTemplate 
+} from "../services/scheduleTemplateService.js";
 import { getTodaysSchedule } from "../utils/scheduleDateGenerator.js";
 import { createScheduleNotification } from "./scheduleNotificationController.js";
 import User from "../models/user.js";
@@ -17,8 +22,13 @@ import Employee from "../models/employee.js";
 // GET /api/employee-schedules
 export const getEmployeeSchedules = async (req, res) => {
   try {
-    const schedules = await getAllEmployeeSchedules();
-    res.status(200).json(schedules);
+    // Get schedules from both old system and new template system
+    const legacySchedules = await getAllEmployeeSchedules();
+    const templateSchedules = await getEmployeeSchedulesFromTemplates();
+    
+    // Combine and return both
+    const allSchedules = [...legacySchedules, ...templateSchedules];
+    res.status(200).json(allSchedules);
   } catch (error) {
     console.error("Error fetching employee schedules:", error);
     res.status(500).json({ message: "Error fetching employee schedules" });
@@ -29,8 +39,14 @@ export const getEmployeeSchedules = async (req, res) => {
 export const getEmployeeSchedule = async (req, res) => {
   try {
     const { employee_id } = req.params;
-    const schedules = await getSchedulesByEmployeeId(employee_id);
-    res.status(200).json(schedules);
+    
+    // Get schedules from both old system and new template system
+    const legacySchedules = await getSchedulesByEmployeeId(employee_id);
+    const templateSchedules = await getEmployeeSchedulesFromTemplates(employee_id);
+    
+    // Combine and return both
+    const allSchedules = [...legacySchedules, ...templateSchedules];
+    res.status(200).json(allSchedules);
   } catch (error) {
     console.error("Error fetching employee schedule:", error);
     res.status(500).json({ message: "Error fetching employee schedule" });
@@ -55,32 +71,40 @@ export const assignSchedule = async (req, res) => {
     console.log("📥 Assigning schedule with data:", req.body);
     console.log("👤 Request user:", req.user);
     
-    const schedule = await assignScheduleToEmployee(req.body);
-    console.log("✅ Schedule assigned successfully:", schedule.id);
+    const { employee_id, template_id, days, assigned_by } = req.body;
+    
+    // Use new template-based assignment for specific date schedules
+    const result = await assignEmployeesToTemplate(template_id, [employee_id], assigned_by || req.user?.username || "System");
+    
+    console.log("✅ Schedule assigned successfully to template:", template_id);
     
     // Create notification for biometric app
     try {
-      const assignedBy = req.user?.username || "System";
-      const employeeId = req.body.employee_id;
+      const assignedByUser = assigned_by || req.user?.username || "System";
       const shiftName = req.body.shift_name || "Schedule";
       
       await createScheduleNotification(
-        `New schedule assigned to employee ${employeeId}: ${shiftName}`,
+        `New schedule assigned to employee ${employee_id}: ${shiftName}`,
         "schedule_update",
         {
-          employee_id: employeeId,
-          schedule_id: schedule.id,
+          employee_id: employee_id,
+          template_id: template_id,
           shift_name: shiftName,
           action: "assigned"
         },
-        assignedBy
+        assignedByUser
       );
     } catch (notificationError) {
       console.error("⚠️ Failed to create schedule notification:", notificationError);
       // Don't fail the main operation if notification fails
     }
     
-    res.status(201).json(schedule);
+    res.status(201).json({ 
+      id: `template-${template_id}-${employee_id}`,
+      message: "Schedule assigned successfully",
+      template_id,
+      employee_id
+    });
   } catch (error) {
     console.error("❌ Error assigning schedule:", error);
     console.error("❌ Error details:", error.message);
@@ -266,19 +290,25 @@ export const removeDaysFromSchedule = async (req, res) => {
 export const getTodaysEmployeeSchedule = async (req, res) => {
   try {
     const { employee_id } = req.params;
-    const schedules = await getSchedulesByEmployeeId(employee_id);
     
-    // Find today's schedule
-    let todaysSchedule = null;
-    for (const schedule of schedules) {
-      const todayInfo = getTodaysSchedule(schedule);
-      if (todayInfo) {
-        todaysSchedule = {
-          ...todayInfo,
-          employee_id: schedule.employee_id,
-          schedule_id: schedule.id
-        };
-        break;
+    // First try to get from new template system
+    let todaysSchedule = await getTodaysScheduleFromTemplates(employee_id);
+    
+    // If not found, fall back to legacy system
+    if (!todaysSchedule) {
+      const schedules = await getSchedulesByEmployeeId(employee_id);
+      
+      // Find today's schedule from legacy system
+      for (const schedule of schedules) {
+        const todayInfo = getTodaysSchedule(schedule);
+        if (todayInfo) {
+          todaysSchedule = {
+            ...todayInfo,
+            employee_id: schedule.employee_id,
+            schedule_id: schedule.id
+          };
+          break;
+        }
       }
     }
     

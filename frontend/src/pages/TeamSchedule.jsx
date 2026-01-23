@@ -51,16 +51,63 @@ export default function TeamSchedule() {
       fetchAssignedSchedules();
     });
 
+    socket.on('employee:assigned', (data) => {
+      console.log('📡 TeamSchedule: Employee assigned - refreshing...', data);
+      fetchAssignedSchedules();
+      fetchTemplates(); // Also refresh templates to get updated assigned_employees
+    });
+
+    socket.on('template:created', () => {
+      console.log('📡 TeamSchedule: Template created - refreshing...');
+      fetchTemplates();
+    });
+
+    socket.on('template:updated', () => {
+      console.log('📡 TeamSchedule: Template updated - refreshing...');
+      fetchTemplates();
+      fetchAssignedSchedules();
+    });
+
     return () => {
       socket.off('schedules:published');
       socket.off('drafts:published');
+      socket.off('employee:assigned');
+      socket.off('template:created');
+      socket.off('template:updated');
     };
   }, [socket]);
 
   const fetchTemplates = async () => {
     try {
+      // Get all templates for the department
       const data = await getTemplatesByDepartment(userDepartment);
-      setTemplates(data);
+      
+      // Filter templates to only show current and future dates
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+      
+      const currentAndFutureTemplates = data.filter(template => {
+        // For specific date templates, only show today and future dates
+        if (template.specific_date) {
+          return template.specific_date >= todayStr;
+        }
+        
+        // For legacy day-based templates, keep existing logic
+        if (template.days && template.days.length > 0) {
+          return hasCurrentOrFutureDays(template);
+        }
+        
+        return false;
+      });
+      
+      console.log(`📋 TeamSchedule: Found ${currentAndFutureTemplates.length} current/future templates for ${userDepartment}`);
+      
+      // Show all templates regardless of assignment status
+      // Team leaders should be able to see and assign to all templates in their department
+      setTemplates(currentAndFutureTemplates);
     } catch (error) {
       console.error("Error fetching templates:", error);
     }
@@ -81,6 +128,7 @@ export default function TeamSchedule() {
 
   const fetchAssignedSchedules = async () => {
     try {
+      // Get schedules from both legacy system and new template system
       const allSchedules = await getEmployeeSchedules();
       const allEmployees = await fetchEmployees();
       
@@ -95,12 +143,13 @@ export default function TeamSchedule() {
       const transformedSchedules = teamSchedules.map(schedule => ({
         id: schedule.id,
         employee_id: schedule.employee_id,
-        shift_name: schedule.template.shift_name,
-        start_time: schedule.template.start_time,
-        end_time: schedule.template.end_time,
-        days: schedule.days,
-        department: schedule.template.department,
-        template_id: schedule.template_id
+        shift_name: schedule.shift_name || schedule.template?.shift_name,
+        start_time: schedule.start_time || schedule.template?.start_time,
+        end_time: schedule.end_time || schedule.template?.end_time,
+        days: schedule.days || [],
+        department: schedule.department || schedule.template?.department,
+        template_id: schedule.template_id,
+        specific_date: schedule.specific_date || schedule.template?.specific_date
       }));
       
       // Merge schedules with same employee, shift, and time but different days
@@ -579,7 +628,15 @@ export default function TeamSchedule() {
   };
 
   const handleAssignSchedule = async () => {
-    if (!selectedTemplate || !selectedDay) {
+    const assignmentDay = selectedTemplate.specific_date ? 
+      (() => {
+        const date = new Date(selectedTemplate.specific_date);
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        return dayNames[date.getDay()];
+      })() : 
+      selectedDay;
+      
+    if (!selectedTemplate || (!assignmentDay && !selectedTemplate.specific_date)) {
       return toast.warning("Please select a template and day!");
     }
     if (selectedEmployees.length === 0) {
@@ -590,7 +647,6 @@ export default function TeamSchedule() {
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem("user") || "{}");
     console.log("🔐 Debug - Token exists:", !!token);
-    console.log("🔐 Debug - Token preview:", token?.substring(0, 20) + "...");
     console.log("🔐 Debug - User data:", user);
     console.log("🔐 Debug - User role:", user.role);
 
@@ -605,14 +661,14 @@ export default function TeamSchedule() {
         console.log("📤 Assigning schedule:", {
           employee_id: employeeId,
           template_id: selectedTemplate.id,
-          days: [selectedDay],
+          days: [assignmentDay],
           assigned_by: user.employee?.employee_id || "teamleader"
         });
 
         await assignSchedule({
           employee_id: employeeId,
           template_id: selectedTemplate.id,
-          days: [selectedDay], // Only assign the selected day
+          days: [assignmentDay], // Use the calculated assignment day
           assigned_by: user.employee?.employee_id || "teamleader"
         });
         
@@ -626,7 +682,6 @@ export default function TeamSchedule() {
           const errorMsg = err.response?.data?.message || "Authentication failed";
           console.error("🔐 Authentication error:", errorMsg);
           
-          // Show specific error message and suggest re-login
           toast.error(`Authentication failed: ${errorMsg}. Please log out and log back in.`, {
             autoClose: 8000
           });
@@ -636,7 +691,6 @@ export default function TeamSchedule() {
             error: "Authentication failed - please re-login"
           });
           
-          // Stop processing more assignments if auth fails
           break;
         } else {
           const errorMsg = err.response?.data?.message || "Failed to assign schedule";
@@ -649,23 +703,21 @@ export default function TeamSchedule() {
     }
 
     // Show summary
-    let message = "";
-    if (results.success.length > 0) {
-      message += `Successfully assigned ${selectedTemplate.shift_name} on ${selectedDay} to:\n${results.success.map(s => `  • ${s}`).join("\n")}\n`;
-    }
-    if (results.failed.length > 0) {
-      message += `\nFailed:\n`;
-      results.failed.forEach(f => {
-        message += `  • ${f.name}: ${f.error}\n`;
-      });
-    }
+    const displayDate = selectedTemplate.specific_date ? 
+      new Date(selectedTemplate.specific_date).toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        month: 'short', 
+        day: 'numeric' 
+      }) : 
+      assignmentDay;
     
     if (results.success.length > 0 && results.failed.length === 0) {
-      toast.success(`Successfully assigned ${results.success.length} member(s) to ${selectedTemplate.shift_name} on ${selectedDay}`);
+      const totalAssigned = selectedTemplate.specific_date ? results.success.length : results.success.length;
+      const teamLeaderNote = selectedTemplate.specific_date ? " (including team leader)" : "";
+      toast.success(`Successfully assigned ${totalAssigned} member(s)${teamLeaderNote} to ${selectedTemplate.shift_name} on ${displayDate}`);
     } else if (results.success.length > 0 && results.failed.length > 0) {
       toast.warning(`Assigned ${results.success.length} member(s), but ${results.failed.length} failed`);
     } else if (results.failed.length > 0) {
-      // Check if all failures were due to authentication
       const authFailures = results.failed.filter(f => f.error.includes("Authentication failed"));
       if (authFailures.length === results.failed.length) {
         toast.error("Authentication failed. Please log out and log back in to continue.");
@@ -883,8 +935,8 @@ export default function TeamSchedule() {
         <p className="text-sm text-gray-600 mt-1">
           Assign schedule templates to your team members in {userDepartment}
         </p>
-        <p className="text-xs text-primary-600 mt-1">
-          💡 Note: You cannot delete your own schedule. Contact an administrator if changes are needed.
+        <p className="text-xs text-blue-600 mt-1">
+          💡 Note: Your own schedule is automatically managed. This page is for assigning schedules to your team members.
         </p>
       </div>
 
@@ -900,48 +952,38 @@ export default function TeamSchedule() {
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Group templates by shift name and time */}
-            {Object.values(
-              templates.reduce((acc, template) => {
-                const key = `${template.shift_name}-${template.start_time}-${template.end_time}`;
-                if (!acc[key]) {
-                  // First template with this shift/time combination
-                  acc[key] = {
-                    ...template,
-                    allDays: [...template.days],
-                    mergedDayLimits: template.day_limits ? {...template.day_limits} : {}
-                  };
-                } else {
-                  // Merge days from duplicate templates
-                  acc[key].allDays = [...new Set([...acc[key].allDays, ...template.days])];
-                  // Merge day limits
-                  if (template.day_limits) {
-                    acc[key].mergedDayLimits = {
-                      ...acc[key].mergedDayLimits,
-                      ...template.day_limits
-                    };
-                  }
-                  // Update member_limit if present
-                  if (template.member_limit) {
-                    acc[key].member_limit = template.member_limit;
-                  }
-                }
-                return acc;
-              }, {})
-            ).filter(template => hasCurrentOrFutureDays(template)).map((template) => {
-              const today = new Date();
-              const todayDayName = getDayOfWeek(today);
-              const isTodayIncluded = template.allDays.includes(todayDayName);
-              const shiftPassedToday = isTodayIncluded && isShiftTimePassedForToday(template.start_time, template.end_time);
+            {templates.map((template) => {
+              // Handle both specific date and legacy day-based templates
+              const isSpecificDate = !!template.specific_date;
+              const displayDate = isSpecificDate 
+                ? new Date(template.specific_date).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  })
+                : template.days?.join(', ') || 'No days specified';
               
               return (
                 <div
                   key={template.id}
-                  onClick={() => setSelectedTemplate({
-                    ...template, 
-                    days: template.allDays,
-                    day_limits: template.mergedDayLimits
-                  })}
+                  onClick={() => {
+                    if (isSpecificDate) {
+                      // For specific date templates, set the template and auto-select the date
+                      setSelectedTemplate(template);
+                      const date = new Date(template.specific_date);
+                      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                      const dayName = dayNames[date.getDay()];
+                      setSelectedDay(dayName);
+                    } else {
+                      // For legacy templates, use existing logic
+                      setSelectedTemplate({
+                        ...template, 
+                        days: template.days || [],
+                        day_limits: template.day_limits || {}
+                      });
+                    }
+                  }}
                   className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                     selectedTemplate?.id === template.id
                       ? "border-primary bg-primary-50"
@@ -952,23 +994,56 @@ export default function TeamSchedule() {
                   <p className="text-sm text-gray-600 mb-1 flex items-center gap-1">
                     <MdAccessTime size={16} /> {formatTimeRange24(template.start_time, template.end_time)}
                   </p>
-                  {shiftPassedToday && (
-                    <p className="text-xs text-orange-600 font-medium mb-1 flex items-center gap-1">
-                      <MdWarning size={14} /> Today's shift has started
+                  
+                  {isSpecificDate ? (
+                    <p className="text-xs text-blue-600 flex items-center gap-1 mb-1">
+                      <MdCalendarToday size={14} /> {displayDate}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 flex items-center gap-1 mb-1">
+                      <MdCalendarToday size={14} /> {displayDate}
                     </p>
                   )}
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
-                    {Object.keys(template.mergedDayLimits).length > 0 ? (
-                      <><MdCalendarToday size={14} /> {template.allDays.map(day => {
-                        const limit = template.mergedDayLimits[day];
-                        return limit ? `${day}(${limit})` : day;
-                      }).join(", ")}</>
-                    ) : template.member_limit ? (
-                      <><MdCalendarToday size={14} /> {template.allDays.join(", ")} (Limit: {template.member_limit} per day)</>
-                    ) : (
-                      <><MdCalendarToday size={14} /> {template.allDays.join(", ")}</>
-                    )}
-                  </p>
+                  
+                  {template.member_limit && (
+                    <p className="text-xs text-gray-500">
+                      Member Limit: {template.member_limit}
+                    </p>
+                  )}
+                  
+                  {/* Show assignment status */}
+                  {(() => {
+                    let assignedCount = 0;
+                    if (template.assigned_employees) {
+                      try {
+                        const assignments = typeof template.assigned_employees === 'string' 
+                          ? JSON.parse(template.assigned_employees) 
+                          : template.assigned_employees;
+                        assignedCount = assignments.length;
+                      } catch (e) {
+                        assignedCount = 0;
+                      }
+                    }
+                    
+                    return (
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {isSpecificDate && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Specific Date
+                            </span>
+                          )}
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            assignedCount > 0 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {assignedCount} Assigned
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -976,8 +1051,8 @@ export default function TeamSchedule() {
         )}
       </div>
 
-      {/* Select Day for Assignment */}
-      {selectedTemplate && !selectedDay && (
+      {/* Select Day for Assignment - Only show for legacy day-based templates */}
+      {selectedTemplate && !selectedDay && !selectedTemplate.specific_date && (
         <div className="bg-white rounded-lg shadow-md p-6 my-6">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-primary mb-4">
             <MdSchedule /> Select Day to Assign
@@ -991,29 +1066,25 @@ export default function TeamSchedule() {
 
           <p className="text-sm text-gray-600 mb-3">Choose a day to assign team members:</p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            {selectedTemplate.allDays.filter(day => {
-              // Filter to only show current and future days (including next week)
+            {(selectedTemplate.days || selectedTemplate.allDays || []).filter(day => {
+              // Filter to only show current and future days
               const today = new Date();
               const todayDayName = getDayOfWeek(today);
-              const currentTime = today.getHours() * 60 + today.getMinutes();
               
-              // If it's today, show the schedule until the end of the day (not when shift ends)
               if (day === todayDayName) {
-                return true; // Always show today's schedule until day ends
+                return true; // Always show today
               }
               
-              // For other days, check if they're in the current week (including future days)
+              // For other days, check if they're in the current week
               const dayOrder = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
               const todayIndex = dayOrder.indexOf(todayDayName);
               const dayIndex = dayOrder.indexOf(day);
               
-              // Calculate days from today (considering week cycle)
               let daysFromToday = dayIndex - todayIndex;
               if (daysFromToday < 0) {
                 daysFromToday += 7; // Next week
               }
               
-              // Show days within the next 7 days (current week + next week if needed)
               return daysFromToday > 0 && daysFromToday <= 7;
             }).map((day) => {
               const status = getMemberLimitStatus(day);
@@ -1057,10 +1128,17 @@ export default function TeamSchedule() {
       )}
 
       {/* Assign to Team Members */}
-      {selectedTemplate && selectedDay && (
+      {selectedTemplate && (selectedDay || selectedTemplate.specific_date) && (
         <div className="bg-white rounded-lg shadow-md p-6 my-6">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-primary mb-4">
-            <MdPeople /> Select Team Members for {selectedDay}
+            <MdPeople /> Select Team Members {selectedTemplate.specific_date ? 
+              `for ${new Date(selectedTemplate.specific_date).toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                month: 'short', 
+                day: 'numeric' 
+              })}` : 
+              `for ${selectedDay}`
+            }
           </h2>
           
           <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-md">
@@ -1068,17 +1146,33 @@ export default function TeamSchedule() {
               <strong>Template:</strong> {selectedTemplate.shift_name} ({formatTimeRange24(selectedTemplate.start_time, selectedTemplate.end_time)})
             </p>
             <p className="text-sm text-gray-700">
-              <strong>Day:</strong> {selectedDay}
+              <strong>{selectedTemplate.specific_date ? 'Date' : 'Day'}:</strong> {
+                selectedTemplate.specific_date ? 
+                  new Date(selectedTemplate.specific_date).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'short', 
+                    day: 'numeric',
+                    year: 'numeric'
+                  }) : 
+                  selectedDay
+              }
             </p>
-            <button
-              onClick={() => {
-                setSelectedDay(null);
-                setSelectedEmployees([]);
-              }}
-              className="text-xs text-primary-600 hover:text-primary-800 mt-2 underline"
-            >
-              ← Change Day
-            </button>
+            {selectedTemplate.specific_date && (
+              <p className="text-sm text-blue-700 mt-2">
+                <strong>Note:</strong> You (team leader) will be automatically assigned to this schedule.
+              </p>
+            )}
+            {!selectedTemplate.specific_date && (
+              <button
+                onClick={() => {
+                  setSelectedDay(null);
+                  setSelectedEmployees([]);
+                }}
+                className="text-xs text-primary-600 hover:text-primary-800 mt-2 underline"
+              >
+                ← Change Day
+              </button>
+            )}
           </div>
 
           {teamMembers.length === 0 ? (
@@ -1174,7 +1268,16 @@ export default function TeamSchedule() {
                     : "bg-primary text-white hover:bg-primary-hover"
                 }`}
               >
-                Assign {selectedTemplate.shift_name} on {selectedDay} to {selectedEmployees.length} Member(s)
+                Assign {selectedTemplate.shift_name} {selectedTemplate.specific_date ? 
+                  `on ${new Date(selectedTemplate.specific_date).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric' 
+                  })}` : 
+                  `on ${selectedDay}`
+                } to {selectedTemplate.specific_date ? 
+                  `${selectedEmployees.length + 1} Member(s) (+ You)` : 
+                  `${selectedEmployees.length} Member(s)`
+                }
               </button>
             </>
           )}
@@ -1187,35 +1290,46 @@ export default function TeamSchedule() {
           <MdSchedule /> Assigned Team Schedules
         </h2>
         
-        {assignedSchedules.length === 0 ? (
-          <p className="text-gray-500 text-sm">No schedules assigned yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Employee
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Shift Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Time
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Days
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {assignedSchedules.map((schedule, index) => {
-                  const isOwnSchedule = schedule.employee_id === user.employee?.employee_id;
-                  
-                  return (
+        {(() => {
+          // Filter out the team leader's own schedule - only show team members' schedules
+          const teamMemberSchedules = assignedSchedules.filter(schedule => 
+            schedule.employee_id !== user.employee?.employee_id
+          );
+          
+          if (teamMemberSchedules.length === 0) {
+            return (
+              <div className="text-center py-8 text-gray-500">
+                <MdSchedule size={48} className="mx-auto mb-3 text-gray-300" />
+                <p className="text-lg">No team member schedules assigned yet</p>
+                <p className="text-sm">Assign schedules to your team members using the templates above</p>
+              </div>
+            );
+          }
+          
+          return (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Team Member
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Shift Name
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Time
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Days
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {teamMemberSchedules.map((schedule, index) => (
                     <tr key={schedule.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="text-sm font-medium text-gray-900">
@@ -1234,43 +1348,42 @@ export default function TeamSchedule() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        <div className="flex flex-wrap gap-1">
-                          {schedule.days.map((day, idx) => (
-                            <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
-                              {day}
+                        {schedule.specific_date ? (
+                          <div className="flex flex-wrap gap-1">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
+                              {new Date(schedule.specific_date).toLocaleDateString('en-US', { 
+                                weekday: 'short', 
+                                month: 'short', 
+                                day: 'numeric' 
+                              })}
                             </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {isOwnSchedule ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              disabled
-                              className="w-7 h-7 rounded-md bg-gray-300 text-gray-500 flex items-center justify-center cursor-not-allowed"
-                              title="Cannot delete your own schedule"
-                            >
-                              <MdDelete size={14} />
-                            </button>
-                            <span className="text-xs text-gray-500">Own Schedule</span>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => handleDeleteSchedule(schedule)}
-                            className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
-                            title="Select days to delete"
-                          >
-                            <MdDelete size={14} />
-                          </button>
+                          <div className="flex flex-wrap gap-1">
+                            {schedule.days.map((day, idx) => (
+                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                                {day}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => handleDeleteSchedule(schedule)}
+                          className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                          title="Remove team member's schedule"
+                        >
+                          <MdDelete size={14} />
+                        </button>
+                      </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Delete Days Modal */}

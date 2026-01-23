@@ -6,12 +6,50 @@ import {
   getEmployeeByEmployeeId
 } from "../services/employeeService.js";
 
+// GET /employees (for biometric app compatibility)
+export const getEmployeesForBiometric = async (req, res) => {
+  try {
+    const employees = await getAllEmployees();
+    
+    // Format specifically for biometric app
+    const biometricEmployees = employees.map(employee => {
+      const employeeData = employee.toJSON ? employee.toJSON() : employee;
+      
+      // Ensure fullname is populated
+      let fullname = employeeData.fullname;
+      if (!fullname || fullname.trim() === '' || fullname === 'null') {
+        if (employeeData.firstname && employeeData.lastname) {
+          fullname = `${employeeData.firstname} ${employeeData.lastname}`;
+        } else if (employeeData.firstname) {
+          fullname = employeeData.firstname;
+        } else {
+          fullname = `Employee ${employeeData.employee_id}`;
+        }
+      }
+      
+      return {
+        employee_id: employeeData.employee_id,
+        employeeId: employeeData.employee_id, // For compatibility
+        fullname: fullname,
+        department: employeeData.department || 'No Department',
+        status: employeeData.status || 'Active'
+      };
+    });
+    
+    console.log(`📱 Returning ${biometricEmployees.length} active employees for biometric app`);
+    res.status(200).json(biometricEmployees);
+  } catch (error) {
+    console.error("Error fetching employees for biometric app:", error);
+    res.status(500).json({ message: "Error fetching employees" });
+  }
+};
+
 // GET /api/employees
 export const getEmployees = async (req, res) => {
   try {
     const employees = await getAllEmployees();
     
-    // Ensure fullname is populated for all employees (for biometric app compatibility)
+    // Ensure fullname is populated for all employees (for web app)
     const processedEmployees = employees.map(employee => {
       const employeeData = employee.toJSON ? employee.toJSON() : employee;
       

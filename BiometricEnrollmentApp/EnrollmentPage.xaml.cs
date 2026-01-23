@@ -545,15 +545,15 @@ namespace BiometricEnrollmentApp
             {
                 using var client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(10);
-                string url = "http://localhost:5000/employees";
+                string url = "http://localhost:5000/employees/biometric"; // Use specific biometric endpoint
                 
                 LogHelper.Write($"🔍 Attempting to load employees from: {url}");
                 
                 var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
-                if (employees != null)
+                if (employees != null && employees.Count > 0)
                 {
                     _allEmployees = employees;
-                    LogHelper.Write($"✅ Loaded {employees.Count} employees from server");
+                    LogHelper.Write($"✅ Loaded {employees.Count} active employees from server");
                     
                     // Debug: Log first few employees
                     foreach (var emp in employees.Take(3))
@@ -563,8 +563,14 @@ namespace BiometricEnrollmentApp
                 }
                 else
                 {
-                    LogHelper.Write("⚠️ Server returned null employee list");
+                    LogHelper.Write("⚠️ Server returned empty employee list - no active employees found");
                     _allEmployees = new List<EmployeeDto>();
+                    
+                    // Show user-friendly message
+                    Dispatcher.Invoke(() => 
+                    {
+                        StatusText.Text = "⚠️ No active employees found. Please add employees in the web app.";
+                    });
                 }
             }
             catch (HttpRequestException ex)

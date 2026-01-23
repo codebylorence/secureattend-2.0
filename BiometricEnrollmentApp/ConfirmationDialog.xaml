@@ -1,133 +1,4 @@
-<<<<<<< HEAD
-&lt;Window x:Class="BiometricEnrollmentApp.ConfirmationDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Confirm Clock Out" 
-        Height="300" 
-        Width="450"
-        WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
-        WindowStyle="SingleBorderWindow"
-        Background="#F5F5F5"
-        ShowInTaskbar="False"
-        Topmost="True">
-    
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-        
-        <!-- Header -->
-        <Border Grid.Row="0" Background="#2196F3" Padding="20,15">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="⏰" FontSize="24" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBlock Text="Confirm Clock Out" 
-                          FontSize="18" 
-                          FontWeight="Bold" 
-                          Foreground="White" 
-                          VerticalAlignment="Center"/>
-            </StackPanel>
-        </Border>
-        
-        <!-- Content -->
-        <StackPanel Grid.Row="1" Margin="30,20" VerticalAlignment="Center">
-            <!-- Employee Info -->
-            <Border Background="White" 
-                    BorderBrush="#E0E0E0" 
-                    BorderThickness="1" 
-                    CornerRadius="8" 
-                    Padding="20,15" 
-                    Margin="0,0,0,20">
-                <StackPanel>
-                    <TextBlock x:Name="EmployeeNameText" 
-                              Text="Employee Name" 
-                              FontSize="16" 
-                              FontWeight="Bold" 
-                              Foreground="#333"
-                              Margin="0,0,0,5"/>
-                    <TextBlock x:Name="EmployeeIdText" 
-                              Text="Employee ID: 12345" 
-                              FontSize="12" 
-                              Foreground="#666"
-                              Margin="0,0,0,5"/>
-                    <TextBlock x:Name="ClockInTimeText" 
-                              Text="Clock-in time: 08:00 AM" 
-                              FontSize="12" 
-                              Foreground="#666"/>
-                </StackPanel>
-            </Border>
-            
-            <!-- Confirmation Message -->
-            <TextBlock Text="Are you sure you want to clock out now?" 
-                      FontSize="14" 
-                      Foreground="#333" 
-                      TextAlignment="Center" 
-                      TextWrapping="Wrap"
-                      Margin="0,0,0,10"/>
-            
-            <!-- Working Hours Info -->
-            <TextBlock x:Name="WorkingHoursText" 
-                      Text="Total working time: 8 hours 30 minutes" 
-                      FontSize="12" 
-                      Foreground="#666" 
-                      TextAlignment="Center" 
-                      FontStyle="Italic"/>
-        </StackPanel>
-        
-        <!-- Buttons -->
-        <Border Grid.Row="2" Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="0,1,0,0">
-            <StackPanel Orientation="Horizontal" 
-                       HorizontalAlignment="Center" 
-                       Margin="20,15">
-                <Button x:Name="ConfirmButton" 
-                       Content="✓ Yes, Clock Out" 
-                       Width="140" 
-                       Height="40" 
-                       Background="#4CAF50" 
-                       Foreground="White" 
-                       BorderThickness="0" 
-                       FontSize="14" 
-                       FontWeight="Bold"
-                       Margin="0,0,15,0"
-                       Click="ConfirmButton_Click"
-                       Style="{DynamicResource ModernButtonStyle}"/>
-                
-                <Button x:Name="CancelButton" 
-                       Content="✗ Cancel" 
-                       Width="100" 
-                       Height="40" 
-                       Background="#757575" 
-                       Foreground="White" 
-                       BorderThickness="0" 
-                       FontSize="14"
-                       Click="CancelButton_Click"
-                       Style="{DynamicResource ModernButtonStyle}"/>
-            </StackPanel>
-        </Border>
-    </Grid>
-    
-    <Window.Resources>
-        <Style x:Key="ModernButtonStyle" TargetType="Button">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
-                               CornerRadius="6" 
-                               BorderThickness="{TemplateBinding BorderThickness}"
-                               BorderBrush="{TemplateBinding BorderBrush}">
-                            <ContentPresenter HorizontalAlignment="Center" 
-                                            VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Opacity" Value="0.9"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Opacity" Value="0.8"/>
-=======
-<Window x:Class="BiometricEnrollmentApp.ConfirmationDialog"
+﻿<Window x:Class="BiometricEnrollmentApp.ConfirmationDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Confirm Clock Out" 
@@ -157,7 +28,6 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="ScaleTransform.ScaleX" Value="0.98"/>
->>>>>>> clockout-confirmation
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -165,8 +35,6 @@
             </Setter>
         </Style>
     </Window.Resources>
-<<<<<<< HEAD
-=======
 
     <Border Background="White" CornerRadius="15" Margin="10">
         <Border.Effect>
@@ -175,10 +43,13 @@
 
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>    <RowDefinition Height="Auto"/> </Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Margin="0,25,0,10">
-                <TextBlock Text="🕒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <TextBlock Text="" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                 <TextBlock Text="Confirm Clock Out" FontSize="20" FontWeight="Bold" Foreground="#2D3436" HorizontalAlignment="Center"/>
             </StackPanel>
 
@@ -213,7 +84,7 @@
                         Style="{StaticResource ModernButtonStyle}"/>
 
                 <Button x:Name="ConfirmButton" 
-                        Content="✓ Yes, Clock Out" 
+                        Content=" Yes, Clock Out" 
                         Grid.Column="1" Height="45"
                         Background="#48BB78" Foreground="White"
                         Click="ConfirmButton_Click" 
@@ -221,5 +92,4 @@
             </Grid>
         </Grid>
     </Border>
->>>>>>> clockout-confirmation
 </Window>

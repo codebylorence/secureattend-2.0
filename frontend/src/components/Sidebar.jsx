@@ -111,9 +111,14 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
           icon: FaCalendarAlt,
           submenu: [
             {
-              key: "manage-schedule",
-              label: "Manage Schedule",
+              key: "zone-schedule",
+              label: "Zone-Based Scheduling",
               path: "/admin/schedule"
+            },
+            {
+              key: "role-schedule", 
+              label: "Role-Based Scheduling",
+              path: "/admin/role-schedule"
             },
             {
               key: "view-schedules",

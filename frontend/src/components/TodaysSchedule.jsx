@@ -37,11 +37,7 @@ export default function TodaysSchedule() {
         return;
       }
 
-      // Fetch employee's schedules
-      const schedules = await getEmployeeScheduleById(employeeId);
-      const currentDay = getCurrentDay();
-      
-      // Get today's date in local timezone (not UTC)
+      // Get today's date in YYYY-MM-DD format
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -49,69 +45,63 @@ export default function TodaysSchedule() {
       const todayDate = `${year}-${month}-${day}`;
       
       console.log('📅 TodaysSchedule Debug:');
-      console.log('  Current Day:', currentDay);
       console.log('  Today Date:', todayDate);
-      console.log('  Total Schedules:', schedules.length);
-      console.log('  Raw Schedules Data:', JSON.stringify(schedules, null, 2));
+      console.log('  Employee ID:', employeeId);
       
-      // Find schedule for today - check schedule_dates first, then fall back to days array
+      // Fetch employee's schedules (includes both legacy and template-based)
+      const schedules = await getEmployeeScheduleById(employeeId);
+      console.log('  Total Schedules:', schedules.length);
+      
+      // Find schedule for today
       const todaySchedule = schedules.find(s => {
-        console.log('  Checking schedule ID:', s.id);
-        console.log('    Days:', s.days);
-        console.log('    Schedule Dates:', s.schedule_dates);
-        console.log('    Template:', s.template);
+        console.log('  Checking schedule:', {
+          id: s.id,
+          specific_date: s.specific_date,
+          template_specific_date: s.template?.specific_date,
+          days: s.days
+        });
         
-        // Parse schedule_dates if it's a string
-        let scheduleDates = s.schedule_dates;
-        if (typeof scheduleDates === 'string') {
-          try {
-            scheduleDates = JSON.parse(scheduleDates);
-          } catch (e) {
-            console.log('    Failed to parse schedule_dates');
-            scheduleDates = null;
-          }
+        // Check if this is a template-based schedule with specific_date
+        if (s.specific_date === todayDate) {
+          console.log('    ✓ Found direct specific date match:', s.specific_date);
+          return true;
         }
         
-        // Check if today's date is in the schedule_dates object
-        if (scheduleDates && scheduleDates[currentDay]) {
-          const todayScheduleDates = scheduleDates[currentDay];
-          console.log('    Today Schedule Dates for', currentDay, ':', todayScheduleDates);
-          const hasDate = Array.isArray(todayScheduleDates) && todayScheduleDates.includes(todayDate);
-          console.log('    ✓ Has today date?', hasDate);
-          if (hasDate) return true;
+        // Check if template has specific_date matching today
+        if (s.template?.specific_date === todayDate) {
+          console.log('    ✓ Found template specific date match:', s.template.specific_date);
+          return true;
         }
         
-        // Fallback: check if today is in the days array
+        // Fallback: check if today is in the days array (for legacy schedules)
+        const currentDay = getCurrentDay();
         let days = s.days;
         if (typeof days === 'string') {
           try {
             days = JSON.parse(days);
           } catch (e) {
-            console.log('    Failed to parse days');
             days = [];
           }
         }
         
         const inDays = days && Array.isArray(days) && days.includes(currentDay);
-        console.log('    ✓ In days array?', inDays);
+        if (inDays) {
+          console.log('    ✓ Found in legacy days array:', currentDay);
+        }
         return inDays;
       });
       
       console.log('  ✅ Found Schedule:', todaySchedule ? 'YES' : 'NO');
       
-      // If schedule found, include template data for shift details
+      // If schedule found, set it with proper template data
       if (todaySchedule) {
-        if (todaySchedule.template) {
-          setSchedule({
-            ...todaySchedule,
-            shift_name: todaySchedule.template.shift_name,
-            start_time: todaySchedule.template.start_time,
-            end_time: todaySchedule.template.end_time
-          });
-        } else {
-          // If no template, try to use the schedule data directly
-          setSchedule(todaySchedule);
-        }
+        const scheduleData = {
+          ...todaySchedule,
+          shift_name: todaySchedule.shift_name || todaySchedule.template?.shift_name,
+          start_time: todaySchedule.start_time || todaySchedule.template?.start_time,
+          end_time: todaySchedule.end_time || todaySchedule.template?.end_time
+        };
+        setSchedule(scheduleData);
       } else {
         setSchedule(null);
       }
@@ -129,7 +119,6 @@ export default function TodaysSchedule() {
         }
 
         // Use the actual status from the database
-        // Map legacy statuses to display names
         const statusMap = {
           'Present': 'Present',
           'Late': 'Late',

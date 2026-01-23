@@ -25,9 +25,14 @@ const ScheduleTemplate = sequelize.define("ScheduleTemplate", {
   },
   days: {
     type: DataTypes.JSON,
-    allowNull: false,
-    defaultValue: [],
-    comment: "Array of day names: ['Monday', 'Tuesday', ...]"
+    allowNull: true,
+    defaultValue: null,
+    comment: "Array of day names: ['Monday', 'Tuesday', ...] - DEPRECATED, use specific_date instead"
+  },
+  specific_date: {
+    type: DataTypes.DATEONLY,
+    allowNull: true,
+    comment: "Specific date for this schedule (YYYY-MM-DD format)"
   },
   member_limit: {
     type: DataTypes.INTEGER,
@@ -50,58 +55,11 @@ const ScheduleTemplate = sequelize.define("ScheduleTemplate", {
     type: DataTypes.ENUM("Active", "Inactive"),
     defaultValue: "Active",
   },
-  publish_status: {
-    type: DataTypes.ENUM("Draft", "Published"),
-    defaultValue: "Draft", // New schedules are drafts until admin publishes them
-    allowNull: true,
-    comment: "Draft templates are not visible to team leaders"
-  },
-  published_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    comment: "Timestamp when schedule was published"
-  },
-  published_by: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: "Employee ID who published the schedule"
-  },
-  pending_deletion: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-    allowNull: false,
-    comment: "True when admin marks for deletion but hasn't published the change yet"
-  },
-  deleted_days: {
+  assigned_employees: {
     type: DataTypes.JSON,
     allowNull: true,
     defaultValue: null,
-    comment: "Days marked for deletion: ['Monday', 'Tuesday', ...]"
-  },
-  is_edited: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-    allowNull: false,
-    comment: "True when this draft is an edit of an existing published schedule"
-  },
-  original_template_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    comment: "ID of the original published template that this draft is editing",
-    references: {
-      model: 'schedule_templates',
-      key: 'id'
-    }
-  },
-  edited_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    comment: "Timestamp when the schedule was last edited"
-  },
-  edited_by: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: "Employee ID who last edited the schedule"
+    comment: "Array of employee assignments: [{employee_id: 'TSI00123', assigned_date: '2025-01-25', assigned_by: 'admin'}]"
   },
 }, {
   tableName: "schedule_templates",

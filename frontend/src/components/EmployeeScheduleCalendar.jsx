@@ -38,102 +38,113 @@ const EmployeeScheduleCalendar = () => {
   const generateCalendarEvents = (scheduleData) => {
     const calendarEvents = [];
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Set to start of today
+    today.setHours(0, 0, 0, 0);
     
-    // Calculate 7 days from today for the rolling window
-    const sevenDaysLater = new Date(today);
-    sevenDaysLater.setDate(today.getDate() + 6); // +6 because today counts as day 1
-    
-    // Format dates as YYYY-MM-DD for comparison
+    // Format today's date as YYYY-MM-DD
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     const todayStr = `${year}-${month}-${day}`;
-    
-    const endYear = sevenDaysLater.getFullYear();
-    const endMonth = String(sevenDaysLater.getMonth() + 1).padStart(2, '0');
-    const endDay = String(sevenDaysLater.getDate()).padStart(2, '0');
-    const sevenDaysStr = `${endYear}-${endMonth}-${endDay}`;
 
-    // Helper function to check if a shift should be displayed
-    const isCurrentOrFutureShift = (dateStr, startTime, endTime) => {
-      const currentDate = new Date();
-      const shiftDate = new Date(dateStr);
-      
-      // Exclude any dates from previous years
-      if (shiftDate.getFullYear() < currentDate.getFullYear()) {
-        return false;
-      }
-      
-      // If it's a future date, always include
-      if (shiftDate > currentDate) return true;
-      
-      // If it's today, show the schedule until the end of the day (not when shift ends)
-      if (dateStr === todayStr) {
-        return true; // Always show today's schedule until day ends
-      }
-      
-      // For past dates, don't show them (only show today and future)
-      return false;
-    };
-
-    // Helper function to parse time (same as in TeamSchedule.jsx)
-    const parseTime = (timeStr) => {
-      const [time, period] = timeStr.split(" ");
-      let [hours, minutes] = time.split(":").map(Number);
-      
-      if (period === "PM" && hours !== 12) {
-        hours += 12;
-      } else if (period === "AM" && hours === 12) {
-        hours = 0;
-      }
-      
-      return hours * 60 + minutes;
-    };
-    
     scheduleData.forEach((schedule) => {
-      // Skip if no template (shouldn't happen with new structure)
-      if (!schedule.template) return;
-      
-      const template = schedule.template;
-      
-      // Always generate recurring dates based on the days array for rolling schedules
-      // This ensures schedules continue to update as weeks progress
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      
-      for (let dayOffset = 0; dayOffset <= 6; dayOffset++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + dayOffset);
+      // Handle template-based schedules with specific dates
+      if (schedule.specific_date) {
+        const scheduleDate = new Date(schedule.specific_date);
+        scheduleDate.setHours(0, 0, 0, 0);
         
-        const dayName = dayNames[date.getDay()];
-        
-        if (schedule.days.includes(dayName)) {
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          const dateStr = `${year}-${month}-${day}`;
-          
-          // Only show current/future shifts
-          if (!isCurrentOrFutureShift(dateStr, template.start_time, template.end_time)) return;
-          
-          const startTime = convertTo24Hour(template.start_time);
-          const endTime = convertTo24Hour(template.end_time);
+        // Only show if it's today or in the future
+        if (scheduleDate >= today) {
+          const startTime = convertTo24Hour(schedule.start_time);
+          const endTime = convertTo24Hour(schedule.end_time);
           
           calendarEvents.push({
-            title: template.shift_name,
-            start: `${dateStr}T${startTime}`,
-            end: `${dateStr}T${endTime}`,
-            backgroundColor: getShiftColor(template.shift_name),
-            borderColor: getShiftColor(template.shift_name),
+            title: schedule.shift_name,
+            start: `${schedule.specific_date}T${startTime}`,
+            end: `${schedule.specific_date}T${endTime}`,
+            backgroundColor: getShiftColor(schedule.shift_name),
+            borderColor: getShiftColor(schedule.shift_name),
             textColor: "white",
             extendedProps: {
-              shiftName: template.shift_name,
-              startTime: template.start_time,
-              endTime: template.end_time,
-              department: template.department,
-              dayName: dayName
+              shiftName: schedule.shift_name,
+              startTime: schedule.start_time,
+              endTime: schedule.end_time,
+              department: schedule.department,
+              specificDate: schedule.specific_date,
+              isSpecificDate: true
             }
           });
+        }
+        return;
+      }
+      
+      // Handle legacy template-based schedules
+      if (schedule.template) {
+        const template = schedule.template;
+        
+        // Check if this is a specific date schedule from template
+        if (template.specific_date) {
+          const scheduleDate = new Date(template.specific_date);
+          scheduleDate.setHours(0, 0, 0, 0);
+          
+          if (scheduleDate >= today) {
+            const startTime = convertTo24Hour(template.start_time);
+            const endTime = convertTo24Hour(template.end_time);
+            
+            calendarEvents.push({
+              title: template.shift_name,
+              start: `${template.specific_date}T${startTime}`,
+              end: `${template.specific_date}T${endTime}`,
+              backgroundColor: getShiftColor(template.shift_name),
+              borderColor: getShiftColor(template.shift_name),
+              textColor: "white",
+              extendedProps: {
+                shiftName: template.shift_name,
+                startTime: template.start_time,
+                endTime: template.end_time,
+                department: template.department,
+                specificDate: template.specific_date,
+                isSpecificDate: true
+              }
+            });
+          }
+          return;
+        }
+        
+        // Fallback for legacy day-based schedules
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        
+        for (let dayOffset = 0; dayOffset <= 6; dayOffset++) {
+          const date = new Date(today);
+          date.setDate(today.getDate() + dayOffset);
+          
+          const dayName = dayNames[date.getDay()];
+          
+          if (schedule.days && schedule.days.includes(dayName)) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+            
+            const startTime = convertTo24Hour(template.start_time);
+            const endTime = convertTo24Hour(template.end_time);
+            
+            calendarEvents.push({
+              title: template.shift_name,
+              start: `${dateStr}T${startTime}`,
+              end: `${dateStr}T${endTime}`,
+              backgroundColor: getShiftColor(template.shift_name),
+              borderColor: getShiftColor(template.shift_name),
+              textColor: "white",
+              extendedProps: {
+                shiftName: template.shift_name,
+                startTime: template.start_time,
+                endTime: template.end_time,
+                department: template.department,
+                dayName: dayName,
+                isLegacy: true
+              }
+            });
+          }
         }
       }
     });

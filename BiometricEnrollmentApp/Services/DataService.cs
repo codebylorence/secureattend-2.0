@@ -714,8 +714,44 @@ namespace BiometricEnrollmentApp.Services
                     cmd.Parameters.AddWithValue("$shift", schedule.Shift_Name ?? "");
                     cmd.Parameters.AddWithValue("$start", schedule.Start_Time ?? "");
                     cmd.Parameters.AddWithValue("$end", schedule.End_Time ?? "");
-                    cmd.Parameters.AddWithValue("$days", schedule.Days != null ? string.Join(",", schedule.Days) : "");
-                    cmd.Parameters.AddWithValue("$dates", schedule.Schedule_Dates != null ? System.Text.Json.JsonSerializer.Serialize(schedule.Schedule_Dates) : "");
+                    
+                    // Handle both old Days format and new Specific_Date format
+                    string daysValue = "";
+                    if (schedule.Days != null && schedule.Days.Count > 0)
+                    {
+                        daysValue = string.Join(",", schedule.Days);
+                    }
+                    else if (!string.IsNullOrEmpty(schedule.Specific_Date))
+                    {
+                        // Convert specific date to day of week for backward compatibility
+                        if (DateTime.TryParse(schedule.Specific_Date, out var specificDate))
+                        {
+                            daysValue = specificDate.DayOfWeek.ToString();
+                            LogHelper.Write($"📅 Converted specific date {schedule.Specific_Date} to day: {daysValue}");
+                        }
+                    }
+                    cmd.Parameters.AddWithValue("$days", daysValue);
+                    
+                    // Handle both old Schedule_Dates and new Specific_Date
+                    string scheduleDatesValue = "";
+                    if (schedule.Schedule_Dates != null)
+                    {
+                        scheduleDatesValue = System.Text.Json.JsonSerializer.Serialize(schedule.Schedule_Dates);
+                    }
+                    else if (!string.IsNullOrEmpty(schedule.Specific_Date))
+                    {
+                        // Create a schedule_dates structure for backward compatibility
+                        var scheduleDates = new Dictionary<string, List<string>>();
+                        if (DateTime.TryParse(schedule.Specific_Date, out var specificDate))
+                        {
+                            var dayOfWeek = specificDate.DayOfWeek.ToString();
+                            scheduleDates[dayOfWeek] = new List<string> { schedule.Specific_Date };
+                            scheduleDatesValue = System.Text.Json.JsonSerializer.Serialize(scheduleDates);
+                            LogHelper.Write($"📅 Created schedule_dates for {schedule.Specific_Date}: {scheduleDatesValue}");
+                        }
+                    }
+                    cmd.Parameters.AddWithValue("$dates", scheduleDatesValue);
+                    
                     cmd.Parameters.AddWithValue("$dept", schedule.Department ?? "");
                     cmd.Parameters.AddWithValue("$assigned", schedule.Assigned_By ?? "");
                     cmd.Parameters.AddWithValue("$created", schedule.Created_At?.ToString("yyyy-MM-dd HH:mm:ss") ?? "");
@@ -726,7 +762,7 @@ namespace BiometricEnrollmentApp.Services
                 }
 
                 transaction.Commit();
-                LogHelper.Write($"✅ Updated {count} employee schedule(s) in local database");
+                LogHelper.Write($"✅ Updated {count} employee schedule(s) in local database (new biometric API format)");
                 return count;
             }
             catch (Exception ex)

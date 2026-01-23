@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getEmployees,
+  getEmployeesForBiometric,
   addEmployee,
   deleteEmployee,
   editEmployee,
@@ -13,6 +14,7 @@ import {
 const router = express.Router();
 
 router.get("/", getEmployees);
+router.get("/biometric", getEmployeesForBiometric); // Specific endpoint for biometric app
 router.get("/fingerprint-status", getFingerprintStatus);
 router.get("/test-user-creation", testUserCreation);
 router.post("/", addEmployee);

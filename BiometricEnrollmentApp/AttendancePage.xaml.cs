@@ -23,6 +23,7 @@ namespace BiometricEnrollmentApp
         private System.Timers.Timer? _clockTimer;
         private System.Timers.Timer? _absentMarkingTimer;
         private System.Timers.Timer? _gridRefreshTimer;
+        private System.Timers.Timer? _scheduleAutoSyncTimer;
         
         // Double-tap prevention: Track recent scans per employee
         private static readonly Dictionary<string, DateTime> _lastScanTimes = new Dictionary<string, DateTime>();
@@ -72,6 +73,11 @@ namespace BiometricEnrollmentApp
             _absentMarkingTimer = new System.Timers.Timer(60 * 1000); // every minute
             _absentMarkingTimer.Elapsed += async (_, _) => await MarkAndSyncAbsentEmployeesAsync();
             _absentMarkingTimer.Start();
+            
+            // Start automatic schedule sync timer (every 10 minutes when WiFi is connected)
+            _scheduleAutoSyncTimer = new System.Timers.Timer(10 * 60 * 1000); // every 10 minutes
+            _scheduleAutoSyncTimer.Elapsed += async (_, _) => await AutoSyncSchedulesAsync();
+            _scheduleAutoSyncTimer.Start();
             
             // Run absent marking immediately on startup
             Task.Run(async () => await MarkAndSyncAbsentEmployeesAsync());
@@ -252,6 +258,8 @@ namespace BiometricEnrollmentApp
             _gridRefreshTimer?.Dispose();
             _absentMarkingTimer?.Stop();
             _absentMarkingTimer?.Dispose();
+            _scheduleAutoSyncTimer?.Stop();
+            _scheduleAutoSyncTimer?.Dispose();
             LogHelper.Write("📴 Attendance page unloaded - continuous scanning stopped");
         }
         
@@ -337,13 +345,61 @@ namespace BiometricEnrollmentApp
             }
         }
 
+        private async Task AutoSyncSchedulesAsync()
+        {
+            try
+            {
+                // Check if network is available
+                if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+                {
+                    LogHelper.Write("🌐 Network not available - skipping schedule auto-sync");
+                    return;
+                }
+
+                LogHelper.Write("🔄 Auto-syncing schedules from server...");
+                
+                var schedules = await _apiService.GetAllSchedulesAsync();
+                
+                if (schedules != null && schedules.Count > 0)
+                {
+                    int updated = _dataService.UpdateSchedules(schedules);
+                    LogHelper.Write($"✅ Auto-sync: Updated {updated} schedule(s) from server");
+                    
+                    // Update UI status briefly
+                    Dispatcher.Invoke(() => 
+                    {
+                        UpdateStatus($"🔄 Auto-synced {updated} schedule(s)");
+                        
+                        // Clear status after 3 seconds
+                        var clearTimer = new System.Timers.Timer(3000);
+                        clearTimer.Elapsed += (_, _) => 
+                        {
+                            Dispatcher.Invoke(() => UpdateStatus("Place finger to scan..."));
+                            clearTimer.Dispose();
+                        };
+                        clearTimer.AutoReset = false;
+                        clearTimer.Start();
+                    });
+                }
+                else
+                {
+                    LogHelper.Write("ℹ️ Auto-sync: No schedules found on server");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in auto-sync schedules: {ex.Message}");
+                // Don't show error to user for auto-sync failures
+            }
+        }
+
         private async Task SyncSchedulesFromServerAsync()
         {
             try
             {
                 LogHelper.Write("📥 Syncing schedules from server...");
                 
-                var schedules = await _apiService.GetPublishedSchedulesAsync();
+                var schedules = await _apiService.GetAllSchedulesAsync();
                 
                 if (schedules != null && schedules.Count > 0)
                 {
@@ -352,7 +408,7 @@ namespace BiometricEnrollmentApp
                 }
                 else
                 {
-                    LogHelper.Write("ℹ️ No published schedules found on server");
+                    LogHelper.Write("ℹ️ No schedules found on server");
                 }
             }
             catch (Exception ex)
@@ -579,58 +635,25 @@ namespace BiometricEnrollmentApp
 
                         if (openSessionId > 0)
                         {
-<<<<<<< HEAD
-                            // Found open session - this is a clock-out request
-                            bool shouldClockOut = true; // Default to true if confirmation is disabled
-=======
                             LogHelper.Write($"🔍 Found open session {openSessionId} for {matchedEmployeeId} - processing clock-out");
                             
                             // Found open session - this is a clock-out request
->>>>>>> clockout-confirmation
+
                             DateTime clockInTime = DateTime.MinValue;
                             
                             // Get session details
                             var sessions = _data_service_get().GetTodaySessions();
                             var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
                             
-<<<<<<< HEAD
-                            if (session != null && !string.IsNullOrEmpty(session.ClockIn))
-                            {
-                                clockInTime = DateTime.Parse(session.ClockIn);
-=======
                             if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                             {
                                 clockInTime = DateTime.Parse(session.ClockIn);
                                 LogHelper.Write($"🔍 Session found - Clock-in: {clockInTime}, checking confirmation setting...");
->>>>>>> clockout-confirmation
+
                                 
                                 // Check if confirmation is enabled
                                 if (IsClockOutConfirmationEnabled())
                                 {
-<<<<<<< HEAD
-                                    // Show confirmation dialog on UI thread
-                                    Dispatcher.Invoke(() =>
-                                    {
-                                        var confirmDialog = new ConfirmationDialog();
-                                        confirmDialog.SetEmployeeInfo(matchedName, matchedEmployeeId, clockInTime);
-                                        
-                                        var result = confirmDialog.ShowDialog();
-                                        shouldClockOut = result == true && confirmDialog.IsConfirmed;
-                                        
-                                        if (!shouldClockOut)
-                                        {
-                                            UpdateStatus("❌ Clock-out cancelled by user");
-                                            ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Cancelled", now);
-                                        }
-                                    });
-                                }
-                                
-                                if (!shouldClockOut)
-                                {
-                                    // User cancelled, don't process clock-out
-                                    Thread.Sleep(2000);
-                                    return;
-=======
                                     LogHelper.Write("🔍 Clock-out confirmation is ENABLED - showing dialog");
                                     
                                     // Show confirmation dialog on UI thread and wait for result
@@ -725,23 +748,17 @@ namespace BiometricEnrollmentApp
                                 else
                                 {
                                     LogHelper.Write("🔍 Clock-out confirmation is DISABLED - proceeding directly");
->>>>>>> clockout-confirmation
+
                                 }
                             }
                             
                             // User confirmed or confirmation disabled - proceed with clock-out
-<<<<<<< HEAD
-                            double hours = _data_service_get().SaveClockOut(openSessionId, now);
-                            
-                            // Send clock-out to server
-                            if (session != null && !string.IsNullOrEmpty(session.ClockIn))
-=======
                             LogHelper.Write("💾 Saving clock-out to database...");
                             double hours = _data_service_get().SaveClockOut(openSessionId, now);
                             
                             // Send clock-out to server
                             if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
->>>>>>> clockout-confirmation
+
                             {
                                 // Keep the original status (Present or Late) when clocking out
                                 string finalStatus = session.Status; // Will be "Present" or "Late"
@@ -936,21 +953,14 @@ namespace BiometricEnrollmentApp
         {
             if (_clockOutConfirmationEnabled.HasValue)
             {
-<<<<<<< HEAD
-=======
                 LogHelper.Write($"📋 Using cached clock-out confirmation setting: {_clockOutConfirmationEnabled.Value}");
->>>>>>> clockout-confirmation
+
                 return _clockOutConfirmationEnabled.Value;
             }
 
             try
             {
                 var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
-<<<<<<< HEAD
-                if (System.IO.File.Exists(configPath))
-                {
-                    var configJson = System.IO.File.ReadAllText(configPath);
-=======
                 LogHelper.Write($"📋 Reading config from: {configPath}");
                 
                 if (System.IO.File.Exists(configPath))
@@ -958,18 +968,15 @@ namespace BiometricEnrollmentApp
                     var configJson = System.IO.File.ReadAllText(configPath);
                     LogHelper.Write($"📋 Config JSON: {configJson}");
                     
->>>>>>> clockout-confirmation
+
                     var config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
                     { 
                         PropertyNameCaseInsensitive = true 
                     });
                     
                     _clockOutConfirmationEnabled = config?.ClockOutConfirmation ?? true; // Default to true
-<<<<<<< HEAD
-                    LogHelper.Write($"📋 Clock-out confirmation setting: {_clockOutConfirmationEnabled}");
-=======
                     LogHelper.Write($"📋 Clock-out confirmation setting loaded: {_clockOutConfirmationEnabled}");
->>>>>>> clockout-confirmation
+
                 }
                 else
                 {
@@ -986,8 +993,6 @@ namespace BiometricEnrollmentApp
             return _clockOutConfirmationEnabled.Value;
         }
 
-<<<<<<< HEAD
-=======
         private void TestClockOutBtn_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -1179,7 +1184,7 @@ namespace BiometricEnrollmentApp
             }
         }
 
->>>>>>> clockout-confirmation
+
         private void UpdateStatus(string message)
         {
             try { StatusTextBlock.Text = message; } catch { }
@@ -1603,38 +1608,21 @@ namespace BiometricEnrollmentApp
                 if (openSessionId > 0)
                 {
                     // Found open session - this is a clock-out request
-<<<<<<< HEAD
-                    bool shouldClockOut = true; // Default to true if confirmation is disabled
-=======
->>>>>>> clockout-confirmation
+
                     DateTime clockInTime = DateTime.MinValue;
                     
                     // Get session details
                     var sessions = _data_service_get().GetTodaySessions();
                     var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
                     
-<<<<<<< HEAD
-                    if (session != null && !string.IsNullOrEmpty(session.ClockIn))
-=======
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
->>>>>>> clockout-confirmation
+
                     {
                         clockInTime = DateTime.Parse(session.ClockIn);
                         
                         // Check if confirmation is enabled
                         if (IsClockOutConfirmationEnabled())
                         {
-<<<<<<< HEAD
-                            // Show confirmation dialog on UI thread
-                            Dispatcher.Invoke(() =>
-                            {
-                                var confirmDialog = new ConfirmationDialog();
-                                confirmDialog.SetEmployeeInfo(matchedName, matchedEmployeeId, clockInTime);
-                                
-                                var result = confirmDialog.ShowDialog();
-                                shouldClockOut = result == true && confirmDialog.IsConfirmed;
-                                
-=======
                             // Show confirmation dialog on UI thread and wait for result
                             bool shouldClockOut = false;
                             Dispatcher.Invoke(() =>
@@ -1666,22 +1654,12 @@ namespace BiometricEnrollmentApp
                                 
                                 LogHelper.Write($"🔍 CaptureIdentifyAndProcess dialog result: {result}, IsConfirmed: {confirmDialog.IsConfirmed}");
                                 
->>>>>>> clockout-confirmation
+
                                 if (!shouldClockOut)
                                 {
                                     window.UpdateStatus("❌ Clock-out cancelled by user");
                                 }
                             });
-<<<<<<< HEAD
-                        }
-                        
-                        if (!shouldClockOut)
-                        {
-                            // User cancelled, don't process clock-out
-                            Thread.Sleep(2000);
-                            Dispatcher.Invoke(() => window.Close());
-                            return;
-=======
                             
                             if (!shouldClockOut)
                             {
@@ -1690,7 +1668,7 @@ namespace BiometricEnrollmentApp
                                 Dispatcher.Invoke(() => window.Close());
                                 return;
                             }
->>>>>>> clockout-confirmation
+
                         }
                     }
                     
@@ -1698,11 +1676,8 @@ namespace BiometricEnrollmentApp
                     double hours = _data_service_get().SaveClockOut(openSessionId, now);
                     
                     // Send clock-out to server
-<<<<<<< HEAD
-                    if (session != null && !string.IsNullOrEmpty(session.ClockIn))
-=======
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
->>>>>>> clockout-confirmation
+
                     {
                         // Keep the original status (Present or Late) when clocking out
                         string finalStatus = session.Status;
@@ -1946,12 +1921,12 @@ namespace BiometricEnrollmentApp
             {
                 UpdateStatus("📥 Fetching schedules from server...");
 
-                var schedules = await _apiService.GetPublishedSchedulesAsync();
+                var schedules = await _apiService.GetAllSchedulesAsync();
 
                 if (schedules == null || schedules.Count == 0)
                 {
                     UpdateStatus("⚠️ No schedules found on server");
-                    MessageBox.Show("No published schedules found on the server.", "No Schedules", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("No schedules found on the server.", "No Schedules", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
 
@@ -1999,18 +1974,5 @@ namespace BiometricEnrollmentApp
         }
 
 
-    }
-
-    public class SystemConfig
-    {
-        public string? SystemName { get; set; }
-        public string? PrimaryColor { get; set; }
-        public string? SecondaryColor { get; set; }
-        public string? Logo { get; set; }
-        public string? CompanyName { get; set; }
-        public string? Timezone { get; set; }
-        public int ToolboxMeetingMinutes { get; set; }
-        public bool ClockOutConfirmation { get; set; } = true;
-        public string? LastUpdated { get; set; }
     }
 }

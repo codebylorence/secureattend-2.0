@@ -1,20 +1,19 @@
 import { useState, useEffect, useMemo } from "react";
 import { 
   MdEdit, MdDelete, MdSave, MdContentCopy, MdClose, MdCheck, 
-  MdPlayArrow, MdAdd, MdLightbulb, MdSupervisorAccount, MdPerson 
+  MdPlayArrow, MdAdd, MdLightbulb 
 } from "react-icons/md";
 import { toast } from 'react-toastify';
 
 // API Imports
 import { 
   getTemplates, deleteTemplate, updateTemplate, createTemplate, 
-  publishSchedules, assignSchedule, getEmployeeSchedules, deleteEmployeeSchedule 
+  publishSchedules 
 } from "../api/ScheduleApi";
 import { 
   getShiftTemplates, createShiftTemplate, updateShiftTemplate, deleteShiftTemplate 
 } from "../api/ShiftTemplateApi";
 import { fetchDepartments } from "../api/DepartmentApi";
-import { fetchEmployees } from "../api/EmployeeApi";
 import { confirmAction } from "../utils/confirmToast.jsx";
 
 // ==========================================
@@ -122,8 +121,6 @@ const ScheduleCard = ({ schedule, day, onEdit, onDelete }) => {
 function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose, onAddDepartment, onEdit, onDeleteFromDay }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [localSchedules, setLocalSchedules] = useState(schedules);
-  const [supervisors, setSupervisors] = useState([]);
-  const [supervisorSchedules, setSupervisorSchedules] = useState([]);
   
   const [formData, setFormData] = useState({
     departments: [],
@@ -134,88 +131,6 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
   });
 
   useEffect(() => { setLocalSchedules(schedules); }, [schedules]);
-
-  // Fetch Supervisor Data
-  useEffect(() => {
-    const loadSupervisors = async () => {
-      try {
-        const [allEmployees, allSchedules] = await Promise.all([fetchEmployees(), getEmployeeSchedules()]);
-        
-        const supervisorList = allEmployees.filter(emp => emp.role === 'supervisor' || emp.role === 'team_leader');
-        setSupervisors(supervisorList);
-
-        const svSchedules = allSchedules.filter(schedule => {
-          const emp = allEmployees.find(e => e.employee_id === schedule.employee_id);
-          return emp && (emp.role === 'supervisor' || emp.role === 'team_leader');
-        });
-        setSupervisorSchedules(svSchedules);
-      } catch (error) {
-        console.error("Error loading supervisor data:", error);
-      }
-    };
-    loadSupervisors();
-  }, []);
-
-  const refreshSupervisorSchedules = async () => {
-    try {
-      const allSchedules = await getEmployeeSchedules();
-      const allEmployees = await fetchEmployees();
-      const svSchedules = allSchedules.filter(schedule => {
-        const emp = allEmployees.find(e => e.employee_id === schedule.employee_id);
-        return emp && (emp.role === 'supervisor' || emp.role === 'team_leader');
-      });
-      setSupervisorSchedules(svSchedules);
-    } catch (err) { console.error(err); }
-  };
-
-  // Supervisor Logic
-  const assignSupervisorToShift = async (shiftName, startTime, endTime, supervisorId) => {
-    try {
-      const templateData = {
-        shift_name: shiftName, start_time: startTime, end_time: endTime,
-        days: [day], department: "Supervisor", member_limit: 1, publish_status: "published"
-      };
-      const template = await createTemplate(templateData);
-      if (template) {
-        await assignSchedule({
-          employee_id: supervisorId, template_id: template.id, days: [day], assigned_by: "admin"
-        });
-        await refreshSupervisorSchedules();
-        toast.success("Supervisor assigned!");
-      }
-    } catch (error) {
-      console.error("Error assigning supervisor:", error);
-      toast.error("Failed to assign supervisor");
-    }
-  };
-
-  const removeSupervisorFromShift = async (scheduleId, name) => {
-    try {
-      await deleteEmployeeSchedule(scheduleId);
-      await refreshSupervisorSchedules();
-      toast.success(`${name} removed!`);
-    } catch (error) {
-      console.error("Error removing supervisor:", error);
-      toast.error("Failed to remove supervisor");
-    }
-  };
-
-  const getSupervisorInfo = (shiftName, start, end) => {
-    const schedule = supervisorSchedules.find(s => 
-      s.template.shift_name === shiftName && s.template.start_time === start && 
-      s.template.end_time === end && s.days.includes(day)
-    );
-    if (!schedule) return null;
-    const supervisor = supervisors.find(s => s.employee_id === schedule.employee_id);
-    return { schedule, supervisor };
-  };
-
-  const getAvailableSupervisors = () => {
-    const assignedIds = supervisorSchedules
-      .filter(s => s.days.includes(day))
-      .map(s => s.employee_id);
-    return supervisors.filter(s => !assignedIds.includes(s.employee_id));
-  };
 
   // Form Handlers
   const handleShiftTemplateChange = (shiftName) => {
@@ -306,56 +221,12 @@ function DayScheduleModal({ day, schedules, departments, shiftTemplates, onClose
           ) : (
             Object.entries(groupedSchedules).map(([shiftName, shiftSchedules]) => {
               const { start_time, end_time } = shiftSchedules[0];
-              const supervisorInfo = getSupervisorInfo(shiftName, start_time, end_time);
-              const availSupervisors = getAvailableSupervisors();
 
               return (
                 <div key={shiftName} className="border border-gray-300 rounded-lg overflow-hidden">
                   <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 flex justify-between">
                     <h4 className="font-semibold text-lg">{shiftName}</h4>
                     <span className="text-sm opacity-90">{start_time} - {end_time}</span>
-                  </div>
-
-                  {/* Supervisor Bar */}
-                  <div className="bg-purple-50 border-b border-purple-200 p-3 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <MdSupervisorAccount size={20} className="text-purple-600" />
-                      <span className="font-semibold text-purple-800">Supervisor:</span>
-                      {supervisorInfo ? (
-                        <div className="flex items-center gap-2 bg-white rounded px-2 py-1 border border-purple-200">
-                          <MdPerson className="text-purple-600" />
-                          <span className="text-purple-900 font-semibold">
-                            {supervisorInfo.supervisor?.fullname || supervisorInfo.schedule.employee_id}
-                          </span>
-                          <button 
-                            onClick={() => confirmAction(`Remove supervisor?`, () => removeSupervisorFromShift(supervisorInfo.schedule.id, supervisorInfo.supervisor?.fullname))}
-                            className="text-red-600 hover:bg-red-100 p-1 rounded"
-                          >
-                            <MdDelete size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500 italic bg-white px-2 py-1 rounded text-sm">Not assigned</span>
-                          {availSupervisors.length > 0 && (
-                            <select 
-                              className="text-sm border border-purple-300 rounded px-2 py-1"
-                              onChange={(e) => {
-                                if(e.target.value) {
-                                  assignSupervisorToShift(shiftName, start_time, end_time, e.target.value);
-                                  e.target.value = "";
-                                }
-                              }}
-                            >
-                              <option value="">Assign Supervisor</option>
-                              {availSupervisors.map(s => (
-                                <option key={s.employee_id} value={s.employee_id}>{s.fullname || `${s.firstname} ${s.lastname}`}</option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   </div>
 
                   {/* Zones */}
@@ -700,19 +571,19 @@ export default function WeeklyTemplateView() {
       {/* Instructions */}
       <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-6">
         <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-          <MdLightbulb size={20} /> How to Create Schedules
+          <MdLightbulb size={20} /> How to Create Zone Schedules
         </h3>
         <ul className="text-sm text-primary-800 list-disc list-inside">
-          <li>Click on any day (Monday-Sunday) to open the schedule manager.</li>
+          <li>Click on any day (Monday-Sunday) to open the zone schedule manager.</li>
           <li>Add departments to that specific day with shift details.</li>
-          <li>Edit or delete schedules directly from the day view.</li>
+          <li>Edit or delete zone schedules directly from the day view.</li>
         </ul>
       </div>
 
       {/* Weekly View Calendar */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-3">
-          <h2 className="text-xl font-semibold text-primary">Weekly Schedule Overview</h2>
+          <h2 className="text-xl font-semibold text-primary">Weekly Zone Schedule Overview</h2>
           <div className="flex gap-2">
             <button onClick={handlePublishSchedules} className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded hover:bg-primary-700 font-semibold">
               <MdCheck /> Publish Schedule

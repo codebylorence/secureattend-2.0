@@ -68,9 +68,6 @@
                     Margin="0,0,10,0"/>
             <Button x:Name="ExportBtn" Content="Export" 
                     Click="ExportBtn_Click" 
-                    Margin="0,0,10,0"/>
-            <Button x:Name="SyncSchedulesBtn" Content="Sync Schedules" 
-                    Click="SyncSchedulesBtn_Click" 
                     Style="{StaticResource PrimaryButton}"/>
         </StackPanel>
 

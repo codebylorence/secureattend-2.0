@@ -11,6 +11,15 @@ export const getTemplates = async () => {
   // Add cache-busting parameter to ensure fresh data
   const timestamp = new Date().getTime();
   const response = await api.get(`${TEMPLATE_API_URL}?_t=${timestamp}`);
+  console.log(`🌐 API: Fetched ${response.data.length} templates with timestamp ${timestamp}`);
+  return response.data;
+};
+
+export const getPublishedTemplates = async () => {
+  // For backward compatibility, use the same endpoint as getTemplates
+  // since there's no more published vs draft distinction
+  const timestamp = new Date().getTime();
+  const response = await api.get(`${TEMPLATE_API_URL}?_t=${timestamp}`);
   return response.data;
 };
 
@@ -31,6 +40,22 @@ export const updateTemplate = async (id, templateData) => {
 
 export const deleteTemplate = async (id) => {
   const response = await api.delete(`${TEMPLATE_API_URL}/${id}`);
+  return response.data;
+};
+
+// POST /api/templates/assign-employees - Assign employees to a template
+export const assignEmployees = async (assignmentData) => {
+  console.log('🌐 API: Assigning employees:', assignmentData);
+  const response = await api.post(`${TEMPLATE_API_URL}/assign-employees`, assignmentData);
+  console.log('✅ API: Assignment response:', response.data);
+  return response.data;
+};
+
+// DELETE /api/templates/:id/employees - Remove employees from a template
+export const removeEmployeesFromTemplate = async (templateId, employeeIds) => {
+  const response = await api.delete(`${TEMPLATE_API_URL}/${templateId}/employees`, {
+    data: { employee_ids: employeeIds }
+  });
   return response.data;
 };
 

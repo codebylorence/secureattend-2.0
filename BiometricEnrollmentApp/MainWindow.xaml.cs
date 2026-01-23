@@ -10,18 +10,12 @@ namespace BiometricEnrollmentApp
     {
         private readonly ZKTecoService _zkService = new();
         private readonly ApiService _apiService = new();
-        private readonly NotificationService _notificationService;
         private DispatcherTimer? _clockTimer;
         private bool _isAdminMode = false;
 
         public MainWindow()
         {
             InitializeComponent();
-            
-            // Initialize notification service
-            _notificationService = new NotificationService(_apiService);
-            _notificationService.NotificationReceived += OnNotificationReceived;
-            
             InitializeApp();
         }
 
@@ -39,8 +33,7 @@ namespace BiometricEnrollmentApp
             // Update clock immediately
             UpdateClock();
             
-            // Start notification monitoring
-            _notificationService.StartMonitoring();
+            // Schedule notifications removed - schedules now sync automatically
         }
 
         private void ClockTimer_Tick(object? sender, EventArgs e)
@@ -157,69 +150,21 @@ namespace BiometricEnrollmentApp
         protected override void OnClosed(EventArgs e)
         {
             _clockTimer?.Stop();
-            _notificationService?.StopMonitoring();
+            // Notification service removed
             base.OnClosed(e);
         }
 
+        // Notification functionality removed - schedules now sync automatically
+        /*
         private void OnNotificationReceived(object? sender, NotificationEventArgs e)
         {
-            try
-            {
-                var notification = e.Notification;
-                LogHelper.Write($"📢 New schedule notification received: {notification.Message}");
-                
-                // Update notification indicator
-                UpdateNotificationIndicator();
-                
-                // Show alert message
-                var result = MessageBox.Show(
-                    $"Schedule Update Alert!\n\n{notification.Message}\n\nCreated by: {notification.Created_By ?? "System"}\nTime: {notification.CreatedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Unknown"}\n\nWould you like to acknowledge this notification?",
-                    "Schedule Update",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information
-                );
-
-                // If user acknowledges, mark as read
-                if (result == MessageBoxResult.Yes)
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        await _notificationService.AcknowledgeNotificationAsync(notification.Id);
-                        
-                        // Update indicator after acknowledgment
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            UpdateNotificationIndicator();
-                        });
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"💥 Error handling notification: {ex.Message}");
-            }
+            // This functionality has been removed
         }
 
         private void UpdateNotificationIndicator()
         {
-            try
-            {
-                var count = _notificationService.GetNotificationCount();
-                
-                if (count > 0)
-                {
-                    NotificationIndicator.Visibility = Visibility.Visible;
-                    NotificationCount.Text = count.ToString();
-                }
-                else
-                {
-                    NotificationIndicator.Visibility = Visibility.Collapsed;
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"💥 Error updating notification indicator: {ex.Message}");
-            }
+            // This functionality has been removed
         }
+        */
     }
 }

@@ -24,6 +24,7 @@ import RegistrationStatus from "../pages/RegistrationStatus";
 import RegistrationManagement from "../pages/RegistrationManagement";
 import CheckRegistrationStatus from "../pages/CheckRegistrationStatus";
 import PositionManagement from "../pages/PositionManagementNew";
+import RoleScheduling from "../pages/RoleScheduling";
 import AttendanceReports from "../pages/AttendanceReports";
 import EmployeeProfile from "../pages/EmployeeProfile";
 import SuperAdminProfile from "../pages/SuperAdminProfile";
@@ -93,6 +94,7 @@ export default function AppRouter() {
             <Route path="/admin/employees" element={<Employees />} />
             <Route path="/admin/employee/:employeeId" element={<EmployeeProfile />} />
             <Route path="/admin/schedule" element={<ManageSchedule />} />
+            <Route path="/admin/role-schedule" element={<RoleScheduling />} />
             <Route path="/admin/view-schedules" element={<ViewSchedules />} />
             <Route path="/admin/attendance" element={<EmployeeAttendance />} />
             <Route path="/admin/departments" element={<Departments />} />

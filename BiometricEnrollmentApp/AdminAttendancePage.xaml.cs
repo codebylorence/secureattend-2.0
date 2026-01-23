@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using BiometricEnrollmentApp.Services;
 
 namespace BiometricEnrollmentApp
@@ -12,6 +13,7 @@ namespace BiometricEnrollmentApp
         private readonly ZKTecoService _zkService;
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
+        private readonly DispatcherTimer _autoSyncTimer;
 
         public AdminAttendancePage(ZKTecoService zkService)
         {
@@ -20,12 +22,62 @@ namespace BiometricEnrollmentApp
             _dataService = new DataService();
             _apiService = new ApiService();
 
+            // Initialize auto-sync timer (every 10 minutes)
+            _autoSyncTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(10)
+            };
+            _autoSyncTimer.Tick += AutoSyncTimer_Tick;
+
             Loaded += AdminAttendancePage_Loaded;
+            Unloaded += AdminAttendancePage_Unloaded;
         }
 
-        private void AdminAttendancePage_Loaded(object sender, RoutedEventArgs e)
+        private async void AdminAttendancePage_Loaded(object sender, RoutedEventArgs e)
         {
             RefreshAttendanceData();
+            
+            // Start automatic schedule syncing
+            await AutoSyncSchedules();
+            _autoSyncTimer.Start();
+            LogHelper.Write("🔄 Started automatic schedule sync (every 10 minutes)");
+        }
+
+        private void AdminAttendancePage_Unloaded(object sender, RoutedEventArgs e)
+        {
+            // Stop the timer when page is unloaded
+            _autoSyncTimer?.Stop();
+            LogHelper.Write("⏹️ Stopped automatic schedule sync");
+        }
+
+        private async void AutoSyncTimer_Tick(object sender, EventArgs e)
+        {
+            await AutoSyncSchedules();
+        }
+
+        private async Task AutoSyncSchedules()
+        {
+            try
+            {
+                LogHelper.Write("🔄 Auto-syncing schedules from server...");
+                
+                var schedules = await _apiService.GetAllSchedulesAsync();
+
+                if (schedules != null && schedules.Count > 0)
+                {
+                    int updatedCount = _dataService.UpdateSchedules(schedules);
+                    LogHelper.Write($"✅ Auto-sync: Updated {updatedCount} schedule(s) from server");
+                }
+                else
+                {
+                    LogHelper.Write("ℹ️ Auto-sync: No schedules found on server");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Auto-sync failed: {ex.Message}");
+                // Don't show message box for auto-sync failures to avoid interrupting user
+            }
         }
 
         private void RefreshBtn_Click(object sender, RoutedEventArgs e)
@@ -43,38 +95,6 @@ namespace BiometricEnrollmentApp
             catch (Exception ex)
             {
                 MessageBox.Show($"Export error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private async void SyncSchedulesBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                SyncSchedulesBtn.IsEnabled = false;
-                SyncSchedulesBtn.Content = "⏳ Syncing...";
-
-                var schedules = await _apiService.GetPublishedSchedulesAsync();
-
-                if (schedules == null || schedules.Count == 0)
-                {
-                    MessageBox.Show("No published schedules found on the server.", "No Schedules", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-
-                int updatedCount = _dataService.UpdateSchedules(schedules);
-                MessageBox.Show($"Successfully updated {updatedCount} employee schedule(s) from the server.", "Sync Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-                
-                LogHelper.Write($"✅ Updated {updatedCount} schedules from server");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error syncing schedules: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                LogHelper.Write($"💥 Error syncing schedules: {ex.Message}");
-            }
-            finally
-            {
-                SyncSchedulesBtn.IsEnabled = true;
-                SyncSchedulesBtn.Content = "📅 Sync Schedules";
             }
         }
 

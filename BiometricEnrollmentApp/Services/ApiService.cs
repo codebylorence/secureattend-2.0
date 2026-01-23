@@ -168,12 +168,12 @@ namespace BiometricEnrollmentApp.Services
             return false;
         }
 
-        public async Task<List<EmployeeSchedule>?> GetPublishedSchedulesAsync()
+        public async Task<List<EmployeeSchedule>?> GetAllSchedulesAsync()
         {
             try
             {
-                LogHelper.Write("📥 Fetching published schedules from server...");
-                var response = await _httpClient.GetAsync($"{_baseUrl}/api/employee-schedules/published");
+                LogHelper.Write("📥 Fetching all schedules from server (biometric endpoint)...");
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/schedules/biometric");
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -183,18 +183,18 @@ namespace BiometricEnrollmentApp.Services
                         PropertyNameCaseInsensitive = true 
                     });
                     
-                    LogHelper.Write($"✅ Retrieved {schedules?.Count ?? 0} published schedule(s)");
+                    LogHelper.Write($"✅ Retrieved {schedules?.Count ?? 0} schedule(s) from biometric endpoint");
                     return schedules;
                 }
                 else
                 {
-                    LogHelper.Write($"⚠️ Failed to get schedules: {response.StatusCode}");
+                    LogHelper.Write($"⚠️ Failed to get schedules from biometric endpoint: {response.StatusCode}");
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error getting schedules: {ex.Message}");
+                LogHelper.Write($"💥 Error getting schedules from biometric endpoint: {ex.Message}");
                 return null;
             }
         }
@@ -295,90 +295,6 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
-        public async Task<List<ScheduleNotification>?> GetScheduleNotificationsAsync()
-        {
-            try
-            {
-                LogHelper.Write("📥 Fetching schedule notifications from server...");
-                var response = await _httpClient.GetAsync($"{_baseUrl}/api/schedule-notifications/unacknowledged");
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var json = await response.Content.ReadAsStringAsync();
-                    var result = JsonSerializer.Deserialize<ScheduleNotificationResponse>(json, new JsonSerializerOptions 
-                    { 
-                        PropertyNameCaseInsensitive = true 
-                    });
-                    
-                    LogHelper.Write($"✅ Retrieved {result?.Notifications?.Count ?? 0} schedule notification(s)");
-                    return result?.Notifications;
-                }
-                else
-                {
-                    LogHelper.Write($"⚠️ Failed to get schedule notifications: {response.StatusCode}");
-                    return null;
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"💥 Error getting schedule notifications: {ex.Message}");
-                return null;
-            }
-        }
-
-        public async Task<bool> AcknowledgeNotificationAsync(int notificationId)
-        {
-            try
-            {
-                LogHelper.Write($"📤 Acknowledging notification {notificationId}");
-                
-                var response = await _httpClient.PutAsync($"{_baseUrl}/api/schedule-notifications/{notificationId}/acknowledge", null);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    LogHelper.Write($"✅ Notification {notificationId} acknowledged successfully");
-                    return true;
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    LogHelper.Write($"❌ Failed to acknowledge notification: {response.StatusCode} - {errorContent}");
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"💥 Error acknowledging notification: {ex.Message}");
-                return false;
-            }
-        }
-
-        public async Task<bool> AcknowledgeAllNotificationsAsync()
-        {
-            try
-            {
-                LogHelper.Write("📤 Acknowledging all notifications");
-                
-                var response = await _httpClient.PutAsync($"{_baseUrl}/api/schedule-notifications/acknowledge-all", null);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    LogHelper.Write("✅ All notifications acknowledged successfully");
-                    return true;
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    LogHelper.Write($"❌ Failed to acknowledge all notifications: {response.StatusCode} - {errorContent}");
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"💥 Error acknowledging all notifications: {ex.Message}");
-                return false;
-            }
-        }
     }
 
     public class EmployeeDetails
@@ -412,11 +328,16 @@ namespace BiometricEnrollmentApp.Services
         public string? Start_Time { get; set; }
         public string? End_Time { get; set; }
         public List<string>? Days { get; set; }
-        public Dictionary<string, List<string>>? Schedule_Dates { get; set; }
+        public string? Specific_Date { get; set; }
         public string? Department { get; set; }
+        public string? Employee_Name { get; set; }
         public string? Assigned_By { get; set; }
+        public string? Assigned_Date { get; set; }
         public DateTime? Created_At { get; set; }
         public DateTime? Updated_At { get; set; }
+        
+        // Legacy fields for backward compatibility
+        public Dictionary<string, List<string>>? Schedule_Dates { get; set; }
     }
 
     public class OvertimeAssignment
@@ -426,25 +347,6 @@ namespace BiometricEnrollmentApp.Services
         public double EstimatedHours { get; set; }
         public DateTime AssignedDate { get; set; }
         public string? AssignedBy { get; set; }
-    }
-
-    public class ScheduleNotification
-    {
-        public int Id { get; set; }
-        public string? Message { get; set; }
-        public string? Type { get; set; }
-        public string? Details { get; set; }
-        public bool Is_Acknowledged { get; set; }
-        public string? Created_By { get; set; }
-        public DateTime? CreatedAt { get; set; }
-        public DateTime? Acknowledged_At { get; set; }
-    }
-
-    public class ScheduleNotificationResponse
-    {
-        public bool Success { get; set; }
-        public List<ScheduleNotification>? Notifications { get; set; }
-        public int Count { get; set; }
     }
 
     public class DoubleTapResponse

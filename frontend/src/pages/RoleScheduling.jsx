@@ -1,39 +1,38 @@
 import { useState, useEffect } from "react";
-import CalendarScheduleView from "../components/CalendarScheduleView";
+import CalendarRoleScheduleView from "../components/CalendarRoleScheduleView";
 import { useSocket } from "../context/SocketContext";
 
-export default function ManageSchedule() {
+export default function RoleScheduling() {
   const [refreshKey, setRefreshKey] = useState(0);
   const { socket } = useSocket();
   
   // Get user role from localStorage
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userRole = user.role;
-  const isSupervisor = userRole === "supervisor";
 
   useEffect(() => {
     if (!socket) return;
 
     // Listen for real-time updates
-    socket.on('template:created', () => {
-      console.log('📡 Template created - refreshing...');
+    socket.on('schedule:assigned', () => {
+      console.log('📡 Role assignment created - refreshing...');
       setRefreshKey(prev => prev + 1);
     });
 
-    socket.on('template:updated', () => {
-      console.log('📡 Template updated - refreshing...');
+    socket.on('schedule:updated', () => {
+      console.log('📡 Role assignment updated - refreshing...');
       setRefreshKey(prev => prev + 1);
     });
 
-    socket.on('template:deleted', () => {
-      console.log('📡 Template deleted - refreshing...');
+    socket.on('schedule:deleted', () => {
+      console.log('📡 Role assignment deleted - refreshing...');
       setRefreshKey(prev => prev + 1);
     });
 
     return () => {
-      socket.off('template:created');
-      socket.off('template:updated');
-      socket.off('template:deleted');
+      socket.off('schedule:assigned');
+      socket.off('schedule:updated');
+      socket.off('schedule:deleted');
     };
   }, [socket]);
 
@@ -42,15 +41,15 @@ export default function ManageSchedule() {
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
         <h1 className="text-heading text-[21px] font-semibold">
-          Zone-Based Scheduling
+          Role-Based Scheduling
         </h1>
         <p className="text-sm text-gray-600 mt-1">
-          Click on any date to create zone schedules. Manage department shifts with an interactive calendar.
+          Click on any date to assign supervisors and warehouse admins. Manage role-based schedules with an interactive calendar.
         </p>
       </div>
 
-      {/* Calendar Schedule View */}
-      <CalendarScheduleView key={`calendar-${refreshKey}`} />
+      {/* Calendar Role Schedule View */}
+      <CalendarRoleScheduleView key={`role-calendar-${refreshKey}`} />
     </div>
   );
 }

@@ -330,20 +330,6 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write($"⚠️ Could not clear configuration cache: {ex.Message}");
             }
         }
-    }
-
-    public class SystemConfig
-    {
-        public string? SystemName { get; set; }
-        public string? PrimaryColor { get; set; }
-        public string? SecondaryColor { get; set; }
-        public string? Logo { get; set; }
-        public string? CompanyName { get; set; }
-        public string? Timezone { get; set; }
-        public int ToolboxMeetingMinutes { get; set; }
-        public bool ClockOutConfirmation { get; set; } = true;
-        public string? LastUpdated { get; set; }
-    }
 
         private void BackupDbBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -394,179 +380,30 @@ namespace BiometricEnrollmentApp
             }
         }
 
-        private async void CheckNotificationsBtn_Click(object sender, RoutedEventArgs e)
+        // Schedule notification functionality removed - schedules now sync automatically
+        private void CheckNotificationsBtn_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                CheckNotificationsBtn.IsEnabled = false;
-                CheckNotificationsBtn.Content = "⏳ Checking...";
-                NotificationStatusText.Text = "Checking for notifications...";
-
-                var notifications = await _apiService.GetScheduleNotificationsAsync();
-                
-                if (notifications != null && notifications.Count > 0)
-                {
-                    NotificationStatusText.Text = $"Found {notifications.Count} unacknowledged notification(s)";
-                    NotificationStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Orange);
-                    
-                    // Show notifications in a message box
-                    var message = "Schedule Notifications:\n\n";
-                    foreach (var notification in notifications)
-                    {
-                        message += $"• {notification.Message}\n";
-                        message += $"  Created by: {notification.Created_By ?? "System"}\n";
-                        message += $"  Time: {notification.CreatedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Unknown"}\n\n";
-                    }
-                    
-                    MessageBox.Show(message, "Schedule Notifications", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                else
-                {
-                    NotificationStatusText.Text = "No unacknowledged notifications";
-                    NotificationStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
-                    MessageBox.Show("No schedule notifications found.", "Notifications", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                NotificationStatusText.Text = "Error checking notifications";
-                NotificationStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-                MessageBox.Show($"Error checking notifications: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                LogHelper.Write($"💥 Error checking notifications: {ex.Message}");
-            }
-            finally
-            {
-                CheckNotificationsBtn.IsEnabled = true;
-                CheckNotificationsBtn.Content = "Check Now";
-            }
+            MessageBox.Show("Schedule notifications are no longer used.\nSchedules now sync automatically when WiFi is connected.", 
+                          "Feature Removed", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        private async void ClearNotificationsBtn_Click(object sender, RoutedEventArgs e)
+        private void ClearNotificationsBtn_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                var result = MessageBox.Show("This will acknowledge all schedule notifications. Continue?", 
-                                            "Confirm Clear All", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                
-                if (result == MessageBoxResult.Yes)
-                {
-                    ClearNotificationsBtn.IsEnabled = false;
-                    ClearNotificationsBtn.Content = "⏳ Clearing...";
-                    
-                    var success = await _apiService.AcknowledgeAllNotificationsAsync();
-                    
-                    if (success)
-                    {
-                        NotificationStatusText.Text = "All notifications cleared";
-                        NotificationStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
-                        MessageBox.Show("All schedule notifications have been acknowledged.", "Notifications Cleared", MessageBoxButton.OK, MessageBoxImage.Information);
-                        LogHelper.Write("✅ All schedule notifications acknowledged");
-                    }
-                    else
-                    {
-                        MessageBox.Show("Failed to clear notifications. Please try again.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error clearing notifications: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                LogHelper.Write($"💥 Error clearing notifications: {ex.Message}");
-            }
-            finally
-            {
-                ClearNotificationsBtn.IsEnabled = true;
-                ClearNotificationsBtn.Content = "Clear All";
-            }
+            MessageBox.Show("Schedule notifications are no longer used.\nSchedules now sync automatically when WiFi is connected.", 
+                          "Feature Removed", MessageBoxButton.OK, MessageBoxImage.Information);
         }
+    }
 
-        private bool LoadClockOutConfirmationSetting()
-        {
-            try
-            {
-                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
-                if (System.IO.File.Exists(configPath))
-                {
-                    var configJson = System.IO.File.ReadAllText(configPath);
-                    var config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
-                    { 
-                        PropertyNameCaseInsensitive = true 
-                    });
-                    
-                    return config?.ClockOutConfirmation ?? true; // Default to true
-                }
-                else
-                {
-                    LogHelper.Write("📋 Config file not found, using default clock-out confirmation: enabled");
-                    return true; // Default to enabled
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"⚠️ Error reading clock-out confirmation setting: {ex.Message}");
-                return true; // Default to enabled on error
-            }
-        }
-
-        private bool SaveClockOutConfirmationSetting(bool enabled)
-        {
-            try
-            {
-                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
-                
-                SystemConfig config;
-                if (System.IO.File.Exists(configPath))
-                {
-                    var configJson = System.IO.File.ReadAllText(configPath);
-                    config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
-                    { 
-                        PropertyNameCaseInsensitive = true 
-                    }) ?? new SystemConfig();
-                }
-                else
-                {
-                    config = new SystemConfig();
-                }
-                
-                config.ClockOutConfirmation = enabled;
-                config.LastUpdated = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                
-                var updatedJson = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions 
-                { 
-                    WriteIndented = true,
-                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-                });
-                
-                System.IO.File.WriteAllText(configPath, updatedJson);
-                LogHelper.Write($"📋 Clock-out confirmation setting saved: {enabled}");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"💥 Error saving clock-out confirmation setting: {ex.Message}");
-                return false;
-            }
-        }
-
-        private void ClearConfigurationCache()
-        {
-            try
-            {
-                // Use reflection to clear the static cache in AttendancePage
-                var attendancePageType = typeof(AttendancePage);
-                var cacheField = attendancePageType.GetField("_clockOutConfirmationEnabled", 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                
-                if (cacheField != null)
-                {
-                    cacheField.SetValue(null, null);
-                    LogHelper.Write("🔄 Configuration cache cleared - new settings will take effect immediately");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"⚠️ Could not clear configuration cache: {ex.Message}");
-            }
-        }
+    public class SystemConfig
+    {
+        public string? SystemName { get; set; }
+        public string? PrimaryColor { get; set; }
+        public string? SecondaryColor { get; set; }
+        public string? Logo { get; set; }
+        public string? CompanyName { get; set; }
+        public string? Timezone { get; set; }
+        public int ToolboxMeetingMinutes { get; set; }
+        public bool ClockOutConfirmation { get; set; } = true;
+        public string? LastUpdated { get; set; }
     }
 }
