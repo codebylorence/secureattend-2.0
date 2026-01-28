@@ -118,33 +118,43 @@ namespace BiometricEnrollmentApp
             {
                 Dispatcher.Invoke(() =>
                 {
-                    // Show employee name
-                    EmployeeNameText.Text = employeeName;
+                    // Show detailed employee information
+                    EmployeeNameText.Text = $"{employeeName}\nID: {employeeId}";
+                    EmployeeNameText.FontSize = 32;
+                    EmployeeNameText.TextAlignment = TextAlignment.Left;
                     EmployeeNameText.Visibility = Visibility.Visible;
 
-                    // Show status message with appropriate color
+                    // Enhanced status message with side-by-side layout
                     var timeStr = TimezoneHelper.FormatTimeDisplay(timestamp);
-                    var statusColor = status switch
-                    {
-                        "Present" => "#4CAF50", // Green
-                        "Late" => "#FF9800",    // Orange
-                        "DoubleTap" => "#FF5722", // Red for double-tap prevention
-                        "Cancelled" => "#9E9E9E", // Gray for cancelled
-                        _ => "#4CAF50"          // Default green
-                    };
-
-                    var actionText = status switch
-                    {
-                        "DoubleTap" => "Please wait before scanning again",
-                        "Cancelled" => "Clock-out cancelled",
-                        "Present" or "Late" => "Clock-in",
-                        _ => "Clock-out"
-                    };
+                    var (statusColor, statusIcon, mainMessage, detailMessage) = GetOptimizedStatusInfo(status, timeStr, employeeId);
                     
-                    StatusMessage.Text = status == "DoubleTap" || status == "Cancelled" ? actionText : $"{actionText} successful at {timeStr}";
+                    // Set status icon
+                    if (StatusIcon != null)
+                    {
+                        StatusIcon.Text = statusIcon;
+                        StatusIcon.Visibility = Visibility.Visible;
+                    }
+                    
+                    // Set main status message
+                    StatusMessage.Text = mainMessage;
+                    StatusMessage.FontSize = 24;
+                    StatusMessage.TextAlignment = TextAlignment.Left;
                     StatusMessage.Foreground = new System.Windows.Media.SolidColorBrush(
                         (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(statusColor));
                     StatusMessage.Visibility = Visibility.Visible;
+                    
+                    // Set additional details
+                    if (StatusDetails != null && !string.IsNullOrEmpty(detailMessage))
+                    {
+                        StatusDetails.Text = detailMessage;
+                        StatusDetails.Visibility = Visibility.Visible;
+                    }
+                    
+                    // Show the status panel
+                    if (StatusPanel != null)
+                    {
+                        StatusPanel.Visibility = Visibility.Visible;
+                    }
 
                     // Try to load employee photo (skip for double-tap prevention and cancelled)
                     if (status != "DoubleTap" && status != "Cancelled")
@@ -152,8 +162,8 @@ namespace BiometricEnrollmentApp
                         LoadEmployeePhoto(employeeId);
                     }
 
-                    // Hide the result after 5 seconds (or 3 seconds for double-tap/cancelled)
-                    var hideDelay = status == "DoubleTap" || status == "Cancelled" ? 3000 : 5000;
+                    // Hide the result after appropriate delay
+                    var hideDelay = status == "DoubleTap" || status == "Cancelled" ? 4000 : 7000;
                     var hideTimer = new System.Timers.Timer(hideDelay);
                     hideTimer.Elapsed += (_, _) => Dispatcher.Invoke(HideEmployeeResult);
                     hideTimer.AutoReset = false;
@@ -162,8 +172,25 @@ namespace BiometricEnrollmentApp
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error showing employee result: {ex.Message}");
+                LogHelper.Write($"� Error showing employee result: {ex.Message}");
             }
+        }
+
+        private (string color, string icon, string mainMessage, string detailMessage) GetOptimizedStatusInfo(string status, string timeStr, string employeeId)
+        {
+            return status switch
+            {
+                "Present" => ("#4CAF50", "✅", "ON-TIME CLOCK-IN", $"Successfully clocked in at {timeStr}\nStatus: Present"),
+                "Late" => ("#FF9800", "⚠️", "LATE CLOCK-IN", $"Clocked in late at {timeStr}\nStatus: Late Arrival"),
+                "Clock-out" => ("#2196F3", "🏁", "CLOCK-OUT COMPLETED", $"Successfully clocked out at {timeStr}\nShift ended"),
+                "Overtime" => ("#9C27B0", "⏰", "OVERTIME CLOCK-OUT", $"Clocked out during overtime at {timeStr}\nOvertime hours recorded"),
+                "Missed Clock-out" => ("#FFC107", "⚠️", "MISSED CLOCK-OUT", $"Late clock-out at {timeStr}\nBeyond scheduled shift time"),
+                "DoubleTap" => ("#FF5722", "🚫", "SCAN TOO SOON", "Please wait before scanning again\nCooldown period active"),
+                "Cancelled" => ("#9E9E9E", "❌", "CLOCK-OUT CANCELLED", "Action cancelled by user\nNo changes made"),
+                "Not Scheduled" => ("#FF5722", "📅", "NOT SCHEDULED", $"Employee {employeeId} not scheduled today"),
+                "Outside Hours" => ("#FF5722", "🕐", "OUTSIDE SHIFT HOURS", "Not within scheduled work time\nCheck your schedule"),
+                _ => ("#4CAF50", "✅", "ATTENDANCE RECORDED", $"Action completed at {timeStr}\nStatus: {status}")
+            };
         }
 
         private void HideEmployeeResult()
@@ -174,6 +201,20 @@ namespace BiometricEnrollmentApp
                 StatusMessage.Visibility = Visibility.Collapsed;
                 EmployeePhoto.Visibility = Visibility.Collapsed;
                 DefaultUserIcon.Visibility = Visibility.Visible;
+                
+                // Hide the status panel and its components
+                if (StatusPanel != null)
+                {
+                    StatusPanel.Visibility = Visibility.Collapsed;
+                }
+                if (StatusIcon != null)
+                {
+                    StatusIcon.Visibility = Visibility.Collapsed;
+                }
+                if (StatusDetails != null)
+                {
+                    StatusDetails.Visibility = Visibility.Collapsed;
+                }
             }
             catch { }
         }
@@ -754,7 +795,7 @@ namespace BiometricEnrollmentApp
                             
                             // User confirmed or confirmation disabled - proceed with clock-out
                             LogHelper.Write("💾 Saving clock-out to database...");
-                            double hours = _data_service_get().SaveClockOut(openSessionId, now);
+                            double hours = _data_service_get().SaveClockOut(openSessionId, matchedEmployeeId, now);
                             
                             // Send clock-out to server
                             if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
@@ -850,7 +891,7 @@ namespace BiometricEnrollmentApp
                                 }
                                 else
                                 {
-                                    Dispatcher.Invoke(() => UpdateStatus($"⚠️ {matchedEmployeeId} is not scheduled to work today."));
+                                    Dispatcher.Invoke(() => ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Not Scheduled", now));
                                     LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} not scheduled for {TimezoneHelper.Now.DayOfWeek}");
                                 }
                             }
@@ -861,7 +902,7 @@ namespace BiometricEnrollmentApp
                                 
                                 if (!timeWindowCheck.IsWithinShiftTime)
                                 {
-                                    Dispatcher.Invoke(() => UpdateStatus($"⚠️ {timeWindowCheck.Message}"));
+                                    Dispatcher.Invoke(() => ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Outside Hours", now));
                                     LogHelper.Write($"⚠️ Attendance denied: {matchedEmployeeId} - {timeWindowCheck.Message}");
                                 }
                                 else
@@ -1072,7 +1113,7 @@ namespace BiometricEnrollmentApp
                         if (shouldClockOut)
                         {
                             // User confirmed - proceed with clock-out
-                            double hours = _dataService.SaveClockOut(sessionId, now);
+                            double hours = _dataService.SaveClockOut(sessionId, testEmployeeId, now);
                             LogHelper.Write($"🧪 TEST: Clock-out confirmed and saved. Hours: {hours:F2}");
                             UpdateStatus($"✅ TEST: Clock-out confirmed! Hours worked: {hours:F2}");
                             ShowEmployeeAttendanceResult(testEmployeeId, testEmployeeName, "Clock-out", now);
@@ -1673,7 +1714,7 @@ namespace BiometricEnrollmentApp
                     }
                     
                     // User confirmed or confirmation disabled - proceed with clock-out
-                    double hours = _data_service_get().SaveClockOut(openSessionId, now);
+                    double hours = _data_service_get().SaveClockOut(openSessionId, matchedEmployeeId, now);
                     
                     // Send clock-out to server
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))

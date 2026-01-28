@@ -3,41 +3,11 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import { MdSchedule, MdPeople, MdClose, MdCalendarToday, MdInfo } from "react-icons/md";
-import { getTemplates, getEmployeeSchedules } from "../api/ScheduleApi";
+import { MdSchedule, MdPeople, MdClose, MdCalendarToday, MdLocationOn } from "react-icons/md";
+import { getTemplates } from "../api/ScheduleApi";
 import { fetchEmployees } from "../api/EmployeeApi";
 import { useSocket } from "../context/SocketContext";
-import { formatTimeRange24 } from "../utils/timeFormat";
-
-// Helper Functions
-const formatDateForAPI = (date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const convertTo24Hour = (time12h) => {
-  if (!time12h) return "00:00";
-  
-  // If already in 24-hour format (HH:MM)
-  if (/^\d{2}:\d{2}$/.test(time12h)) {
-    return time12h;
-  }
-  
-  const [time, modifier] = time12h.split(' ');
-  let [hours, minutes] = time.split(':');
-  
-  if (hours === '12') {
-    hours = '00';
-  }
-  
-  if (modifier === 'PM') {
-    hours = parseInt(hours, 10) + 12;
-  }
-  
-  return `${hours.toString().padStart(2, '0')}:${minutes}`;
-};
+import { formatTimeRange24, formatTime24Short } from "../utils/timeFormat";
 
 const getShiftColor = (shiftName) => {
   const colors = {
@@ -60,8 +30,15 @@ const getShiftColor = (shiftName) => {
 };
 
 // Zone Details Modal Component
-function ZoneDetailsModal({ selectedShift, onClose, employees }) {
+function ShiftDetailsModal({ selectedShift, onClose, employees }) {
   if (!selectedShift) return null;
+
+  console.log('📋 Modal opened with shift data:', {
+    shift: selectedShift.shift_name,
+    date: selectedShift.date,
+    zones: selectedShift.zones?.length || 0,
+    employees: employees?.length || 0
+  });
 
   const getEmployeeName = (employeeId) => {
     const employee = employees.find((emp) => emp.employee_id === employeeId);
@@ -85,18 +62,45 @@ function ZoneDetailsModal({ selectedShift, onClose, employees }) {
     return employee ? employee.position : "";
   };
 
+  const getEmployeeRole = (employeeId) => {
+    const employee = employees.find((emp) => emp.employee_id === employeeId);
+    return employee ? employee.role : "";
+  };
+
+  // Separate zones and roles, and merge all Role-Based zones into one
+  const zones = selectedShift.zones.filter(zone => zone.department !== 'Role-Based');
+  
+  const roleBasedZones = selectedShift.zones.filter(zone => zone.department === 'Role-Based');
+  
+  // Merge all Role-Based zones into a single logical role group
+  const roles = roleBasedZones.length > 0 ? [{
+    department: 'Role-Based',
+    template_id: roleBasedZones[0].template_id, // Use the first template_id for operations
+    member_limit: null, // Role-Based templates don't have member limits
+    assigned_count: roleBasedZones.reduce((sum, zone) => sum + zone.assigned_count, 0),
+    members: roleBasedZones.reduce((allMembers, zone) => [...allMembers, ...(zone.members || [])], [])
+  }] : [];
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <div>
-            <h3 className="text-xl font-semibold text-blue-600 flex items-center gap-2">
-              <MdSchedule size={24} />
-              {selectedShift.shift_name} - {selectedShift.date}
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">
-              {formatTimeRange24(selectedShift.start_time, selectedShift.end_time)}
-            </p>
+          <div className="flex items-center gap-3">
+            <div 
+              className="w-6 h-6 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: getShiftColor(selectedShift.shift_name) }}
+            >
+              <MdSchedule size={16} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-gray-800">
+                {selectedShift.shift_name} - {selectedShift.date}
+              </h3>
+              <p className="text-sm text-gray-600">
+                {formatTimeRange24(selectedShift.start_time, selectedShift.end_time)}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -106,91 +110,155 @@ function ZoneDetailsModal({ selectedShift, onClose, employees }) {
           </button>
         </div>
 
-        {/* Zones Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {selectedShift.zones.map((zone, index) => (
-            <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        {/* Scheduled Zones Header */}
+        <div className="mb-4">
+          <h4 className="text-lg font-semibold text-blue-600 flex items-center gap-2">
+            <MdLocationOn size={20} />
+            Scheduled Zones ({zones.length + roles.length})
+          </h4>
+        </div>
+
+        {/* Zone Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {/* Management Roles - Single Card */}
+          {roles.length > 0 && (
+            <div className="border-2 border-purple-300 bg-purple-50 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="font-semibold text-gray-800 flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <div 
-                    className="w-3 h-3 rounded-full" 
+                    className="w-3 h-3 rounded-full bg-purple-500"
+                  ></div>
+                  <span className="font-semibold text-gray-800">Management Roles</span>
+                </div>
+                <div className="flex items-center gap-1 text-sm font-medium text-gray-700 bg-white px-2 py-1 rounded border">
+                  <MdPeople size={16} />
+                  <span>{roles[0].assigned_count || 0}</span>
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <h6 className="text-sm font-semibold text-gray-700 mb-2">Assigned Members:</h6>
+              </div>
+
+              {roles[0].members && roles[0].members.length > 0 ? (
+                <div className="space-y-2">
+                  {roles[0].members.map((member, memberIdx) => {
+                    const employee = employees.find(emp => emp.employee_id === member.employee_id);
+                    const employeeName = getEmployeeName(member.employee_id);
+                    const employeeRole = employee?.role;
+                    const roleTitle = employeeRole === 'supervisor' ? 'Supervisor' : 'Warehouse Admin';
+                    const position = getEmployeePosition(member.employee_id);
+
+                    return (
+                      <div key={memberIdx} className="bg-white border border-gray-200 rounded p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium text-gray-800">{employeeName}</span>
+                              <span className={`text-xs px-2 py-1 rounded font-medium ${
+                                employeeRole === 'supervisor' 
+                                  ? 'bg-purple-100 text-purple-800' 
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {roleTitle}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              ID: {member.employee_id} | Position: {position || roleTitle}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-500 text-sm">
+                  No members assigned
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Zone Assignments */}
+          {zones.map((zone, index) => (
+            <div key={`zone-${index}`} className="border-2 border-green-300 bg-green-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: getShiftColor(selectedShift.shift_name) }}
                   ></div>
-                  {zone.department}
-                </h4>
-                <div className="flex items-center gap-1 text-sm text-gray-600">
+                  <span className="font-semibold text-gray-800">{zone.department}</span>
+                </div>
+                <div className="flex items-center gap-1 text-sm font-medium text-gray-700 bg-white px-2 py-1 rounded border">
                   <MdPeople size={16} />
                   <span>{zone.assigned_count || 0}/{zone.member_limit || '∞'}</span>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <div className="text-sm text-gray-600">
-                  <strong>Shift:</strong> {selectedShift.shift_name}
-                </div>
-                <div className="text-sm text-gray-600">
-                  <strong>Time:</strong> {formatTimeRange24(selectedShift.start_time, selectedShift.end_time)}
-                </div>
-                <div className="text-sm text-gray-600">
-                  <strong>Member Limit:</strong> {zone.member_limit || 'Unlimited'}
-                </div>
+              <div className="mb-3">
+                <h6 className="text-sm font-semibold text-gray-700 mb-2">Assigned Members:</h6>
               </div>
 
-              {/* Assigned Members */}
-              {zone.members && zone.members.length > 0 && (
-                <div className="mt-4">
-                  <h5 className="text-sm font-semibold text-gray-700 mb-2">Assigned Members:</h5>
-                  <div className="space-y-2">
-                    {zone.members.map((member, memberIdx) => {
-                      const position = getEmployeePosition(member.employee_id);
-                      const isTeamLeader = position === "Team Leader";
-                      const isSupervisor = position === "Supervisor";
+              {zone.members && zone.members.length > 0 ? (
+                <div className="space-y-2">
+                  {zone.members.map((member, memberIdx) => {
+                    const position = getEmployeePosition(member.employee_id);
+                    const employeeRole = getEmployeeRole(member.employee_id);
+                    const isTeamLeader = position === "Team Leader";
+                    const employeeName = getEmployeeName(member.employee_id);
 
-                      return (
-                        <div key={memberIdx} className="bg-white border border-gray-200 rounded p-2">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium text-gray-800">
-                              {getEmployeeName(member.employee_id)}
-                            </span>
-                            {isSupervisor && (
-                              <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded font-medium">
-                                Supervisor
-                              </span>
-                            )}
-                            {isTeamLeader && (
-                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">
-                                Team Leader
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            ID: {member.employee_id} | Position: {position || 'Employee'}
+                    return (
+                      <div key={memberIdx} className="bg-white border border-gray-200 rounded p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium text-gray-800">{employeeName}</span>
+                              {isTeamLeader && (
+                                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">
+                                  Team Leader
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              ID: {member.employee_id} | Position: {position || 'Team Leader'}
+                            </div>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-
-              {(!zone.members || zone.members.length === 0) && (
-                <div className="mt-4 text-center py-4 text-gray-500 text-sm">
-                  No members assigned yet
+              ) : (
+                <div className="text-center py-4 text-gray-500 text-sm bg-white border border-gray-200 rounded">
+                  <MdPeople size={24} className="mx-auto mb-2 text-gray-300" />
+                  <p>No members assigned yet</p>
                 </div>
               )}
             </div>
           ))}
         </div>
 
-        {selectedShift.zones.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <MdSchedule size={48} className="mx-auto mb-3 text-gray-300" />
-            <p className="text-lg">No zones scheduled for this shift</p>
+        {/* Summary Footer */}
+        <div className="border-t pt-4">
+          <div className="grid grid-cols-2 gap-4 text-center">
+            <div>
+              <p className="text-2xl font-bold text-blue-600">{zones.length + roles.length}</p>
+              <p className="text-sm text-gray-600">Total Zones</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-green-600">
+                {zones.reduce((sum, zone) => sum + (zone.assigned_count || 0), 0) + 
+                 roles.reduce((sum, role) => sum + (role.members?.length || 0), 0)}
+              </p>
+              <p className="text-sm text-gray-600">Total Assigned</p>
+            </div>
           </div>
-        )}
+        </div>
 
         {/* Close Button */}
-        <div className="flex justify-end mt-6 pt-4 border-t">
+        <div className="flex justify-end mt-6">
           <button
             onClick={onClose}
             className="bg-gray-300 text-gray-700 py-2 px-6 rounded-md hover:bg-gray-400 font-medium transition-colors"
@@ -206,7 +274,6 @@ function ZoneDetailsModal({ selectedShift, onClose, employees }) {
 export default function ViewSchedules() {
   const [templates, setTemplates] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [employeeSchedules, setEmployeeSchedules] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedShift, setSelectedShift] = useState(null);
@@ -295,9 +362,6 @@ export default function ViewSchedules() {
       
       setTemplates(templatesData);
       setEmployees(employeesData);
-      
-      // No more employee schedules from legacy system
-      setEmployeeSchedules([]);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -330,7 +394,8 @@ export default function ViewSchedules() {
           start_time: template.start_time,
           end_time: template.end_time,
           date: dateKey,
-          zones: []
+          zones: [],
+          roles: []
         };
       }
       
@@ -358,7 +423,7 @@ export default function ViewSchedules() {
         assigned_employees: templateAssignedEmployees.map(emp => emp.employee_id)
       });
       
-      // Add this template as a zone with assigned members
+      // All templates are treated as zones now (no more role-based separation)
       shiftsByDate[dateKey][template.shift_name].zones.push({
         department: template.department,
         template_id: template.id,
@@ -373,27 +438,49 @@ export default function ViewSchedules() {
     // Create calendar events for each shift
     Object.entries(shiftsByDate).forEach(([date, shifts]) => {
       Object.entries(shifts).forEach(([shiftName, shiftData]) => {
-        const startTime = convertTo24Hour(shiftData.start_time);
-        const endTime = convertTo24Hour(shiftData.end_time);
+        const startTime = formatTime24Short(shiftData.start_time);
+        const endTime = formatTime24Short(shiftData.end_time);
+        
+        console.log(`🕐 Time conversion for ${shiftName}:`, {
+          original_start: shiftData.start_time,
+          original_end: shiftData.end_time,
+          converted_start: startTime,
+          converted_end: endTime
+        });
         const backgroundColor = getShiftColor(shiftName);
         
-        // Calculate total assigned members across all zones
-        const totalAssigned = shiftData.zones.reduce((sum, zone) => sum + zone.assigned_count, 0);
+        // Check if this is a past date
+        const eventDate = new Date(date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const isPastDate = eventDate < today;
         
-        console.log(`📅 Creating event: ${date} - ${shiftName} (${shiftData.zones.length} zones, ${totalAssigned} assigned)`);
+        // Calculate total assigned members across all zones and roles
+        const totalZoneAssigned = shiftData.zones.reduce((sum, zone) => sum + zone.assigned_count, 0);
+        const totalRoleAssigned = shiftData.roles.reduce((sum, role) => sum + role.assigned_count, 0);
+        const totalAssigned = totalZoneAssigned + totalRoleAssigned;
+        
+        // Count total zones and roles
+        const totalItems = shiftData.zones.length + shiftData.roles.length;
+        
+        console.log(`� Creating event: ${date} - ${shiftName} (${shiftData.zones.length} zones, ${shiftData.roles.length} roles, ${totalAssigned} assigned)`);
         
         events.push({
           id: `${date}-${shiftName}`,
-          title: `${shiftName} (${shiftData.zones.length} zones, ${totalAssigned} assigned)`,
+          title: `${startTime} - ${endTime} ${shiftName}`,
           start: `${date}T${startTime}`,
           end: `${date}T${endTime}`,
-          backgroundColor: backgroundColor,
-          borderColor: backgroundColor,
+          backgroundColor: isPastDate ? '#9ca3af' : backgroundColor, // Gray for past dates
+          borderColor: isPastDate ? '#6b7280' : backgroundColor,
           textColor: "white",
+          classNames: isPastDate ? ['past-event'] : [],
           extendedProps: {
             shiftData: shiftData,
             zoneCount: shiftData.zones.length,
-            totalAssigned: totalAssigned
+            roleCount: shiftData.roles.length,
+            totalAssigned: totalAssigned,
+            totalItems: totalItems,
+            isPast: isPastDate // Keep track for visual styling
           }
         });
       });
@@ -404,6 +491,13 @@ export default function ViewSchedules() {
   };
 
   const handleEventClick = (info) => {
+    // Allow viewing all events, including past ones
+    console.log('🖱️ Event clicked:', {
+      isPast: info.event.extendedProps.isPast,
+      shiftData: info.event.extendedProps.shiftData,
+      title: info.event.title
+    });
+    
     const shiftData = info.event.extendedProps.shiftData;
     setSelectedShift(shiftData);
   };
@@ -429,84 +523,8 @@ export default function ViewSchedules() {
           <div className="flex items-center gap-3">
             <div>
               <h1 className="text-heading text-[21px] font-semibold flex items-center gap-2">
-                <MdCalendarToday size={24} className="text-blue-600" />
-                View Zone Schedules
+                View Shift Schedules
               </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Calendar view of all zone schedules. Click on any shift to see zone details.
-              </p>
-            </div>
-            
-            {/* Guidelines Icon */}
-            <div className="relative group">
-              <button className="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition-colors">
-                <MdInfo size={24} />
-              </button>
-              
-              {/* Tooltip */}
-              <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-                <div className="space-y-1">
-                  <div>• Click on any shift to view zone details</div>
-                  <div>• Different colors represent different shift types</div>
-                  <div>• Numbers show zone count per shift</div>
-                  <div>• View assigned members for each zone</div>
-                </div>
-                <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-gray-800"></div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Refresh Button */}
-          <button
-            onClick={() => {
-              console.log('🔄 Manual refresh triggered');
-              fetchData();
-            }}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                Loading...
-              </>
-            ) : (
-              <>
-                🔄 Refresh
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow-md p-4">
-          <div className="flex items-center gap-3">
-            <MdSchedule size={24} className="text-blue-600" />
-            <div>
-              <p className="text-sm text-gray-600">Total Schedules</p>
-              <p className="text-xl font-bold text-gray-800">{templates.length}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md p-4">
-          <div className="flex items-center gap-3">
-            <MdCalendarToday size={24} className="text-green-600" />
-            <div>
-              <p className="text-sm text-gray-600">Unique Dates</p>
-              <p className="text-xl font-bold text-gray-800">
-                {new Set(templates.map(t => t.specific_date)).size}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md p-4">
-          <div className="flex items-center gap-3">
-            <MdPeople size={24} className="text-purple-600" />
-            <div>
-              <p className="text-sm text-gray-600">Total Employees</p>
-              <p className="text-xl font-bold text-gray-800">{employees.length}</p>
             </div>
           </div>
         </div>
@@ -514,23 +532,31 @@ export default function ViewSchedules() {
 
       {/* Calendar */}
       <div className="bg-white rounded-lg shadow-md p-6">
+        <style jsx>{`
+          .fc-day-past {
+            background-color: #f3f4f6 !important;
+            color: #9ca3af !important;
+          }
+          .fc-day-past .fc-daygrid-day-number {
+            color: #9ca3af !important;
+          }
+          .fc-day-past:hover {
+            background-color: #f3f4f6 !important;
+            /* Removed cursor: not-allowed to allow clicking */
+          }
+        `}</style>
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           headerToolbar={{
             left: "prev,next today",
             center: "title",
-            right: "dayGridMonth,timeGridWeek,timeGridDay",
+            right: "", // Removed week and day views, only month view available
           }}
           events={calendarEvents}
           eventClick={handleEventClick}
           eventDisplay="block"
-          displayEventTime={true}
-          eventTimeFormat={{
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-          }}
+          displayEventTime={false}
           slotMinTime="06:00:00"
           slotMaxTime="24:00:00"
           allDaySlot={false}
@@ -538,14 +564,34 @@ export default function ViewSchedules() {
           dayMaxEvents={3}
           moreLinkClick="popover"
           eventMouseEnter={(info) => {
+            // Allow pointer cursor for all events, including past ones
             info.el.style.cursor = 'pointer';
+          }}
+          eventDidMount={(info) => {
+            // Add opacity to past events but keep them clickable
+            if (info.event.extendedProps.isPast) {
+              info.el.style.opacity = '0.6';
+              info.el.style.cursor = 'pointer'; // Keep pointer cursor for past events
+              // Removed pointerEvents = 'none' to allow clicking on past events
+            }
+          }}
+          dayCellDidMount={(info) => {
+            // Gray out past dates but keep them clickable
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const cellDate = new Date(info.date);
+            
+            if (cellDate < today) {
+              info.el.classList.add('fc-day-past');
+              // Removed cursor: not-allowed to allow clicking on past events
+            }
           }}
         />
       </div>
 
-      {/* Zone Details Modal */}
+      {/* Shift Details Modal */}
       {selectedShift && (
-        <ZoneDetailsModal
+        <ShiftDetailsModal
           selectedShift={selectedShift}
           onClose={() => setSelectedShift(null)}
           employees={employees}

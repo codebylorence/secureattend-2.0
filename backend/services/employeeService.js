@@ -8,9 +8,7 @@ import { Op } from "sequelize";
 
 export const getAllEmployees = async () => {
   return await Employee.findAll({
-    where: {
-      status: 'Active' // Only return active employees
-    },
+    // Remove the hardcoded status filter to allow fetching all employees
     include: [
       {
         model: User,

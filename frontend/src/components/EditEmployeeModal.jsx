@@ -101,13 +101,17 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      console.log('🔄 Updating employee:', { id: employee.id, formData });
+      
       // Check if position is changing to/from Team Leader
       const oldPosition = employee.position;
       const newPosition = formData.position;
       const isTeamLeaderChange = (oldPosition === "Team Leader" && newPosition !== "Team Leader") ||
                                 (oldPosition !== "Team Leader" && newPosition === "Team Leader");
 
-      await updateEmployee(employee.id, formData);
+      const result = await updateEmployee(employee.id, formData);
+      console.log('✅ Employee update result:', result);
+      
       toast.success("Employee updated successfully!");
       
       // If position changed to/from Team Leader, notify team leader update
@@ -116,10 +120,12 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
         teamLeaderEventManager.notifyTeamLeaderUpdate();
       }
       
+      console.log('🔄 Calling onUpdated callback to refresh employee list');
       onUpdated();
       onClose();
     } catch (error) {
-      console.error("Error updating employee:", error);
+      console.error("❌ Error updating employee:", error);
+      console.error("Error details:", error.response?.data || error.message);
       toast.error("Failed to update employee");
     }
   };

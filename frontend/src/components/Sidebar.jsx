@@ -63,6 +63,29 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
   };
 
   const isActive = (path) => {
+    // Handle paths with query parameters
+    if (path.includes('?')) {
+      const [pathname, query] = path.split('?');
+      const currentPath = location.pathname;
+      const currentSearch = location.search;
+      
+      // Check if pathname matches and query parameters match
+      if (currentPath === pathname) {
+        const queryParams = new URLSearchParams(query);
+        const currentParams = new URLSearchParams(currentSearch);
+        
+        // Check if all query parameters in the path exist in current URL
+        for (const [key, value] of queryParams) {
+          if (currentParams.get(key) !== value) {
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    }
+    
+    // For paths without query parameters, use exact match
     return location.pathname === path;
   };
 
@@ -109,23 +132,13 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
           key: "schedule",
           label: "Schedule Management",
           icon: FaCalendarAlt,
-          submenu: [
-            {
-              key: "zone-schedule",
-              label: "Zone-Based Scheduling",
-              path: "/admin/schedule"
-            },
-            {
-              key: "role-schedule", 
-              label: "Role-Based Scheduling",
-              path: "/admin/role-schedule"
-            },
-            {
-              key: "view-schedules",
-              label: "View Schedules",
-              path: "/admin/view-schedules"
-            }
-          ]
+          path: "/admin/schedule"
+        },
+        {
+          key: "view-schedules",
+          label: "View Schedules",
+          icon: FaCalendarCheck,
+          path: "/admin/view-schedules"
         },
         {
           key: "attendance",

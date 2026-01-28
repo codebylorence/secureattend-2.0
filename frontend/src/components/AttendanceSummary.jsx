@@ -11,6 +11,7 @@ export default function AttendanceSummary() {
     { name: "Present", value: 0 },
     { name: "Late", value: 0 },
     { name: "Absent", value: 0 },
+    { name: "Missed Clock-out", value: 0 },
   ]);
   const [totalDays, setTotalDays] = useState(0);
   const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'syncing', 'error'
@@ -71,6 +72,10 @@ export default function AttendanceSummary() {
         att.status === "Absent" || att.status === "ABSENT"
       ).length;
 
+      const missedClockout = filteredAttendances.filter(att => 
+        att.status === "Missed Clock-out"
+      ).length;
+
       console.log('🔍 Attendance Summary Debug:', {
         filter: filter,
         totalAttendances: allAttendances.length,
@@ -78,6 +83,7 @@ export default function AttendanceSummary() {
         present,
         late,
         absent,
+        missedClockout,
         sampleRecords: filteredAttendances.slice(0, 3).map(att => ({
           date: att.date,
           status: att.status
@@ -103,6 +109,7 @@ export default function AttendanceSummary() {
         { name: "Present", value: present },
         { name: "Late", value: late },
         { name: "Absent", value: absent },
+        { name: "Missed Clock-out", value: missedClockout },
       ]);
       
       setSyncStatus('synced');
@@ -133,7 +140,7 @@ export default function AttendanceSummary() {
     }
   };
 
-  const COLORS = ["#10B981", "#F59E0B", "#EF4444"]; // Green for Present, Amber for Late, Red for Absent
+  const COLORS = ["#10B981", "#F59E0B", "#EF4444", "#FCD34D"]; // Green for Present, Amber for Late, Red for Absent, Yellow for Missed Clock-out
 
   const getFilterLabel = () => {
     switch(filter) {
@@ -215,7 +222,7 @@ export default function AttendanceSummary() {
         <div className="text-center mb-4">
           <p className="text-sm text-gray-600">{getFilterLabel()}</p>
           <p className="text-xs text-gray-500">
-            Total Records: {attendanceData[0].value + attendanceData[1].value + attendanceData[2].value}
+            Total Records: {attendanceData[0].value + attendanceData[1].value + attendanceData[2].value + attendanceData[3].value}
           </p>
         </div>
 
@@ -249,9 +256,9 @@ export default function AttendanceSummary() {
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+        <div className="grid grid-cols-4 gap-2 mt-4 text-center">
           {(() => {
-            const totalRecords = attendanceData[0].value + attendanceData[1].value + attendanceData[2].value;
+            const totalRecords = attendanceData[0].value + attendanceData[1].value + attendanceData[2].value + attendanceData[3].value;
             return (
               <>
                 <div className="bg-green-50 p-2 rounded">
@@ -278,6 +285,15 @@ export default function AttendanceSummary() {
                   {totalRecords > 0 && (
                     <div className="text-xs text-red-500">
                       {Math.round((attendanceData[2].value / totalRecords) * 100)}%
+                    </div>
+                  )}
+                </div>
+                <div className="bg-amber-50 p-2 rounded">
+                  <div className="text-lg font-semibold text-amber-600">{attendanceData[3].value}</div>
+                  <div className="text-xs text-amber-600">Missed</div>
+                  {totalRecords > 0 && (
+                    <div className="text-xs text-amber-500">
+                      {Math.round((attendanceData[3].value / totalRecords) * 100)}%
                     </div>
                   )}
                 </div>

@@ -45,20 +45,11 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
       ]);
       
       console.log('📊 Raw employees data:', employeesData);
+      console.log('📊 Employee statuses:', employeesData.map(emp => ({ id: emp.id, employee_id: emp.employee_id, status: emp.status })));
       console.log('👆 Raw fingerprint data:', fingerprintData);
       
-      let filteredEmployees = employeesData;
-      
-      // For supervisor view, show all employees but still filter out inactive ones
-      if (supervisorView) {
-        filteredEmployees = employeesData.filter(emp => 
-          emp.status === "Active"
-        );
-        console.log('👥 Filtered employees for supervisor:', filteredEmployees.length);
-      }
-      
-      console.log('✅ Final employees to display:', filteredEmployees.length);
-      setEmployees(filteredEmployees);
+      console.log('✅ Final employees to display:', employeesData.length);
+      setEmployees(employeesData);
       setFingerprintStatus(fingerprintData);
     } catch (error) {
       console.error("❌ Error fetching employees:", error);
@@ -102,6 +93,14 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
         emp.position?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
+
+    console.log('🔍 Filtering employees:', {
+      total: employees.length,
+      zoneFilter,
+      statusFilter,
+      searchTerm,
+      filtered: filtered.length
+    });
 
     setFilteredEmployees(filtered);
   }, [employees, zoneFilter, statusFilter, searchTerm]);

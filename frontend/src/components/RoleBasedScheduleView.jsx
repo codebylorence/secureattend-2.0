@@ -117,11 +117,13 @@ const RoleAssignmentCard = ({ assignment, day, onEdit, onDelete }) => {
 function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAssignment, onEdit, onDeleteFromDay }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [localAssignments, setLocalAssignments] = useState(assignments);
-  const [availableEmployees, setAvailableEmployees] = useState([]);
+  const [availableSupervisors, setAvailableSupervisors] = useState([]);
+  const [availableWarehouseAdmins, setAvailableWarehouseAdmins] = useState([]);
   const [loading, setLoading] = useState(false);
   
   const [formData, setFormData] = useState({
-    employee_id: "",
+    supervisor_id: "",
+    warehouse_admin_id: "",
     shift_template_id: "",
     shift_name: "",
     start_time: "",
@@ -130,17 +132,21 @@ function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAss
 
   useEffect(() => { setLocalAssignments(assignments); }, [assignments]);
 
-  // Fetch available supervisors and admins
+  // Fetch available supervisors and warehouse admins
   useEffect(() => {
     const loadAvailableEmployees = async () => {
       try {
         setLoading(true);
         const [allEmployees, allSchedules] = await Promise.all([fetchEmployees(), getEmployeeSchedules()]);
         
-        // Filter for supervisors and admins only
-        const roleBasedEmployees = allEmployees.filter(emp => 
-          emp.role === 'supervisor' || emp.role === 'admin'
-        );
+        // Filter out inactive employees first
+        const activeEmployees = allEmployees.filter(emp => emp.status === 'Active');
+        
+        // Filter for supervisors and warehouse admins separately
+        const supervisors = activeEmployees.filter(emp => emp.role === 'supervisor');
+        const warehouseAdmins = activeEmployees.filter(emp => emp.role === 'admin');
+        
+        console.log(`👥 Loaded ${supervisors.length} active supervisors and ${warehouseAdmins.length} active admins for role-based scheduling`);
         
         // Get already assigned employee IDs for this day
         const assignedIds = allSchedules
@@ -148,11 +154,11 @@ function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAss
           .map(schedule => schedule.employee_id);
         
         // Filter out already assigned employees
-        const available = roleBasedEmployees.filter(emp => 
-          !assignedIds.includes(emp.employee_id)
-        );
+        const availableSups = supervisors.filter(emp => !assignedIds.includes(emp.employee_id));
+        const availableWAdmins = warehouseAdmins.filter(emp => !assignedIds.includes(emp.employee_id));
         
-        setAvailableEmployees(available);
+        setAvailableSupervisors(availableSups);
+        setAvailableWarehouseAdmins(availableWAdmins);
       } catch (error) {
         console.error("Error loading available employees:", error);
         toast.error("Failed to load available employees");
@@ -183,26 +189,37 @@ function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAss
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.employee_id || !formData.shift_name || !formData.start_time || !formData.end_time) {
-      toast.warning("Please fill all fields!");
+    if (!formData.supervisor_id || !formData.warehouse_admin_id || !formData.shift_name || !formData.start_time || !formData.end_time) {
+      toast.warning("Please select both supervisor and warehouse admin, and fill all fields!");
       return;
     }
 
     try {
       setLoading(true);
-      const result = await onAddAssignment({
-        employee_id: formData.employee_id,
+      
+      // Create assignments for both supervisor and warehouse admin
+      const supervisorResult = await onAddAssignment({
+        employee_id: formData.supervisor_id,
         shift_name: formData.shift_name,
         start_time: formData.start_time,
         end_time: formData.end_time,
         day: day
       });
 
-      if (result.success) {
-        setLocalAssignments(prev => [...prev, result.assignment]);
-        toast.success("Role assignment created successfully!");
+      const warehouseAdminResult = await onAddAssignment({
+        employee_id: formData.warehouse_admin_id,
+        shift_name: formData.shift_name,
+        start_time: formData.start_time,
+        end_time: formData.end_time,
+        day: day
+      });
+
+      if (supervisorResult.success && warehouseAdminResult.success) {
+        setLocalAssignments(prev => [...prev, supervisorResult.assignment, warehouseAdminResult.assignment]);
+        toast.success("Both supervisor and warehouse admin assigned successfully!");
         setFormData({
-          employee_id: "",
+          supervisor_id: "",
+          warehouse_admin_id: "",
           shift_template_id: "",
           shift_name: "",
           start_time: "",
@@ -210,11 +227,14 @@ function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAss
         });
         setShowAddForm(false);
       } else {
-        toast.error(result.error || "Failed to create assignment");
+        const errors = [];
+        if (!supervisorResult.success) errors.push(`Supervisor: ${supervisorResult.error}`);
+        if (!warehouseAdminResult.success) errors.push(`Warehouse Admin: ${warehouseAdminResult.error}`);
+        toast.error(`Failed to create assignments: ${errors.join(', ')}`);
       }
     } catch (error) {
-      console.error("Error creating assignment:", error);
-      toast.error("Failed to create assignment");
+      console.error("Error creating assignments:", error);
+      toast.error("Failed to create assignments");
     } finally {
       setLoading(false);
     }
@@ -239,7 +259,7 @@ function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAss
             <MdAssignment size={28} className="text-blue-600" />
             <div>
               <h2 className="text-2xl font-semibold text-blue-600">{day} Role Assignments</h2>
-              <p className="text-sm text-gray-600">Manage supervisor and admin schedules</p>
+              <p className="text-sm text-gray-600">Assign both supervisor and warehouse admin to shifts</p>
             </div>
             {day === getDayOfWeek(new Date()) && (
               <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">Today</span>
@@ -303,40 +323,70 @@ function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAss
             onClick={() => setShowAddForm(true)} 
             className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 font-semibold transition-colors"
           >
-            <MdAdd size={20} /> Assign Role to {day}
+            <MdAdd size={20} /> Assign Supervisor & Warehouse Admin to {day}
           </button>
         ) : (
           <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
             <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <MdAssignment size={20} />
-              Assign Supervisor or Admin
+              Assign Supervisor and Warehouse Admin
             </h4>
             <form onSubmit={handleSubmit} className="space-y-4">
               
-              {/* Employee Selection */}
+              {/* Supervisor Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Employee (Supervisor/Admin)
+                  Select Supervisor <span className="text-red-500">*</span>
                 </label>
                 {loading ? (
                   <div className="w-full border border-gray-300 rounded-md p-3 bg-gray-100 text-center">
-                    Loading available employees...
+                    Loading available supervisors...
                   </div>
-                ) : availableEmployees.length === 0 ? (
+                ) : availableSupervisors.length === 0 ? (
                   <div className="w-full border border-orange-300 rounded-md p-3 bg-orange-50 text-orange-700 text-center">
-                    No available supervisors or admins for this day
+                    No available supervisors for this day
                   </div>
                 ) : (
                   <select 
-                    value={formData.employee_id} 
-                    onChange={(e) => setFormData({...formData, employee_id: e.target.value})}
+                    value={formData.supervisor_id} 
+                    onChange={(e) => setFormData({...formData, supervisor_id: e.target.value})}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
-                    <option value="">Select Employee</option>
-                    {availableEmployees.map(emp => (
+                    <option value="">Select Supervisor</option>
+                    {availableSupervisors.map(emp => (
                       <option key={emp.employee_id} value={emp.employee_id}>
-                        {emp.fullname || `${emp.firstname} ${emp.lastname}`} - {emp.role?.toUpperCase()} ({emp.employee_id})
+                        {emp.fullname || `${emp.firstname} ${emp.lastname}`} ({emp.employee_id})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Warehouse Admin Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Warehouse Admin <span className="text-red-500">*</span>
+                </label>
+                {loading ? (
+                  <div className="w-full border border-gray-300 rounded-md p-3 bg-gray-100 text-center">
+                    Loading available warehouse admins...
+                  </div>
+                ) : availableWarehouseAdmins.length === 0 ? (
+                  <div className="w-full border border-orange-300 rounded-md p-3 bg-orange-50 text-orange-700 text-center">
+                    No available warehouse admins for this day
+                  </div>
+                ) : (
+                  <select 
+                    value={formData.warehouse_admin_id} 
+                    onChange={(e) => setFormData({...formData, warehouse_admin_id: e.target.value})}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Select Warehouse Admin</option>
+                    {availableWarehouseAdmins.map(emp => (
+                      <option key={emp.employee_id} value={emp.employee_id}>
+                        {emp.fullname || `${emp.firstname} ${emp.lastname}`} ({emp.employee_id})
                       </option>
                     ))}
                   </select>
@@ -388,10 +438,10 @@ function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAss
               <div className="flex gap-2 pt-2">
                 <button 
                   type="submit" 
-                  disabled={loading || !formData.employee_id || availableEmployees.length === 0} 
+                  disabled={loading || !formData.supervisor_id || !formData.warehouse_admin_id || availableSupervisors.length === 0 || availableWarehouseAdmins.length === 0} 
                   className="flex-1 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
                 >
-                  {loading ? "Assigning..." : "Assign Role"}
+                  {loading ? "Assigning..." : "Assign Both Roles"}
                 </button>
                 <button 
                   type="button" 
@@ -448,6 +498,9 @@ export default function RoleBasedScheduleView() {
     try {
       setLoading(true);
       const [schedules, employees] = await Promise.all([getEmployeeSchedules(), fetchEmployees()]);
+      
+      // Keep all employees for schedule display (including inactive ones with existing schedules)
+      // but note that new assignments will only use active employees from the other function
       
       // Filter for supervisor and admin assignments only
       const roleBasedSchedules = schedules.filter(schedule => {
@@ -566,7 +619,7 @@ export default function RoleBasedScheduleView() {
             <MdSupervisorAccount size={28} className="text-blue-600" />
             Role-Based Scheduling
           </h2>
-          <p className="text-gray-600 mt-1">Manage supervisor and admin schedules across the week</p>
+          <p className="text-gray-600 mt-1">Assign both supervisor and warehouse admin to shifts across the week</p>
         </div>
         <button 
           onClick={() => { 
@@ -587,7 +640,8 @@ export default function RoleBasedScheduleView() {
           <MdLightbulb size={20} /> How to Manage Role Assignments
         </h3>
         <ul className="text-sm text-blue-800 list-disc list-inside space-y-1">
-          <li>Click on any day to assign supervisors or admins to shifts</li>
+          <li>Click on any day to assign both a supervisor and warehouse admin to shifts</li>
+          <li>Both roles must be assigned together for each shift</li>
           <li>Only employees with supervisor or admin roles can be assigned</li>
           <li>Each employee can only be assigned to one shift per day</li>
           <li>Use shift templates to maintain consistent scheduling</li>

@@ -526,6 +526,80 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
+        /// <summary>
+        /// Save clock-out with missed clock-out status checking
+        /// </summary>
+        public double SaveClockOut(long sessionId, string employeeId, DateTime clockOutLocal)
+        {
+            try
+            {
+                var tsOut = clockOutLocal.ToString("yyyy-MM-dd HH:mm:ss");
+
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT clock_in FROM AttendanceSessions WHERE id = $id";
+                cmd.Parameters.AddWithValue("$id", sessionId);
+                var clockInObj = cmd.ExecuteScalar();
+                if (clockInObj == null || clockInObj == DBNull.Value)
+                {
+                    LogHelper.Write($"⚠️ Session {sessionId} not found for clock-out.");
+                    return -1;
+                }
+
+                var clockInStr = clockInObj.ToString();
+                if (!DateTime.TryParse(clockInStr, out var clockInLocal))
+                {
+                    LogHelper.Write($"⚠️ Invalid clock_in value in DB for session {sessionId}: {clockInStr}");
+                    return -1;
+                }
+
+                var total = (clockOutLocal - clockInLocal).TotalHours;
+                if (total < 0) total = 0;
+
+                // Get current status to preserve it (Present or Late)
+                cmd.CommandText = "SELECT status FROM AttendanceSessions WHERE id = $id";
+                cmd.Parameters.Clear();
+                cmd.Parameters.AddWithValue("$id", sessionId);
+                var currentStatus = cmd.ExecuteScalar()?.ToString() ?? "Present";
+
+                // Check if this should be marked as "Missed Clock-out"
+                bool isMissedClockout = ShouldMarkAsMissedClockout(employeeId, clockOutLocal);
+                string finalStatus = currentStatus;
+                
+                if (isMissedClockout)
+                {
+                    finalStatus = "Missed Clock-out";
+                    LogHelper.Write($"⚠️ Marking session {sessionId} as 'Missed Clock-out' for employee {employeeId}");
+                }
+
+                cmd.CommandText = @"
+                    UPDATE AttendanceSessions
+                    SET clock_out = $clock_out, total_hours = $total_hours, status = $status
+                    WHERE id = $id;
+                ";
+                cmd.Parameters.Clear();
+                cmd.Parameters.AddWithValue("$clock_out", tsOut);
+                cmd.Parameters.AddWithValue("$total_hours", total);
+                cmd.Parameters.AddWithValue("$status", finalStatus);
+                cmd.Parameters.AddWithValue("$id", sessionId);
+
+                int rows = cmd.ExecuteNonQuery();
+
+                LogHelper.Write(rows > 0
+                    ? $"🕙 Clock-out saved for session {sessionId} at {tsOut} (hours={total:F2}, status={finalStatus})"
+                    : $"⚠️ Failed to update session {sessionId} on clock-out.");
+
+                return total;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 SaveClockOut failed for session {sessionId}: {ex.Message}");
+                return -1;
+            }
+        }
+
         public long GetOpenSessionId(string employeeId, DateTime localDate)
         {
             var date = localDate.ToString("yyyy-MM-dd");
@@ -1231,6 +1305,78 @@ namespace BiometricEnrollmentApp.Services
             {
                 LogHelper.Write($"💥 Error determining status: {ex.Message}");
                 return "Present";
+            }
+        }
+
+        /// <summary>
+        /// Determine if a clock-out should be marked as "Missed Clock-out" based on shift end time
+        /// </summary>
+        public bool ShouldMarkAsMissedClockout(string employeeId, DateTime clockOutTime)
+        {
+            try
+            {
+                var scheduleCheck = IsEmployeeScheduledToday(employeeId);
+                
+                if (!scheduleCheck.IsScheduled)
+                {
+                    LogHelper.Write($"📅 No schedule found for {employeeId}, allowing normal clock-out");
+                    return false;
+                }
+                
+                // Parse shift end time
+                var timeParts = scheduleCheck.EndTime.Split(':');
+                if (timeParts.Length < 2) return false;
+                
+                int shiftHour = int.Parse(timeParts[0]);
+                int shiftMinute = int.Parse(timeParts[1]);
+                
+                var shiftEnd = new DateTime(clockOutTime.Year, clockOutTime.Month, clockOutTime.Day, shiftHour, shiftMinute, 0);
+                
+                // Handle overnight shifts (end time is next day)
+                if (IsOvernightShift(scheduleCheck.StartTime, scheduleCheck.EndTime))
+                {
+                    // For overnight shifts, if we're clocking out in early morning hours
+                    // and the shift end time is also in early morning, use today's date
+                    if (clockOutTime.Hour >= 0 && clockOutTime.Hour < 12 && shiftHour >= 0 && shiftHour < 12)
+                    {
+                        // Both clock-out and shift end are in morning hours - use same day
+                        shiftEnd = new DateTime(clockOutTime.Year, clockOutTime.Month, clockOutTime.Day, shiftHour, shiftMinute, 0);
+                    }
+                    else if (clockOutTime.Hour >= 0 && clockOutTime.Hour < 12)
+                    {
+                        // Clock-out is in morning but shift end is in evening - shift ended yesterday
+                        shiftEnd = shiftEnd.AddDays(-1);
+                    }
+                    else
+                    {
+                        // Clock-out is in evening/afternoon - shift ends tomorrow
+                        shiftEnd = shiftEnd.AddDays(1);
+                    }
+                }
+                
+                // Get grace period from settings
+                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
+                int gracePeriod = settingsService.GetClockOutGracePeriodMinutes();
+                
+                // Calculate minutes after shift end (positive = late clock-out)
+                var minutesAfterShiftEnd = (clockOutTime - shiftEnd).TotalMinutes;
+                
+                LogHelper.Write($"🕐 Clock-out analysis for {employeeId}: {minutesAfterShiftEnd:F1} minutes after shift end (Grace period: {gracePeriod} min)");
+                
+                // If clocking out more than grace period after shift end, mark as "Missed Clock-out"
+                if (minutesAfterShiftEnd > gracePeriod)
+                {
+                    LogHelper.Write($"⚠️ {employeeId} clocking out {minutesAfterShiftEnd:F1} minutes after shift end - Status: Missed Clock-out");
+                    return true;
+                }
+                
+                LogHelper.Write($"✅ {employeeId} clocking out within grace period - Status: Normal");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error checking missed clock-out for {employeeId}: {ex.Message}");
+                return false; // Default to normal clock-out if error
             }
         }
 

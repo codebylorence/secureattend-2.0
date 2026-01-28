@@ -71,25 +71,43 @@ export const assignSchedule = async (req, res) => {
     console.log("📥 Assigning schedule with data:", req.body);
     console.log("👤 Request user:", req.user);
     
-    const { employee_id, template_id, days, assigned_by } = req.body;
+    const { employee_id, template_id, days, assigned_by, shift_name, start_time, end_time } = req.body;
     
-    // Use new template-based assignment for specific date schedules
-    const result = await assignEmployeesToTemplate(template_id, [employee_id], assigned_by || req.user?.username || "System");
+    let result;
     
-    console.log("✅ Schedule assigned successfully to template:", template_id);
+    if (template_id) {
+      // Use template-based assignment
+      result = await assignEmployeesToTemplate(template_id, [employee_id], assigned_by || req.user?.username || "System");
+      console.log("✅ Schedule assigned successfully to template:", template_id);
+    } else if (shift_name && start_time && end_time && days) {
+      // Use direct assignment for role-based scheduling
+      const scheduleData = {
+        employee_id,
+        shift_name,
+        start_time,
+        end_time,
+        days,
+        assigned_by: assigned_by || req.user?.username || "System"
+      };
+      
+      result = await assignScheduleToEmployee(scheduleData);
+      console.log("✅ Schedule assigned successfully with direct assignment:", result.id);
+    } else {
+      throw new Error("Either template_id or (shift_name, start_time, end_time, days) must be provided");
+    }
     
     // Create notification for biometric app
     try {
       const assignedByUser = assigned_by || req.user?.username || "System";
-      const shiftName = req.body.shift_name || "Schedule";
+      const notificationShiftName = shift_name || "Schedule";
       
       await createScheduleNotification(
-        `New schedule assigned to employee ${employee_id}: ${shiftName}`,
+        `New schedule assigned to employee ${employee_id}: ${notificationShiftName}`,
         "schedule_update",
         {
           employee_id: employee_id,
-          template_id: template_id,
-          shift_name: shiftName,
+          template_id: template_id || null,
+          shift_name: notificationShiftName,
           action: "assigned"
         },
         assignedByUser
@@ -100,10 +118,11 @@ export const assignSchedule = async (req, res) => {
     }
     
     res.status(201).json({ 
-      id: `template-${template_id}-${employee_id}`,
+      id: result.id || `schedule-${employee_id}`,
       message: "Schedule assigned successfully",
-      template_id,
-      employee_id
+      template_id: template_id || null,
+      employee_id,
+      result
     });
   } catch (error) {
     console.error("❌ Error assigning schedule:", error);

@@ -1,50 +1,35 @@
-import { getAllTemplates } from "../services/scheduleTemplateService.js";
-import "../models/associations.js";
+import axios from 'axios';
 
-const testTemplateAPI = async () => {
+const API_BASE = 'http://localhost:5000/api';
+
+async function testTemplateAPI() {
   try {
-    console.log("🧪 Testing template API endpoint...");
+    console.log("🧪 Testing template API endpoints...");
     
-    const templates = await getAllTemplates();
+    // Test GET /api/templates
+    console.log("\n1. Testing GET /api/templates");
+    const templatesResponse = await axios.get(`${API_BASE}/templates`);
+    console.log(`   ✅ Success: Found ${templatesResponse.data.length} templates`);
     
-    console.log(`📊 Found ${templates.length} templates`);
+    // Test POST /api/templates (this will fail without auth, but we can see the error)
+    console.log("\n2. Testing POST /api/templates (without auth - should fail)");
+    try {
+      await axios.post(`${API_BASE}/templates`, {
+        department: 'Test',
+        shift_name: 'Test Shift',
+        start_time: '09:00',
+        end_time: '17:00',
+        specific_date: '2025-01-27'
+      });
+    } catch (error) {
+      console.log(`   ❌ Expected auth error: ${error.response?.status} - ${error.response?.data?.message || error.message}`);
+    }
     
-    templates.forEach(template => {
-      console.log(`\n📋 Template ${template.id}:`);
-      console.log(`  - Department: ${template.department}`);
-      console.log(`  - Shift: ${template.shift_name}`);
-      console.log(`  - Date: ${template.specific_date || 'Legacy days: ' + JSON.stringify(template.days)}`);
-      console.log(`  - Time: ${template.start_time} - ${template.end_time}`);
-      console.log(`  - Status: ${template.status}`);
-      
-      if (template.assigned_employees) {
-        try {
-          const assignments = typeof template.assigned_employees === 'string' 
-            ? JSON.parse(template.assigned_employees) 
-            : template.assigned_employees;
-          
-          console.log(`  - Assigned employees (${assignments.length}):`);
-          assignments.forEach(assignment => {
-            console.log(`    * ${assignment.employee_id} (by ${assignment.assigned_by} on ${assignment.assigned_date})`);
-          });
-        } catch (e) {
-          console.log(`  - Assigned employees: ERROR parsing - ${template.assigned_employees}`);
-        }
-      } else {
-        console.log(`  - Assigned employees: None`);
-      }
-    });
+    console.log("\n✅ Template API endpoints are responding correctly");
     
   } catch (error) {
-    console.error("❌ Test failed:", error);
+    console.error("❌ Test failed:", error.response?.data || error.message);
   }
-};
+}
 
-// Run the test
-testTemplateAPI().then(() => {
-  console.log("\n✅ API test completed");
-  process.exit(0);
-}).catch(error => {
-  console.error("❌ Script failed:", error);
-  process.exit(1);
-});
+testTemplateAPI();

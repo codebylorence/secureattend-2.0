@@ -55,66 +55,68 @@ export default function ConfirmationModal({
   const styles = getTypeStyles();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full ${styles.iconBg} flex items-center justify-center`}>
-              <FaExclamationTriangle className={`${styles.iconColor}`} size={20} />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg w-full max-w-md shadow-xl">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-full ${styles.iconBg} flex items-center justify-center`}>
+                <FaExclamationTriangle className={`${styles.iconColor}`} size={24} />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900">
+                {title}
+              </h3>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              {title}
-            </h3>
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            >
+              <FaTimes size={20} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
-          >
-            <FaTimes size={20} />
-          </button>
-        </div>
 
-        {/* Message */}
-        <div className="mb-4">
-          <p className="text-gray-600 mb-4">{message}</p>
-          
-          {/* Item Details */}
-          {itemDetails && (
-            <div className={`${styles.bgColor} ${styles.borderColor} border p-3 rounded-md`}>
-              {typeof itemDetails === 'string' ? (
-                <p className="font-semibold text-gray-800">{itemDetails}</p>
-              ) : (
-                <div className="space-y-1">
-                  {Object.entries(itemDetails).map(([key, value]) => (
-                    <div key={key} className="flex justify-between">
-                      <span className="text-sm text-gray-600 capitalize">{key}:</span>
-                      <span className="text-sm font-medium text-gray-800">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+          {/* Message */}
+          <div className="mb-6">
+            <p className="text-gray-600 mb-6 leading-relaxed break-words whitespace-normal">{message}</p>
+            
+            {/* Item Details */}
+            {itemDetails && (
+              <div className={`${styles.bgColor} ${styles.borderColor} border p-4 rounded-lg`}>
+                {typeof itemDetails === 'string' ? (
+                  <p className="font-semibold text-gray-800 break-words whitespace-normal">{itemDetails}</p>
+                ) : (
+                  <div className="space-y-3">
+                    {Object.entries(itemDetails).map(([key, value]) => (
+                      <div key={key} className="flex flex-col">
+                        <span className="text-sm font-medium text-gray-700 capitalize mb-1">{key}:</span>
+                        <span className="text-sm font-semibold text-gray-900 break-words whitespace-normal">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
-        {/* Actions */}
-        <div className="flex gap-3">
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className={`flex-1 ${styles.confirmBg} text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
-          >
-            {loading ? 'Processing...' : confirmText}
-          </button>
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 transition-colors"
-          >
-            {cancelText}
-          </button>
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className={`flex-1 ${styles.confirmBg} text-white py-3 px-6 rounded-lg focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-base`}
+            >
+              {loading ? 'Processing...' : confirmText}
+            </button>
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 bg-gray-600 text-white py-3 px-6 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 transition-colors font-medium text-base"
+            >
+              {cancelText}
+            </button>
+          </div>
         </div>
       </div>
     </div>

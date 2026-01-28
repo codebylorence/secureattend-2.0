@@ -176,23 +176,22 @@ const EmployeeScheduleCalendar = () => {
 
   const getShiftColor = (shiftName) => {
     const colors = {
-      'Opening Shift': '#22c55e',
-      'Closing Shift': '#3b82f6',
-      'Graveyard Shift': '#8b5cf6',
-      'Morning Shift': '#f59e0b',
-      'Afternoon Shift': '#ef4444',
-      'Evening Shift': '#6366f1',
+      'Opening': '#22c55e',
+      'Closing': '#3b82f6', 
+      'Graveyard': '#8b5cf6',
+      'Morning': '#f59e0b',
+      'Afternoon': '#ef4444',
+      'Evening': '#6366f1',
+      'Night': '#7c3aed',
     };
     
-    // Check if shift name contains any of the keywords
     for (const [key, color] of Object.entries(colors)) {
       if (shiftName.toLowerCase().includes(key.toLowerCase())) {
         return color;
       }
     }
     
-    // Default color
-    return '#6b7280';
+    return '#6b7280'; // Default gray
   };
 
   // Generate table data from events
@@ -237,10 +236,6 @@ const EmployeeScheduleCalendar = () => {
         <>
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-semibold text-gray-800">
-                Your Assigned Schedules
-              </h3>
-              
               {/* View Toggle Button */}
               <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
                 <button
@@ -267,77 +262,17 @@ const EmployeeScheduleCalendar = () => {
                 </button>
               </div>
             </div>
-            
-            <div className="flex flex-wrap gap-2">
-              {schedules.map((schedule, index) => {
-                const displayData = schedule.template;
-                
-                // Generate current week dates for display
-                const today = new Date();
-                const currentWeekDates = [];
-                
-                // Find the next occurrence of each scheduled day
-                const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                
-                schedule.days.forEach(dayName => {
-                  const dayIndex = dayNames.indexOf(dayName);
-                  const todayIndex = today.getDay();
-                  
-                  // Calculate days until next occurrence
-                  let daysUntil = dayIndex - todayIndex;
-                  if (daysUntil < 0) {
-                    daysUntil += 7; // Next week
-                  }
-                  
-                  const nextDate = new Date(today);
-                  nextDate.setDate(today.getDate() + daysUntil);
-                  
-                  currentWeekDates.push({
-                    day: dayName,
-                    date: nextDate.toLocaleDateString('en-GB', { 
-                      day: '2-digit', 
-                      month: '2-digit', 
-                      year: 'numeric' 
-                    })
-                  });
-                });
-                
-                // Sort by day order
-                currentWeekDates.sort((a, b) => {
-                  return dayNames.indexOf(a.day) - dayNames.indexOf(b.day);
-                });
-                
-                const dateRange = currentWeekDates.length > 0 
-                  ? `${currentWeekDates[0].date} - ${currentWeekDates[currentWeekDates.length - 1].date}`
-                  : 'Ongoing';
-                
-                return (
-                  <div key={index} className="rounded-md px-3 py-2 text-sm bg-green-100 border border-green-300">
-                    <span className="font-medium">{displayData.shift_name}</span>
-                    <span className="text-gray-600 ml-2">
-                      {displayData.start_time} - {displayData.end_time}
-                    </span>
-                    <span className="text-gray-500 ml-2">
-                      ({schedule.days.join(', ')})
-                    </span>
-                    <span className="text-purple-600 ml-2 text-xs">
-                      [{dateRange}]
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
           </div>
           
           {/* Calendar View */}
           {viewMode === "calendar" && (
             <FullCalendar
               plugins={[dayGridPlugin, timeGridPlugin]}
-              initialView="timeGridWeek"
+              initialView="dayGridMonth"
               headerToolbar={{
                 left: "prev,next today",
                 center: "title",
-                right: "timeGridWeek,dayGridMonth",
+                right: "", // Removed week view, only month view available
               }}
               events={events}
               eventDisplay="block"

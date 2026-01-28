@@ -7,6 +7,7 @@ export const getStatusDisplay = (status) => {
     'Late': { label: 'Late', color: 'text-orange-600', bgColor: 'bg-orange-50' },
     'Absent': { label: 'Absent', color: 'text-red-600', bgColor: 'bg-red-50' },
     'Overtime': { label: 'Overtime', color: 'text-purple-600', bgColor: 'bg-purple-50' },
+    'Missed Clock-out': { label: 'Missed Clock-out', color: 'text-yellow-600', bgColor: 'bg-yellow-50' },
     // Legacy statuses (for backward compatibility)
     'IN': { label: 'Clocked In', color: 'text-blue-600', bgColor: 'bg-blue-50' },
     'COMPLETED': { label: 'Completed', color: 'text-green-600', bgColor: 'bg-green-50' },
@@ -42,4 +43,8 @@ export const isAbsent = (status) => {
 
 export const isOvertime = (status) => {
   return status === 'Overtime';
+};
+
+export const isMissedClockout = (status) => {
+  return status === 'Missed Clock-out';
 };

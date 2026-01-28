@@ -90,15 +90,38 @@ export const getSchedulesByDepartment = async (department) => {
 export const assignScheduleToEmployee = async (scheduleData) => {
   console.log("🔧 Service: assignScheduleToEmployee called with:", scheduleData);
   
-  const { employee_id, template_id, days, start_date, end_date } = scheduleData;
+  const { employee_id, template_id, days, start_date, end_date, shift_name, start_time, end_time, assigned_by } = scheduleData;
 
   // Validate required fields
   if (!employee_id) {
     throw new Error("employee_id is required");
   }
-  if (!template_id) {
-    throw new Error("template_id is required");
+  
+  let finalTemplateId = template_id;
+  
+  // If no template_id provided, create a temporary template for role-based assignment
+  if (!template_id && shift_name && start_time && end_time) {
+    console.log("🔧 Creating temporary template for role-based assignment...");
+    
+    const ScheduleTemplate = (await import("../models/scheduleTemplate.js")).default;
+    
+    // Create a temporary template
+    const tempTemplate = await ScheduleTemplate.create({
+      department: "Role-Based", // Special department for role assignments
+      shift_name: shift_name,
+      start_time: start_time,
+      end_time: end_time,
+      days: days,
+      created_by: assigned_by || "admin",
+      status: "Active"
+    });
+    
+    finalTemplateId = tempTemplate.id;
+    console.log("✅ Created temporary template with ID:", finalTemplateId);
+  } else if (!template_id) {
+    throw new Error("Either template_id or (shift_name, start_time, end_time) must be provided");
   }
+  
   if (!days || !Array.isArray(days) || days.length === 0) {
     throw new Error("days array is required and must not be empty");
   }
@@ -115,7 +138,10 @@ export const assignScheduleToEmployee = async (scheduleData) => {
   today.setHours(0, 0, 0, 0);
 
   const scheduleToCreate = {
-    ...scheduleData,
+    employee_id,
+    template_id: finalTemplateId,
+    days,
+    assigned_by: assigned_by || "admin",
     schedule_dates: scheduleDates,
     start_date: today,
     end_date: null, // Rolling schedules are ongoing

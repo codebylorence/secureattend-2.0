@@ -28,9 +28,9 @@ const Attendance = sequelize.define("Attendance", {
     allowNull: true,
   },
   status: {
-    type: DataTypes.ENUM("IN", "COMPLETED", "Present", "Late", "Absent", "Overtime"),
+    type: DataTypes.ENUM("IN", "COMPLETED", "Present", "Late", "Absent", "Overtime", "Missed Clock-out"),
     defaultValue: "Present",
-    comment: "IN/COMPLETED are legacy values, use Present/Late/Absent/Overtime for new records"
+    comment: "IN/COMPLETED are legacy values, use Present/Late/Absent/Overtime/Missed Clock-out for new records"
   },
   overtime_hours: {
     type: DataTypes.FLOAT,

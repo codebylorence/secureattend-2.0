@@ -11,8 +11,11 @@ export const getEmployeesForBiometric = async (req, res) => {
   try {
     const employees = await getAllEmployees();
     
+    // Filter only active employees for biometric app
+    const activeEmployees = employees.filter(emp => emp.status === 'Active');
+    
     // Format specifically for biometric app
-    const biometricEmployees = employees.map(employee => {
+    const biometricEmployees = activeEmployees.map(employee => {
       const employeeData = employee.toJSON ? employee.toJSON() : employee;
       
       // Ensure fullname is populated
