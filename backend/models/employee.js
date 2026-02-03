@@ -20,11 +20,6 @@ const Employee = sequelize.define("Employee", {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  // Keep fullname for backward compatibility
-  fullname: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
   department: {
     type: DataTypes.STRING,
     allowNull: true, // Allow null for supervisors/admins

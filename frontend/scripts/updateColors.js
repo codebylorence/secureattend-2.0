@@ -75,7 +75,7 @@ const filesToUpdate = [
   'src/pages/MyAttendance.jsx',
   'src/pages/Profile.jsx',
   'src/pages/AdminProfile.jsx',
-  'src/pages/SuperAdminProfile.jsx',
+  'src/pages/WarehouseAdminProfile.jsx',
   'src/pages/Settings.jsx',
   'src/pages/Login.jsx',
   'src/pages/ViewSchedules.jsx',

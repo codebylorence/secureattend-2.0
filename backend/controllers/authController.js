@@ -34,3 +34,19 @@ export const updateCredentials = async (req, res) => {
   }
 };
 
+export const updateProfile = async (req, res) => {
+  try {
+    console.log("🔍 updateProfile called for user ID:", req.user.id);
+    
+    const { username, currentPassword, newPassword, firstname, lastname } = req.body;
+    const userId = req.user.id;
+
+    const result = await changeUserCredentials(userId, username, newPassword, currentPassword, firstname, lastname);
+    console.log("✅ Profile updated successfully for user:", userId);
+    res.json(result);
+  } catch (error) {
+    console.error("❌ Error updating profile for user", req.user.id, ":", error.message);
+    res.status(400).json({ message: error.message || "Error updating profile" });
+  }
+};
+

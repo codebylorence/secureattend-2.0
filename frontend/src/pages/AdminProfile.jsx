@@ -42,7 +42,7 @@ export default function AdminProfile() {
   const handleEditCredentials = () => {
     const fullName = user?.firstname && user?.lastname 
       ? `${user.firstname} ${user.lastname}`.trim()
-      : user?.employee?.fullname || `${user?.employee?.firstname || ''} ${user?.employee?.lastname || ''}`.trim() || "";
+      : `${user?.employee?.firstname || ''} ${user?.employee?.lastname || ''}`.trim() || "";
     
     // Split existing name into firstname and lastname if available
     const nameParts = fullName.split(' ');
@@ -189,7 +189,7 @@ export default function AdminProfile() {
 
   const displayName = user?.firstname && user?.lastname 
     ? `${user.firstname} ${user.lastname}`.trim()
-    : user?.employee?.fullname || 
+    : 
       `${user?.employee?.firstname || ''} ${user?.employee?.lastname || ''}`.trim() || 
       "Administrator";
 

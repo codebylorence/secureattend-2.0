@@ -9,7 +9,7 @@ import AddEmployeeModal from "../components/AddEmployeeModal";
 export default function Employees() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [zoneFilter, setZoneFilter] = useState("All Zone");
-  const [statusFilter, setStatusFilter] = useState("Active");
+  const [statusFilter, setStatusFilter] = useState("All Employees");
   const [searchTerm, setSearchTerm] = useState("");
   const employeeListRef = useRef(null);
   

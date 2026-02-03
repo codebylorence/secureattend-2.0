@@ -9,7 +9,7 @@ import EmpAction from "./EmpAction";
 import { MdManageAccounts } from "react-icons/md";
 import { fetchEmployees, getFingerprintStatus } from "../api/EmployeeApi";
 
-const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zone", statusFilter = "Active", searchTerm = "" }, ref) => {
+const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zone", statusFilter = "All Employees", searchTerm = "" }, ref) => {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -79,19 +79,20 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
     }
 
     // Apply status filter
-    if (statusFilter) {
+    if (statusFilter && statusFilter !== "All Employees") {
       filtered = filtered.filter(emp => emp.status === statusFilter);
     }
 
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(emp =>
-        emp.fullname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.position?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      filtered = filtered.filter(emp => {
+        const fullName = `${emp.firstname || ''} ${emp.lastname || ''}`.trim();
+        return fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.position?.toLowerCase().includes(searchTerm.toLowerCase());
+      });
     }
 
     console.log('🔍 Filtering employees:', {
@@ -130,9 +131,9 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
       ) : filteredEmployees.length === 0 ? (
         <div className="p-6 text-center text-gray-500">
           <MdManageAccounts className="text-4xl mx-auto mb-4 text-gray-300" />
-          <p>{searchTerm || zoneFilter !== "All Zone" || statusFilter !== "Active" ? "No employees match your filters" : (supervisorView ? "No active employees found" : "No employees found")}</p>
+          <p>{searchTerm || zoneFilter !== "All Zone" || (statusFilter !== "All Employees" && statusFilter !== "Active") ? "No employees match your filters" : (supervisorView ? "No active employees found" : "No employees found")}</p>
           <p className="text-sm mt-2">
-            {searchTerm || zoneFilter !== "All Zone" || statusFilter !== "Active" 
+            {searchTerm || zoneFilter !== "All Zone" || (statusFilter !== "All Employees" && statusFilter !== "Active") 
               ? "Try adjusting your search or filter criteria." 
               : (supervisorView 
                 ? "All active employees will appear here." 

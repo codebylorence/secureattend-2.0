@@ -7,7 +7,9 @@ export default function WelcomeSection() {
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
-    const name = user.employee?.fullname || user.username || "Employee";
+    const name = user.employee?.firstname && user.employee?.lastname 
+      ? `${user.employee.firstname} ${user.employee.lastname}`
+      : user.username || "Employee";
     const dept = user.employee?.department || "";
     setEmployeeName(name);
     setDepartment(dept);

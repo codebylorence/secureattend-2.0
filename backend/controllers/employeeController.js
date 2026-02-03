@@ -18,22 +18,22 @@ export const getEmployeesForBiometric = async (req, res) => {
     const biometricEmployees = activeEmployees.map(employee => {
       const employeeData = employee.toJSON ? employee.toJSON() : employee;
       
-      // Ensure fullname is populated
-      let fullname = employeeData.fullname;
-      if (!fullname || fullname.trim() === '' || fullname === 'null') {
-        if (employeeData.firstname && employeeData.lastname) {
-          fullname = `${employeeData.firstname} ${employeeData.lastname}`;
-        } else if (employeeData.firstname) {
-          fullname = employeeData.firstname;
-        } else {
-          fullname = `Employee ${employeeData.employee_id}`;
-        }
+      // Generate fullname from firstname and lastname for backward compatibility
+      let fullname = '';
+      if (employeeData.firstname && employeeData.lastname) {
+        fullname = `${employeeData.firstname} ${employeeData.lastname}`;
+      } else if (employeeData.firstname) {
+        fullname = employeeData.firstname;
+      } else {
+        fullname = `Employee ${employeeData.employee_id}`;
       }
       
       return {
         employee_id: employeeData.employee_id,
         employeeId: employeeData.employee_id, // For compatibility
-        fullname: fullname,
+        firstname: employeeData.firstname || '',
+        lastname: employeeData.lastname || '',
+        fullname: fullname, // Keep for biometric app compatibility
         department: employeeData.department || 'No Department',
         status: employeeData.status || 'Active'
       };
@@ -52,28 +52,17 @@ export const getEmployees = async (req, res) => {
   try {
     const employees = await getAllEmployees();
     
-    // Ensure fullname is populated for all employees (for web app)
+    // Return employees with separate firstname and lastname fields
     const processedEmployees = employees.map(employee => {
       const employeeData = employee.toJSON ? employee.toJSON() : employee;
-      
-      // Ensure fullname is populated
-      let fullname = employeeData.fullname;
-      if (!fullname || fullname.trim() === '' || fullname === 'null') {
-        if (employeeData.firstname && employeeData.lastname) {
-          fullname = `${employeeData.firstname} ${employeeData.lastname}`;
-        } else if (employeeData.firstname) {
-          fullname = employeeData.firstname;
-        } else {
-          fullname = `Employee ${employeeData.employee_id}`;
-        }
-      }
       
       // Include role from user relationship
       const role = employeeData.user?.role || 'employee';
       
       return {
         ...employeeData,
-        fullname: fullname,
+        firstname: employeeData.firstname || '',
+        lastname: employeeData.lastname || '',
         role: role
       };
     });

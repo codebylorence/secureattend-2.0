@@ -230,7 +230,7 @@ export default function Profile() {
               <h2 className="text-3xl font-bold text-white mb-2">
                 {user?.employee?.firstname && user?.employee?.lastname 
                   ? `${user.employee.firstname} ${user.employee.lastname}`
-                  : user?.employee?.fullname || "Employee Name"}
+                  : "Employee Name"}
               </h2>
               <p className="text-blue-100 text-lg mb-1">
                 {user?.employee?.position || "Position"}
@@ -271,7 +271,7 @@ export default function Profile() {
                   <p className="text-gray-900 font-medium">
                     {user?.employee?.firstname && user?.employee?.lastname 
                       ? `${user.employee.firstname} ${user.employee.lastname}`
-                      : user?.employee?.fullname || "N/A"}
+                      : "N/A"}
                   </p>
                 </div>
               </div>

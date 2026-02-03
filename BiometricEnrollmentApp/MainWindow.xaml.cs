@@ -10,12 +10,18 @@ namespace BiometricEnrollmentApp
     {
         private readonly ZKTecoService _zkService = new();
         private readonly ApiService _apiService = new();
+        private readonly DataService _dataService = new();
+        private readonly SyncService _syncService;
         private DispatcherTimer? _clockTimer;
         private bool _isAdminMode = false;
 
         public MainWindow()
         {
             InitializeComponent();
+            
+            // Initialize global sync service
+            _syncService = new SyncService(_dataService, _apiService);
+            
             InitializeApp();
         }
 
@@ -33,7 +39,9 @@ namespace BiometricEnrollmentApp
             // Update clock immediately
             UpdateClock();
             
-            // Schedule notifications removed - schedules now sync automatically
+            // Start global sync service for automatic schedule synchronization
+            _syncService.StartSyncService();
+            LogHelper.Write("🔄 Global sync service started from MainWindow");
         }
 
         private void ClockTimer_Tick(object? sender, EventArgs e)
@@ -150,7 +158,8 @@ namespace BiometricEnrollmentApp
         protected override void OnClosed(EventArgs e)
         {
             _clockTimer?.Stop();
-            // Notification service removed
+            _syncService?.StopSyncService();
+            LogHelper.Write("⏹️ Global sync service stopped from MainWindow");
             base.OnClosed(e);
         }
 

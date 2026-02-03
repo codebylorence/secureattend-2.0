@@ -15,11 +15,11 @@ import { authenticateToken, requireAdminOrTeamLeader } from "../middleware/auth.
 
 const router = express.Router();
 
-router.get("/", getEmployeeSchedules);
+router.get("/", authenticateToken, getEmployeeSchedules);
 router.get("/published", getPublishedSchedules); // For biometric app
-router.get("/employee/:employee_id", getEmployeeSchedule);
-router.get("/today/:employee_id", getTodaysEmployeeSchedule);
-router.get("/department/:department", getDepartmentSchedules);
+router.get("/employee/:employee_id", authenticateToken, getEmployeeSchedule);
+router.get("/today/:employee_id", authenticateToken, getTodaysEmployeeSchedule);
+router.get("/department/:department", authenticateToken, getDepartmentSchedules);
 router.post("/assign", authenticateToken, requireAdminOrTeamLeader, assignSchedule);
 router.post("/regenerate-weekly", authenticateToken, requireAdminOrTeamLeader, regenerateWeekly);
 router.put("/:id", authenticateToken, requireAdminOrTeamLeader, editEmployeeSchedule);

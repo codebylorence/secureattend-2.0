@@ -24,3 +24,13 @@ export const fetchTeamLeaders = async () => {
   const response = await api.get("/auth/teamleaders");
   return response.data;
 };
+
+export const updateProfile = async (profileData) => {
+  try {
+    const response = await api.put("/auth/profile", profileData);
+    return response.data;
+  } catch (error) {
+    console.error("Update profile error:", error);
+    throw error;
+  }
+};

@@ -47,9 +47,6 @@ function ShiftDetailsModal({ selectedShift, onClose, employees }) {
     if (employee.firstname && employee.lastname) {
       return `${employee.firstname} ${employee.lastname}`;
     }
-    if (employee.fullname && employee.fullname.trim()) {
-      return employee.fullname;
-    }
     if (employee.firstname && employee.firstname.trim()) {
       return employee.firstname;
     }

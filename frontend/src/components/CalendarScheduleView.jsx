@@ -5,7 +5,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { 
   MdAdd, MdEdit, MdDelete, MdClose, MdCalendarToday,
-  MdInfo, MdCheck, MdPeople, MdPersonAdd, MdLocationOn, MdSupervisorAccount, MdAdminPanelSettings
+  MdInfo, MdCheck, MdPeople, MdPersonAdd, MdLocationOn, MdSupervisorAccount, MdAdminPanelSettings, MdSearch
 } from "react-icons/md";
 import { toast } from 'react-toastify';
 
@@ -16,7 +16,7 @@ import {
   getShiftTemplates, createShiftTemplate, updateShiftTemplate, deleteShiftTemplate
 } from "../api/ShiftTemplateApi";
 import { fetchDepartments } from "../api/DepartmentApi";
-import { fetchEmployees } from "../api/EmployeeApi";
+import { fetchEmployees, getFingerprintStatus } from "../api/EmployeeApi";
 import { confirmAction } from "../utils/confirmToast.jsx";
 import { formatTime24Short } from "../utils/timeFormat";
 
@@ -73,6 +73,9 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
   const [employees, setEmployees] = useState([]);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedScheduleForAssign, setSelectedScheduleForAssign] = useState(null);
+  const [fingerprintStatus, setFingerprintStatus] = useState({});
+  const [loadingFingerprints, setLoadingFingerprints] = useState(true);
+  const [managementSearchTerm, setManagementSearchTerm] = useState("");
 
   // Pre-populate form data when reassigning
   useEffect(() => {
@@ -89,9 +92,9 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
               // Determine if this is a supervisor or admin based on employee data
               const employee = employees.find(emp => emp.employee_id === member.employee_id);
               if (employee) {
-                if (employee.role === 'supervisor') {
+                if (employee.position === 'Supervisor') {
                   assignedRoleIds.push(`supervisor_${member.employee_id}`);
-                } else if (employee.role === 'admin') {
+                } else if (employee.position === 'Warehouse Admin' || employee.position === 'Warehouse Manager') {
                   assignedRoleIds.push(`admin_${member.employee_id}`);
                 }
               }
@@ -125,6 +128,43 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
     };
     loadEmployees();
   }, []);
+
+  // Fetch fingerprint status for all employees
+  useEffect(() => {
+    const fetchFingerprintStatus = async () => {
+      try {
+        setLoadingFingerprints(true);
+        const status = await getFingerprintStatus();
+        setFingerprintStatus(status);
+        console.log('👆 Fingerprint status loaded:', status);
+      } catch (error) {
+        console.error('❌ Error fetching fingerprint status:', error);
+        setFingerprintStatus({});
+      } finally {
+        setLoadingFingerprints(false);
+      }
+    };
+
+    fetchFingerprintStatus();
+  }, []);
+
+  // Filter management employees based on search term
+  const filteredManagementEmployees = employees
+    .filter(emp => emp.position === 'Supervisor' || emp.position === 'Warehouse Admin' || emp.position === 'Warehouse Manager')
+    .filter(emp => {
+      if (!managementSearchTerm) return true;
+      
+      const employeeName = emp.firstname && emp.lastname 
+        ? `${emp.firstname} ${emp.lastname}` 
+        : emp.employee_id;
+      
+      const searchLower = managementSearchTerm.toLowerCase();
+      return (
+        employeeName.toLowerCase().includes(searchLower) ||
+        emp.employee_id.toLowerCase().includes(searchLower) ||
+        emp.position.toLowerCase().includes(searchLower)
+      );
+    });
 
   const dateStr = selectedDate ? formatDateForAPI(selectedDate) : "";
   const dayName = selectedDate ? getDayName(selectedDate) : "";
@@ -168,6 +208,18 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
   };
 
   const handleDepartmentToggle = (deptName) => {
+    // Check if this is a management role selection
+    if (deptName.startsWith('supervisor_') || deptName.startsWith('admin_')) {
+      const employeeId = deptName.replace('supervisor_', '').replace('admin_', '');
+      const hasFingerprint = fingerprintStatus[employeeId];
+      
+      // If trying to select a management role without fingerprint, show error and prevent selection
+      if (!formData.departments.includes(deptName) && !hasFingerprint) {
+        toast.error(`Cannot assign employee ${employeeId}. Employee must have fingerprint enrolled in the biometric system before being scheduled.`);
+        return;
+      }
+    }
+    
     setFormData(prev => ({
       ...prev,
       departments: prev.departments.includes(deptName)
@@ -246,9 +298,9 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
               role.members.forEach(member => {
                 const employee = employees.find(emp => emp.employee_id === member.employee_id);
                 if (employee) {
-                  if (employee.role === 'supervisor') {
+                  if (employee.position === 'Supervisor') {
                     existingRoleIds.push(`supervisor_${member.employee_id}`);
-                  } else if (employee.role === 'admin') {
+                  } else if (employee.position === 'Warehouse Admin' || employee.position === 'Warehouse Manager') {
                     existingRoleIds.push(`admin_${member.employee_id}`);
                   }
                 }
@@ -387,7 +439,9 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
               }
             } catch (error) {
               console.error(`Error adding management roles:`, error);
-              results.push({ success: false, action: 'added', item: 'Management Roles', error: error.message });
+              console.error(`Error details:`, error.response?.data);
+              console.error(`Error status:`, error.response?.status);
+              results.push({ success: false, action: 'added', item: 'Management Roles', error: error.response?.data?.message || error.message });
             }
           }
           
@@ -498,12 +552,12 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
               if (dept.startsWith('supervisor_')) {
                 const empId = dept.replace('supervisor_', '');
                 const emp = employees.find(e => e.employee_id === empId);
-                const name = emp ? (emp.firstname && emp.lastname ? `${emp.firstname} ${emp.lastname}` : emp.fullname || empId) : empId;
+                const name = emp ? (emp.firstname && emp.lastname ? `${emp.firstname} ${emp.lastname}` : empId) : empId;
                 return `Supervisor: ${name}`;
               } else if (dept.startsWith('admin_')) {
                 const empId = dept.replace('admin_', '');
                 const emp = employees.find(e => e.employee_id === empId);
-                const name = emp ? (emp.firstname && emp.lastname ? `${emp.firstname} ${emp.lastname}` : emp.fullname || empId) : empId;
+                const name = emp ? (emp.firstname && emp.lastname ? `${emp.firstname} ${emp.lastname}` : empId) : empId;
                 return `Warehouse Admin: ${name}`;
               }
               return dept;
@@ -762,107 +816,103 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                         <div className="flex justify-between items-center mb-3">
                           <h5 className="text-sm font-medium text-purple-700">
                             Management Roles
+                            {managementSearchTerm && (
+                              <span className="text-xs text-gray-500 ml-2">
+                                ({filteredManagementEmployees.length} found)
+                              </span>
+                            )}
                           </h5>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const allManagementIds = employees
-                                  .filter(emp => emp.role === 'supervisor' || emp.role === 'admin')
-                                  .map(emp => emp.role === 'supervisor' ? `supervisor_${emp.employee_id}` : `admin_${emp.employee_id}`);
-                                setFormData(prev => ({
-                                  ...prev,
-                                  departments: [...new Set([...prev.departments, ...allManagementIds])]
-                                }));
-                              }}
-                              className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
-                            >
-                              Select All
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const managementIds = employees
-                                  .filter(emp => emp.role === 'supervisor' || emp.role === 'admin')
-                                  .map(emp => emp.role === 'supervisor' ? `supervisor_${emp.employee_id}` : `admin_${emp.employee_id}`);
-                                setFormData(prev => ({
-                                  ...prev,
-                                  departments: prev.departments.filter(dept => !managementIds.includes(dept))
-                                }));
-                              }}
-                              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                            >
-                              Deselect All
-                            </button>
-                          </div>
                         </div>
-                        <div className="space-y-3">
-                          {/* Individual Supervisors */}
-                          {employees.filter(emp => emp.role === 'supervisor').map(supervisor => {
-                            const supervisorName = supervisor.firstname && supervisor.lastname 
-                              ? `${supervisor.firstname} ${supervisor.lastname}` 
-                              : supervisor.fullname || supervisor.employee_id;
-                            
-                            // Check if this supervisor is already assigned (for styling only)
-                            const isAlreadyAssigned = reassignShiftData?.existingRoles?.some(role => 
-                              role.members?.some(member => member.employee_id === supervisor.employee_id)
-                            );
-                            
-                            return (
-                              <div key={supervisor.employee_id}>
-                                <label className="flex items-center gap-3 p-3 border-2 border-purple-200 rounded-lg cursor-pointer transition-colors hover:bg-purple-50">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.departments.includes(`supervisor_${supervisor.employee_id}`)}
-                                    onChange={() => handleDepartmentToggle(`supervisor_${supervisor.employee_id}`)}
-                                    className="text-purple-600 focus:ring-purple-500 w-4 h-4"
-                                  />
-                                  <div className="flex-1">
-                                    <span className="text-sm font-medium text-purple-800">Supervisor</span>
-                                    <div className="text-xs text-purple-600 mt-1">
-                                      {supervisorName}
-                                    </div>
+                        
+                        {/* Search Bar */}
+                        <div className="mb-3 relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <MdSearch className="h-4 w-4 text-gray-400" />
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Search management employees..."
+                            value={managementSearchTerm}
+                            onChange={(e) => setManagementSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          />
+                          {managementSearchTerm && (
+                            <button
+                              type="button"
+                              onClick={() => setManagementSearchTerm("")}
+                              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                            >
+                              <MdClose className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        
+                        {/* Scrollable Management List */}
+                        <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto bg-white">
+                          {filteredManagementEmployees.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500 text-sm">
+                              {managementSearchTerm ? 'No management employees found matching your search' : 'No supervisors or warehouse admins found'}
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-gray-100">
+                              {filteredManagementEmployees.map((employee) => {
+                                const employeeName = employee.firstname && employee.lastname 
+                                  ? `${employee.firstname} ${employee.lastname}` 
+                                  : employee.employee_id;
+                                
+                                const hasFingerprint = fingerprintStatus[employee.employee_id];
+                                const roleKey = employee.position === 'Supervisor' 
+                                  ? `supervisor_${employee.employee_id}` 
+                                  : `admin_${employee.employee_id}`;
+                                const isSelected = formData.departments.includes(roleKey);
+                                const isDisabled = !hasFingerprint && !isSelected;
+                                
+                                return (
+                                  <div key={employee.employee_id} className={`p-4 hover:bg-gray-50 transition-colors ${
+                                    isSelected ? 'bg-purple-50 border-l-4 border-l-purple-500' : ''
+                                  } ${isDisabled ? 'bg-gray-50 opacity-60' : ''}`}>
+                                    <label className={`flex items-center gap-3 cursor-pointer ${
+                                      isDisabled ? 'cursor-not-allowed' : ''
+                                    }`}>
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => handleDepartmentToggle(roleKey)}
+                                        disabled={isDisabled}
+                                        className="text-purple-600 focus:ring-purple-500 w-4 h-4 disabled:opacity-50"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className={`text-sm font-medium ${
+                                            employee.position === 'Supervisor' ? 'text-purple-700' : 'text-blue-700'
+                                          } ${isDisabled ? 'text-gray-500' : ''}`}>
+                                            {employee.position === 'Supervisor' ? 'Supervisor' : 'Warehouse Admin'}
+                                          </span>
+                                          {/* Fingerprint Status Indicator */}
+                                          {loadingFingerprints ? (
+                                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-medium">
+                                              Checking...
+                                            </span>
+                                          ) : !hasFingerprint ? (
+                                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
+                                              No Fingerprint
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        <div className={`text-base font-medium mb-1 ${
+                                          isSelected ? (employee.position === 'Supervisor' ? 'text-purple-800' : 'text-blue-800') : 
+                                          isDisabled ? 'text-gray-400' : 'text-gray-800'
+                                        }`}>
+                                          {employeeName}
+                                        </div>
+                                        <div className={`text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
+                                          ID: {employee.employee_id}
+                                        </div>
+                                      </div>
+                                    </label>
                                   </div>
-                                </label>
-                              </div>
-                            );
-                          })}
-
-                          {/* Individual Warehouse Admins */}
-                          {employees.filter(emp => emp.role === 'admin').map(admin => {
-                            const adminName = admin.firstname && admin.lastname 
-                              ? `${admin.firstname} ${admin.lastname}` 
-                              : admin.fullname || admin.employee_id;
-                            
-                            // Check if this admin is already assigned (for styling only)
-                            const isAlreadyAssigned = reassignShiftData?.existingRoles?.some(role => 
-                              role.members?.some(member => member.employee_id === admin.employee_id)
-                            );
-                            
-                            return (
-                              <div key={admin.employee_id}>
-                                <label className="flex items-center gap-3 p-3 border-2 border-purple-200 rounded-lg cursor-pointer transition-colors hover:bg-purple-50">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.departments.includes(`admin_${admin.employee_id}`)}
-                                    onChange={() => handleDepartmentToggle(`admin_${admin.employee_id}`)}
-                                    className="text-purple-600 focus:ring-purple-500 w-4 h-4"
-                                  />
-                                  <div className="flex-1">
-                                    <span className="text-sm font-medium text-purple-800">Warehouse Admin</span>
-                                    <div className="text-xs text-purple-600 mt-1">
-                                      {adminName}
-                                    </div>
-                                  </div>
-                                </label>
-                              </div>
-                            );
-                          })}
-                          
-                          {/* Show message if no supervisors or admins found */}
-                          {employees.filter(emp => emp.role === 'supervisor' || emp.role === 'admin').length === 0 && (
-                            <div className="text-center py-4 text-gray-500 text-sm">
-                              No supervisors or warehouse admins found
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1033,6 +1083,27 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [initiallyAssignedEmployees, setInitiallyAssignedEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [fingerprintStatus, setFingerprintStatus] = useState({});
+  const [loadingFingerprints, setLoadingFingerprints] = useState(true);
+
+  // Fetch fingerprint status for all employees
+  useEffect(() => {
+    const fetchFingerprintStatus = async () => {
+      try {
+        setLoadingFingerprints(true);
+        const status = await getFingerprintStatus();
+        setFingerprintStatus(status);
+        console.log('👆 Fingerprint status loaded:', status);
+      } catch (error) {
+        console.error('❌ Error fetching fingerprint status:', error);
+        setFingerprintStatus({});
+      } finally {
+        setLoadingFingerprints(false);
+      }
+    };
+
+    fetchFingerprintStatus();
+  }, []);
 
   // Get currently assigned employees
   useEffect(() => {
@@ -1055,7 +1126,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
   const departmentEmployees = employees.filter(emp => {
     // For Role-Based (Management Roles), only include supervisors and warehouse admins
     if (schedule.department === 'Role-Based') {
-      return emp.role === 'supervisor' || emp.role === 'admin';
+      return emp.position === 'Supervisor' || emp.position === 'Warehouse Admin' || emp.position === 'Warehouse Manager';
     }
     
     // For regular zones, only include employees from the same department or Company-wide
@@ -1084,10 +1155,19 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
     setSelectedEmployees(prev => {
       const isCurrentlySelected = prev.includes(employeeId);
       
-      // Only apply member limit restrictions to zones, not management roles
-      if (!isCurrentlySelected && schedule.department !== 'Role-Based' && schedule.member_limit && prev.length >= schedule.member_limit) {
-        toast.warning(`Cannot assign more than ${schedule.member_limit} employees to this zone`);
-        return prev;
+      // If trying to select an employee, check if they have fingerprint enrolled
+      if (!isCurrentlySelected) {
+        const hasFingerprint = fingerprintStatus[employeeId];
+        if (!hasFingerprint) {
+          toast.error(`Cannot assign employee ${employeeId}. Employee must have fingerprint enrolled in the biometric system before being scheduled.`);
+          return prev;
+        }
+        
+        // Only apply member limit restrictions to zones, not management roles
+        if (schedule.department !== 'Role-Based' && schedule.member_limit && prev.length >= schedule.member_limit) {
+          toast.warning(`Cannot assign more than ${schedule.member_limit} employees to this zone`);
+          return prev;
+        }
       }
       
       return isCurrentlySelected 
@@ -1103,11 +1183,17 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
       return;
     }
     
+    // Validate that all selected employees have fingerprints enrolled
+    const employeesToAdd = selectedEmployees.filter(empId => !initiallyAssignedEmployees.includes(empId));
+    const employeesWithoutFingerprints = employeesToAdd.filter(empId => !fingerprintStatus[empId]);
+    
+    if (employeesWithoutFingerprints.length > 0) {
+      toast.error(`Cannot assign employees ${employeesWithoutFingerprints.join(', ')}. These employees must have fingerprints enrolled in the biometric system before being scheduled.`);
+      return;
+    }
+    
     setLoading(true);
     try {
-      // Find employees to add (selected but not initially assigned)
-      const employeesToAdd = selectedEmployees.filter(empId => !initiallyAssignedEmployees.includes(empId));
-      
       // Find employees to remove (initially assigned but not selected)
       const employeesToRemove = initiallyAssignedEmployees.filter(empId => !selectedEmployees.includes(empId));
       
@@ -1200,7 +1286,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                   
                   const employeeName = employee.firstname && employee.lastname 
                     ? `${employee.firstname} ${employee.lastname}`
-                    : employee.fullname || employee.employee_id;
+                    : employee.employee_id;
                   
                   return (
                     <div key={empId} className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
@@ -1237,30 +1323,33 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
               {departmentEmployees.map(employee => {
                 const employeeName = employee.firstname && employee.lastname 
                   ? `${employee.firstname} ${employee.lastname}`
-                  : employee.fullname || employee.employee_id;
+                  : employee.employee_id;
                 
                 const isSelected = selectedEmployees.includes(employee.employee_id);
                 const isTeamLeader = employee.position === "Team Leader";
                 const isSupervisor = employee.position === "Supervisor";
+                const hasFingerprint = fingerprintStatus[employee.employee_id];
+                
                 // Only apply member limit restrictions to zones, not management roles
                 const isAtLimit = schedule.department !== 'Role-Based' && schedule.member_limit && selectedEmployees.length >= schedule.member_limit && !isSelected;
+                const isDisabled = isAtLimit || (!hasFingerprint && !isSelected); // Disable if no fingerprint and not already selected
                 
                 return (
                   <label key={employee.employee_id} className={`flex items-center gap-3 p-3 border rounded-lg transition-colors ${
                     isSelected ? 'border-blue-500 bg-blue-50' : 
-                    isAtLimit ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60' : 
+                    isDisabled ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60' : 
                     'border-gray-200 hover:bg-gray-50 cursor-pointer'
                   }`}>
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => handleEmployeeToggle(employee.employee_id)}
-                      disabled={isAtLimit}
+                      disabled={isDisabled}
                       className="text-blue-600 focus:ring-blue-500 disabled:opacity-50"
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className={`font-medium ${isSelected ? 'text-blue-800' : isAtLimit ? 'text-gray-500' : 'text-gray-800'}`}>
+                        <span className={`font-medium ${isSelected ? 'text-blue-800' : isDisabled ? 'text-gray-500' : 'text-gray-800'}`}>
                           {employeeName}
                         </span>
                         {isSupervisor && (
@@ -1268,6 +1357,16 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                             Supervisor
                           </span>
                         )}
+                        {/* Fingerprint Status Indicator */}
+                        {loadingFingerprints ? (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-medium">
+                            Checking...
+                          </span>
+                        ) : !hasFingerprint ? (
+                          <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-medium">
+                            No Fingerprint
+                          </span>
+                        ) : null}
                         {isTeamLeader && (
                           <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">
                             Team Leader
@@ -1329,7 +1428,7 @@ function ShiftDetailsModal({ shiftData, onClose, employees, onSave, onReassign }
     if (employee) {
       return employee.firstname && employee.lastname 
         ? `${employee.firstname} ${employee.lastname}`
-        : employee.fullname || employeeId;
+        : employeeId;
     }
     return employeeId;
   };
@@ -1717,7 +1816,7 @@ function ShiftDetailsModal({ shiftData, onClose, employees, onSave, onReassign }
                     const employeeName = employee ? 
                       (employee.firstname && employee.lastname ? 
                         `${employee.firstname} ${employee.lastname}` : 
-                        employee.fullname || member.employee_id) : 
+                        member.employee_id) : 
                       member.employee_id;
                     
                     const employeeRole = employee?.role;

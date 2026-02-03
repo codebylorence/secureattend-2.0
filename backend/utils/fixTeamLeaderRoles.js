@@ -24,7 +24,7 @@ export const fixTeamLeaderRoles = async () => {
     let fixedCount = 0;
     
     for (const user of usersToFix) {
-      console.log(`🔧 Fixing role for: ${user.employee.fullname} (${user.employee.employee_id})`);
+      console.log(`🔧 Fixing role for: ${user.employee.firstname} ${user.employee.lastname} (${user.employee.employee_id})`);
       
       await user.update({ role: "teamleader" });
       fixedCount++;

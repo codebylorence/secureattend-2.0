@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/user.js";
 import Employee from "../models/employee.js";
+// Import associations to ensure they are loaded
+import "../models/associations.js";
 
 export const verifyLogin = async (username, password) => {
   try {
@@ -24,7 +26,7 @@ export const verifyLogin = async (username, password) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, employeeId: user.employeeId },
       process.env.JWT_SECRET || "your-secret-key",
       { expiresIn: "24h" }
     );
@@ -61,7 +63,7 @@ export const verifyLogin = async (username, password) => {
       }
 
       const token = jwt.sign(
-        { id: user.id, role: user.role },
+        { id: user.id, role: user.role, employeeId: user.employeeId },
         process.env.JWT_SECRET || "your-secret-key",
         { expiresIn: "24h" }
       );
@@ -114,13 +116,13 @@ export const changeUserCredentials = async (id, username, password, currentPassw
     updateData.password = hashedPassword;
   }
   
-  // Update firstname if provided and user is superadmin or admin
-  if (firstname !== null && (user.role === 'superadmin' || user.role === 'admin')) {
+  // Update firstname if provided and user is admin or warehouseadmin
+  if (firstname !== null && (user.role === 'admin' || user.role === 'warehouseadmin')) {
     updateData.firstname = firstname;
   }
   
-  // Update lastname if provided and user is superadmin or admin
-  if (lastname !== null && (user.role === 'superadmin' || user.role === 'admin')) {
+  // Update lastname if provided and user is admin or warehouseadmin
+  if (lastname !== null && (user.role === 'admin' || user.role === 'warehouseadmin')) {
     updateData.lastname = lastname;
   }
   

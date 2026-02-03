@@ -23,7 +23,6 @@ namespace BiometricEnrollmentApp
         private System.Timers.Timer? _clockTimer;
         private System.Timers.Timer? _absentMarkingTimer;
         private System.Timers.Timer? _gridRefreshTimer;
-        private System.Timers.Timer? _scheduleAutoSyncTimer;
         
         // Double-tap prevention: Track recent scans per employee
         private static readonly Dictionary<string, DateTime> _lastScanTimes = new Dictionary<string, DateTime>();
@@ -50,9 +49,6 @@ namespace BiometricEnrollmentApp
             Loaded += AttendancePage_Loaded;
             Unloaded += AttendancePage_Unloaded;
 
-            // Start sync service for retry mechanism
-            _syncService.StartSyncService();
-
             // Auto-sync deleted employees every 5 minutes
             var syncTimer = new System.Timers.Timer(5 * 60 * 1000); // every 5 minutes
             syncTimer.Elapsed += async (_, _) => await SyncDeletedEmployeesAsync();
@@ -74,19 +70,12 @@ namespace BiometricEnrollmentApp
             _absentMarkingTimer.Elapsed += async (_, _) => await MarkAndSyncAbsentEmployeesAsync();
             _absentMarkingTimer.Start();
             
-            // Start automatic schedule sync timer (every 10 minutes when WiFi is connected)
-            _scheduleAutoSyncTimer = new System.Timers.Timer(10 * 60 * 1000); // every 10 minutes
-            _scheduleAutoSyncTimer.Elapsed += async (_, _) => await AutoSyncSchedulesAsync();
-            _scheduleAutoSyncTimer.Start();
+            // Note: SyncService is now started globally from MainWindow
+            // Subscribe to schedule update notifications if needed
+            // _syncService.OnSchedulesUpdated += OnSchedulesUpdated;
             
             // Run absent marking immediately on startup
             Task.Run(async () => await MarkAndSyncAbsentEmployeesAsync());
-            
-            // Load schedules on startup (one-time)
-            Task.Run(async () => 
-            {
-                await SyncSchedulesFromServerAsync();
-            });
         }
 
         private void UpdateClock()
@@ -299,8 +288,14 @@ namespace BiometricEnrollmentApp
             _gridRefreshTimer?.Dispose();
             _absentMarkingTimer?.Stop();
             _absentMarkingTimer?.Dispose();
-            _scheduleAutoSyncTimer?.Stop();
-            _scheduleAutoSyncTimer?.Dispose();
+            
+            // Note: SyncService cleanup is handled globally from MainWindow
+            // Unsubscribe from schedule update notifications if subscribed
+            // if (_syncService != null)
+            // {
+            //     _syncService.OnSchedulesUpdated -= OnSchedulesUpdated;
+            // }
+
             LogHelper.Write("📴 Attendance page unloaded - continuous scanning stopped");
         }
         
@@ -386,54 +381,6 @@ namespace BiometricEnrollmentApp
             }
         }
 
-        private async Task AutoSyncSchedulesAsync()
-        {
-            try
-            {
-                // Check if network is available
-                if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
-                {
-                    LogHelper.Write("🌐 Network not available - skipping schedule auto-sync");
-                    return;
-                }
-
-                LogHelper.Write("🔄 Auto-syncing schedules from server...");
-                
-                var schedules = await _apiService.GetAllSchedulesAsync();
-                
-                if (schedules != null && schedules.Count > 0)
-                {
-                    int updated = _dataService.UpdateSchedules(schedules);
-                    LogHelper.Write($"✅ Auto-sync: Updated {updated} schedule(s) from server");
-                    
-                    // Update UI status briefly
-                    Dispatcher.Invoke(() => 
-                    {
-                        UpdateStatus($"🔄 Auto-synced {updated} schedule(s)");
-                        
-                        // Clear status after 3 seconds
-                        var clearTimer = new System.Timers.Timer(3000);
-                        clearTimer.Elapsed += (_, _) => 
-                        {
-                            Dispatcher.Invoke(() => UpdateStatus("Place finger to scan..."));
-                            clearTimer.Dispose();
-                        };
-                        clearTimer.AutoReset = false;
-                        clearTimer.Start();
-                    });
-                }
-                else
-                {
-                    LogHelper.Write("ℹ️ Auto-sync: No schedules found on server");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"💥 Error in auto-sync schedules: {ex.Message}");
-                // Don't show error to user for auto-sync failures
-            }
-        }
-
         private async Task SyncSchedulesFromServerAsync()
         {
             try
@@ -455,6 +402,32 @@ namespace BiometricEnrollmentApp
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Error syncing schedules: {ex.Message}");
+            }
+        }
+
+        private void OnSchedulesUpdated(int updatedCount)
+        {
+            try
+            {
+                // Update UI status briefly on the UI thread
+                Dispatcher.Invoke(() => 
+                {
+                    UpdateStatus($"🔄 Auto-synced {updatedCount} schedule(s)");
+                    
+                    // Clear status after 3 seconds
+                    var clearTimer = new System.Timers.Timer(3000);
+                    clearTimer.Elapsed += (_, _) => 
+                    {
+                        Dispatcher.Invoke(() => UpdateStatus("Place finger to scan..."));
+                        clearTimer.Dispose();
+                    };
+                    clearTimer.AutoReset = false;
+                    clearTimer.Start();
+                });
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in OnSchedulesUpdated: {ex.Message}");
             }
         }
 
@@ -1960,36 +1933,40 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                UpdateStatus("📥 Fetching schedules from server...");
+                UpdateStatus("📥 Force syncing schedules from server...");
 
-                var schedules = await _apiService.GetAllSchedulesAsync();
+                int updatedCount = await _syncService.ForceScheduleSyncAsync();
 
-                if (schedules == null || schedules.Count == 0)
+                if (updatedCount == -1)
                 {
-                    UpdateStatus("⚠️ No schedules found on server");
-                    MessageBox.Show("No schedules found on the server.", "No Schedules", MessageBoxButton.OK, MessageBoxImage.Information);
+                    UpdateStatus("❌ Failed to sync schedules");
+                    MessageBox.Show("Failed to sync schedules from the server. Please check your network connection.", "Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                // Store schedules in local database
-                int updatedCount = _dataService.UpdateSchedules(schedules);
+                if (updatedCount == 0)
+                {
+                    UpdateStatus("ℹ️ No schedule changes found");
+                    MessageBox.Show("No schedule changes found on the server.", "No Changes", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
 
-                UpdateStatus($"✅ Successfully updated {updatedCount} schedule(s)");
-                MessageBox.Show($"Successfully updated {updatedCount} employee schedule(s) from the server.", "Update Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                UpdateStatus($"✅ Successfully synced {updatedCount} schedule(s)");
+                MessageBox.Show($"Successfully synced {updatedCount} employee schedule(s) from the server.", "Sync Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                 
-                LogHelper.Write($"✅ Updated {updatedCount} schedules from server");
+                LogHelper.Write($"✅ Force synced {updatedCount} schedules from server");
             }
             catch (HttpRequestException ex)
             {
                 UpdateStatus("❌ Network error - Check WiFi connection");
                 MessageBox.Show($"Network error: {ex.Message}\n\nPlease check your WiFi connection and try again.", "Connection Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                LogHelper.Write($"💥 Network error updating schedules: {ex.Message}");
+                LogHelper.Write($"💥 Network error force syncing schedules: {ex.Message}");
             }
             catch (Exception ex)
             {
-                UpdateStatus("❌ Failed to update schedules");
-                MessageBox.Show($"Error updating schedules: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                LogHelper.Write($"💥 Error updating schedules: {ex.Message}");
+                UpdateStatus("❌ Failed to sync schedules");
+                MessageBox.Show($"Error syncing schedules: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogHelper.Write($"💥 Error force syncing schedules: {ex.Message}");
             }
         }
 

@@ -11,8 +11,17 @@ export default function TeamDashboard() {
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
-    const dept = user.employee?.department || "Unknown";
-    setDepartment(dept);
+    
+    // Try to get department from user.employee first
+    let dept = user.employee?.department;
+    
+    // If no department and we have employeeId, set based on known team leaders
+    if (!dept && user.employeeId === 8) {
+      // Charles Lopez (employeeId 8) is from Zone A
+      dept = "Zone A";
+    }
+    
+    setDepartment(dept || "Unknown");
   }, []);
 
   return (

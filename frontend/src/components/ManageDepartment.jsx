@@ -73,7 +73,6 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
             employee_id: leader.employee.employee_id,
             firstname: leader.employee.firstname,
             lastname: leader.employee.lastname,
-            fullname: leader.employee.fullname,
             department: leader.employee.department
           } : null
         }))
@@ -173,11 +172,11 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
       // If there's a manager assigned, make sure they're included even if from different department
       if (dept.manager) {
         const manager = allEmployees.find(emp => {
-          // Check both fullname and firstname+lastname combinations
+          // Check firstname+lastname combination
           const empFullName = emp.firstname && emp.lastname 
             ? `${emp.firstname} ${emp.lastname}` 
-            : emp.fullname;
-          return empFullName === dept.manager || emp.fullname === dept.manager;
+            : emp.firstname || '';
+          return empFullName === dept.manager;
         });
         
         // If manager exists but not in current members list, add them
@@ -198,7 +197,6 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
           employee_id: m.employee_id,
           firstname: m.firstname,
           lastname: m.lastname,
-          fullname: m.fullname,
           position: m.position,
           department: m.department
         }))
@@ -258,8 +256,8 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                             const manager = departmentMembers.find(m => {
                               const memberFullName = m.firstname && m.lastname 
                                 ? `${m.firstname} ${m.lastname}` 
-                                : m.fullname;
-                              return memberFullName === selectedDepartment?.manager || m.fullname === selectedDepartment?.manager;
+                                : m.firstname || '';
+                              return memberFullName === selectedDepartment?.manager;
                             });
                             return manager && manager.department !== selectedDepartment?.name ? (
                               <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -310,13 +308,10 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                       </tr>
                     ) : (
                       departmentMembers.map((member) => {
-                        // Get member's full name (handle both firstname/lastname and fullname formats)
+                        // Get member's full name (handle firstname/lastname format)
                         const memberFullName = (() => {
                           if (member.firstname && member.lastname) {
                             return `${member.firstname} ${member.lastname}`;
-                          }
-                          if (member.fullname && member.fullname.trim()) {
-                            return member.fullname;
                           }
                           if (member.firstname && member.firstname.trim()) {
                             return member.firstname;
@@ -325,8 +320,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                         })();
                         
                         // Check if this member is the team leader (compare with manager name)
-                        const isTeamLeader = memberFullName === selectedDepartment?.manager || 
-                                           member.fullname === selectedDepartment?.manager ||
+                        const isTeamLeader = memberFullName === selectedDepartment?.manager ||
                                            (member.firstname && member.lastname && 
                                             `${member.firstname} ${member.lastname}` === selectedDepartment?.manager);
                         
@@ -471,8 +465,8 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                                   if (leader.employee?.firstname && leader.employee?.lastname) {
                                     return `${leader.employee.firstname} ${leader.employee.lastname}`;
                                   }
-                                  if (leader.employee?.fullname && leader.employee.fullname.trim()) {
-                                    return leader.employee.fullname;
+                                  if (leader.employee?.firstname && leader.employee.firstname.trim()) {
+                                    return leader.employee.firstname;
                                   }
                                   return leader.username;
                                 })();

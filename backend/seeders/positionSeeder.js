@@ -18,7 +18,18 @@ const defaultPositions = [
   { name: "HR Manager", description: "Manages human resources department" },
   { name: "Finance Manager", description: "Manages finance department operations" },
   { name: "Operations Manager", description: "Manages daily operations" },
-  { name: "Director", description: "Senior leadership role overseeing multiple departments" }
+  { name: "Director", description: "Senior leadership role overseeing multiple departments" },
+  { name: "Warehouse Admin", description: "Manages warehouse operations and logistics" },
+  { name: "Warehouse Manager", description: "Senior warehouse management role" },
+  { name: "Warehouse Supervisor", description: "Supervises warehouse operations" },
+  { name: "Inventory Manager", description: "Manages inventory and stock control" },
+  { name: "Logistics Coordinator", description: "Coordinates logistics and shipping" },
+  { name: "Picker", description: "Picks items for order fulfillment" },
+  { name: "Packer", description: "Packs items for shipping" },
+  { name: "Inventory Clerk", description: "Maintains inventory records" },
+  { name: "Shipping Clerk", description: "Handles shipping and receiving" },
+  { name: "Forklift Operator", description: "Operates forklift equipment" },
+  { name: "Warehouse Associate", description: "General warehouse operations" }
 ];
 
 export const seedPositions = async () => {

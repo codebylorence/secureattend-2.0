@@ -54,11 +54,12 @@ const OvertimeModal = ({ isOpen, onClose }) => {
     }
   };
 
-  const filteredEmployees = employees.filter(emp => 
-    emp.fullname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.department?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEmployees = employees.filter(emp => {
+    const fullName = `${emp.firstname || ''} ${emp.lastname || ''}`.trim();
+    return fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.department?.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const handleEmployeeToggle = (employeeId) => {
     setSelectedEmployees(prev => 
@@ -273,7 +274,7 @@ const OvertimeModal = ({ isOpen, onClose }) => {
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-sm font-medium text-gray-900">
-                                {employee.fullname}
+                                {`${employee.firstname || ''} ${employee.lastname || ''}`.trim() || employee.employee_id}
                               </p>
                               <p className="text-sm text-gray-500">
                                 ID: {employee.employee_id} • {employee.department || 'N/A'}

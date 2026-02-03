@@ -34,17 +34,6 @@ export const createEmployee = async (employeeData) => {
   // Handle both old and new data formats
   const processedData = { ...employeeData };
   
-  // If firstname and lastname are provided, also set fullname for backward compatibility
-  if (processedData.firstname && processedData.lastname) {
-    processedData.fullname = `${processedData.firstname} ${processedData.lastname}`;
-  }
-  // If only fullname is provided, try to split it into firstname and lastname
-  else if (processedData.fullname && !processedData.firstname && !processedData.lastname) {
-    const nameParts = processedData.fullname.trim().split(' ');
-    processedData.firstname = nameParts[0] || '';
-    processedData.lastname = nameParts.slice(1).join(' ') || '';
-  }
-  
   // Create user account with provided username and password
   if (employeeData.username && employeeData.password) {
     console.log(`🔐 Username and password provided: ${employeeData.username}`);
@@ -80,6 +69,10 @@ export const createEmployee = async (employeeData) => {
         userRole = "teamleader";
       } else if (employeeData.position === "Supervisor") {
         userRole = "supervisor";
+      } else if (employeeData.position === "Warehouse Admin" || 
+                 employeeData.position === "Warehouse Manager" ||
+                 employeeData.position === "Inventory Manager") {
+        userRole = "warehouseadmin";
       }
       
       console.log(`🔐 Creating user account with role: ${userRole}`);
@@ -204,6 +197,10 @@ export const updateEmployee = async (id, updates) => {
           newRole = "teamleader";
         } else if (updates.position === "Supervisor") {
           newRole = "supervisor";
+        } else if (updates.position === "Warehouse Admin" || 
+                   updates.position === "Warehouse Manager" ||
+                   updates.position === "Inventory Manager") {
+          newRole = "warehouseadmin";
         }
         
         // Update user role only (keep existing password)
@@ -239,26 +236,26 @@ export const getEmployeeByEmployeeId = async (employee_id) => {
   // Convert to the format expected by the biometric app
   const employeeData = employee.toJSON();
   
-  // Ensure fullname is populated for biometric app compatibility
-  let fullname = employeeData.fullname;
-  if (!fullname || fullname.trim() === '' || fullname === 'null') {
-    if (employeeData.firstname && employeeData.lastname) {
-      fullname = `${employeeData.firstname} ${employeeData.lastname}`;
-    } else if (employeeData.firstname) {
-      fullname = employeeData.firstname;
-    } else {
-      fullname = `Employee ${employee_id}`;
-    }
+  // Generate fullname from firstname and lastname for biometric app compatibility only
+  let fullname = '';
+  if (employeeData.firstname && employeeData.lastname) {
+    fullname = `${employeeData.firstname} ${employeeData.lastname}`;
+  } else if (employeeData.firstname) {
+    fullname = employeeData.firstname;
+  } else {
+    fullname = `Employee ${employee_id}`;
   }
   
   // Get role from user relationship
   const role = employeeData.user?.role || 'employee';
   
-  // Return in the format expected by biometric app
+  // Return in the format expected by biometric app (with fullname for compatibility)
   return {
     ...employeeData,
     employeeId: employeeData.employee_id, // Map employee_id to employeeId for C# app
-    fullname: fullname,
+    firstname: employeeData.firstname || '',
+    lastname: employeeData.lastname || '',
+    fullname: fullname, // Keep for biometric app compatibility
     department: employeeData.department || 'No Department',
     role: role // Include the role from user table
   };

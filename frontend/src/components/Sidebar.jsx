@@ -99,7 +99,7 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
 
   const getProfileRoute = () => {
     if (role === "admin") return "/admin/profile";
-    if (role === "superadmin") return "/superadmin/profile";
+    if (role === "warehouseadmin") return "/warehouseadmin/profile";
     if (role === "supervisor") return "/supervisor/profile";
     if (role === "teamleader") return "/team/profile";
     return "/employee/profile";
@@ -113,13 +113,13 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
         label: "Dashboard",
         icon: FaTachometerAlt,
         path: role === "admin" ? "/admin/dashboard" : 
-              role === "superadmin" ? "/admin/dashboard" :
+              role === "warehouseadmin" ? "/warehouseadmin/dashboard" :
               role === "supervisor" ? "/admin/dashboard" :
               role === "teamleader" ? "/team/dashboard" : "/employee/dashboard"
       }
     ];
 
-    if (role === "admin" || role === "supervisor" || role === "superadmin") {
+    if (role === "admin" || role === "supervisor") {
       return [
         ...baseItems,
         {
@@ -207,6 +207,46 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
       ];
     }
 
+    if (role === "warehouseadmin") {
+      return [
+        ...baseItems,
+        {
+          key: "attendance",
+          label: "Attendance",
+          icon: FaClock,
+          path: "/warehouseadmin/attendance"
+        },
+        {
+          key: "reports",
+          label: "Reports",
+          icon: FaChartBar,
+          path: "/warehouseadmin/attendance-reports"
+        },
+        {
+          key: "personal",
+          label: "Personal",
+          icon: FaUser,
+          submenu: [
+            {
+              key: "my-dashboard",
+              label: "My Dashboard",
+              path: "/warehouseadmin/mydashboard"
+            },
+            {
+              key: "my-attendance",
+              label: "My Attendance",
+              path: "/warehouseadmin/myattendance"
+            },
+            {
+              key: "my-schedule",
+              label: "My Schedule",
+              path: "/warehouseadmin/myschedule"
+            }
+          ]
+        }
+      ];
+    }
+
     if (role === "teamleader") {
       return [
         {
@@ -271,8 +311,8 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
 
   const getRoleDisplayName = () => {
     switch (role) {
-      case "admin": return "Administrator";
-      case "superadmin": return "Super Administrator";
+      case "admin": return "HR Administrator";
+      case "warehouseadmin": return "Warehouse Administrator";
       case "supervisor": return "Supervisor";
       case "teamleader": return "Team Leader";
       case "employee": return "Employee";

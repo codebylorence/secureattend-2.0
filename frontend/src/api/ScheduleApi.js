@@ -69,8 +69,28 @@ export const publishSchedules = async (publishedBy) => {
 // ============================================
 
 export const getEmployeeSchedules = async () => {
-  const response = await api.get(EMPLOYEE_SCHEDULE_API_URL);
-  return response.data;
+  // Add cache-busting parameter to ensure fresh data
+  const timestamp = new Date().getTime();
+  console.log(`🌐 Frontend API: Calling getEmployeeSchedules with timestamp ${timestamp}`);
+  
+  try {
+    const response = await api.get(`${EMPLOYEE_SCHEDULE_API_URL}?_t=${timestamp}`);
+    console.log(`✅ Frontend API: Fetched ${response.data.length} employee schedules`);
+    console.log(`📊 Frontend API: Sample schedules:`, response.data.slice(0, 3));
+    return response.data;
+  } catch (error) {
+    console.error(`❌ Frontend API: Error fetching employee schedules:`, error);
+    console.error(`❌ Frontend API: Error details:`, {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message,
+      url: error.config?.url
+    });
+    
+    // Re-throw the error so the calling component can handle it
+    throw error;
+  }
 };
 
 export const getEmployeeScheduleById = async (employeeId) => {

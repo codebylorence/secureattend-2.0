@@ -19,12 +19,56 @@ import { createScheduleNotification } from "./scheduleNotificationController.js"
 import User from "../models/user.js";
 import Employee from "../models/employee.js";
 
+// Helper function to check if employee has fingerprint enrolled
+const checkEmployeeFingerprintStatus = async (employeeId) => {
+  try {
+    const sqlite3 = await import('sqlite3');
+    const { open } = await import('sqlite');
+    
+    // Path to biometric app's local database
+    const dbPath = process.env.BIOMETRIC_DB_PATH || '../BiometricEnrollmentApp/bin/Debug/net9.0-windows/biometric_local.db';
+    
+    console.log(`🔍 Checking fingerprint status for employee ${employeeId}`);
+    
+    // Open connection to biometric database
+    const db = await open({
+      filename: dbPath,
+      driver: sqlite3.default.Database
+    });
+    
+    // Query to check if this specific employee has fingerprints enrolled
+    const enrollment = await db.get(
+      'SELECT employee_id FROM Enrollments WHERE employee_id = ? AND fingerprint_template IS NOT NULL AND fingerprint_template != ""',
+      [employeeId]
+    );
+    
+    await db.close();
+    
+    const hasFingerprint = !!enrollment;
+    console.log(`👆 Employee ${employeeId} fingerprint status: ${hasFingerprint ? 'ENROLLED' : 'NOT ENROLLED'}`);
+    
+    return hasFingerprint;
+  } catch (error) {
+    console.error(`❌ Error checking fingerprint status for employee ${employeeId}:`, error);
+    // If we can't check the database, assume no fingerprint for safety
+    return false;
+  }
+};
+
 // GET /api/employee-schedules
 export const getEmployeeSchedules = async (req, res) => {
   try {
+    console.log('🌐 API: getEmployeeSchedules called by user:', req.user?.role, req.user?.employeeId);
+    
     // Get schedules from both old system and new template system
     const legacySchedules = await getAllEmployeeSchedules();
     const templateSchedules = await getEmployeeSchedulesFromTemplates();
+    
+    console.log('📊 API: Schedule counts:', {
+      legacy: legacySchedules.length,
+      template: templateSchedules.length,
+      total: legacySchedules.length + templateSchedules.length
+    });
     
     // Combine and return both
     const allSchedules = [...legacySchedules, ...templateSchedules];
@@ -72,6 +116,21 @@ export const assignSchedule = async (req, res) => {
     console.log("👤 Request user:", req.user);
     
     const { employee_id, template_id, days, assigned_by, shift_name, start_time, end_time } = req.body;
+    
+    // Validate that employee has fingerprint enrolled before scheduling
+    console.log("🔍 Checking fingerprint status before scheduling...");
+    const hasFingerprint = await checkEmployeeFingerprintStatus(employee_id);
+    
+    if (!hasFingerprint) {
+      console.log(`❌ Cannot schedule employee ${employee_id}: No fingerprint enrolled`);
+      return res.status(400).json({ 
+        message: `Cannot schedule employee ${employee_id}. Employee must have fingerprint enrolled in the biometric system before being scheduled.`,
+        error: "FINGERPRINT_REQUIRED",
+        employee_id: employee_id
+      });
+    }
+    
+    console.log(`✅ Employee ${employee_id} has fingerprint enrolled, proceeding with scheduling...`);
     
     let result;
     
@@ -373,13 +432,14 @@ export const getPublishedSchedules = async (req, res) => {
 // POST /api/employee-schedules/regenerate-weekly
 export const regenerateWeekly = async (req, res) => {
   try {
-    const count = await regenerateWeeklySchedules();
+    // Disabled: No longer supporting automatic rolling schedule regeneration
+    console.log("⚠️ regenerateWeekly endpoint called but is disabled");
     res.status(200).json({ 
-      message: "Weekly schedules regenerated successfully",
-      regeneratedCount: count
+      message: "Weekly schedule regeneration is disabled - schedules should be created explicitly",
+      regeneratedCount: 0
     });
   } catch (error) {
-    console.error("Error regenerating weekly schedules:", error);
-    res.status(500).json({ message: "Error regenerating weekly schedules" });
+    console.error("Error in regenerateWeekly:", error);
+    res.status(500).json({ message: "Error in regenerateWeekly endpoint" });
   }
 };

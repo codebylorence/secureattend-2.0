@@ -1,12 +1,28 @@
-import express from "express";
-import { markTodayAbsent, markDateAbsent } from "../controllers/absentMarkingController.js";
+import express from 'express';
+import { 
+    startAbsentMarking, 
+    stopAbsentMarking, 
+    getAbsentMarkingStatus, 
+    runAbsentMarkingNow 
+} from '../controllers/absentMarkingController.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Mark today's absences
-router.post("/mark-today", markTodayAbsent);
+// All absent marking routes require admin access
+router.use(authenticateToken);
+router.use(requireAdmin);
 
-// Mark absences for a specific date
-router.post("/mark-date", markDateAbsent);
+// Start the absent marking service
+router.post('/start', startAbsentMarking);
+
+// Stop the absent marking service
+router.post('/stop', stopAbsentMarking);
+
+// Get service status
+router.get('/status', getAbsentMarkingStatus);
+
+// Manually run absent marking
+router.post('/run-now', runAbsentMarkingNow);
 
 export default router;

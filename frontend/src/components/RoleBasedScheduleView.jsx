@@ -144,9 +144,9 @@ function RoleScheduleModal({ day, assignments, shiftTemplates, onClose, onAddAss
         
         // Filter for supervisors and warehouse admins separately
         const supervisors = activeEmployees.filter(emp => emp.role === 'supervisor');
-        const warehouseAdmins = activeEmployees.filter(emp => emp.role === 'admin');
+        const warehouseAdmins = activeEmployees.filter(emp => emp.role === 'warehouseadmin');
         
-        console.log(`👥 Loaded ${supervisors.length} active supervisors and ${warehouseAdmins.length} active admins for role-based scheduling`);
+        console.log(`👥 Loaded ${supervisors.length} active supervisors and ${warehouseAdmins.length} active warehouse admins for role-based scheduling`);
         
         // Get already assigned employee IDs for this day
         const assignedIds = allSchedules
@@ -502,10 +502,10 @@ export default function RoleBasedScheduleView() {
       // Keep all employees for schedule display (including inactive ones with existing schedules)
       // but note that new assignments will only use active employees from the other function
       
-      // Filter for supervisor and admin assignments only
+      // Filter for supervisor and warehouse admin assignments only
       const roleBasedSchedules = schedules.filter(schedule => {
         const employee = employees.find(emp => emp.employee_id === schedule.employee_id);
-        return employee && (employee.role === 'supervisor' || employee.role === 'admin');
+        return employee && (employee.role === 'supervisor' || employee.role === 'warehouseadmin');
       });
 
       // Attach employee data to assignments

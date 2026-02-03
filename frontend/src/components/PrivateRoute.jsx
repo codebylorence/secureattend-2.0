@@ -39,8 +39,8 @@ export default function PrivateRoute({ allowedRole }) {
     switch (userRole) {
       case "admin":
         return <Navigate to="/admin/dashboard" replace />;
-      case "superadmin":
-        return <Navigate to="/admin/dashboard" replace />;
+      case "warehouseadmin":
+        return <Navigate to="/warehouseadmin/dashboard" replace />;
       case "supervisor":
         return <Navigate to="/admin/dashboard" replace />;
       case "teamleader":

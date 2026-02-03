@@ -14,11 +14,19 @@ export default function TeamMetrics({ department }) {
 
   const fetchMetrics = async () => {
     try {
+      console.log('🔍 TeamMetrics: Starting fetchMetrics for department:', department);
+      
       const [attendanceData, employeeData, schedules] = await Promise.all([
         getTodayAttendances(),
         fetchEmployees(),
         getEmployeeSchedules()
       ]);
+
+      console.log('🔍 TeamMetrics: API responses received:', {
+        attendances: attendanceData?.length || 0,
+        employees: employeeData?.length || 0,
+        schedules: schedules?.length || 0
+      });
 
       // Filter employees by department (include team leaders in count)
       const departmentEmployees = employeeData.filter(emp => 
@@ -26,6 +34,13 @@ export default function TeamMetrics({ department }) {
         emp.status === "Active"
       );
       const departmentEmployeeIds = new Set(departmentEmployees.map(emp => emp.employee_id));
+
+      console.log('🔍 TeamMetrics: Department filtering:', {
+        department,
+        totalEmployees: employeeData.length,
+        departmentEmployees: departmentEmployees.length,
+        departmentEmployeeIds: Array.from(departmentEmployeeIds)
+      });
 
       // Get today's day name and date in local timezone
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -36,27 +51,57 @@ export default function TeamMetrics({ department }) {
       const day = String(now.getDate()).padStart(2, '0');
       const todayDate = `${year}-${month}-${day}`;
 
+      console.log('🔍 TeamMetrics: Date calculation:', { today, todayDate });
+
       // Find department employees scheduled for today
       const scheduledEmployeeIds = new Set();
-      schedules.forEach(schedule => {
+      
+      console.log('🔍 TeamMetrics: Processing schedules...');
+      schedules.forEach((schedule, index) => {
+        console.log(`  Schedule ${index + 1}:`, {
+          employee_id: schedule.employee_id,
+          specific_date: schedule.specific_date,
+          department: schedule.department,
+          shift_name: schedule.shift_name,
+          isDepartmentEmployee: departmentEmployeeIds.has(schedule.employee_id)
+        });
+        
         // Only count employees from this department
         if (!departmentEmployeeIds.has(schedule.employee_id)) return;
         
-        // Check if employee is scheduled today
-        // First check schedule_dates object for today's date
-        if (schedule.schedule_dates && schedule.schedule_dates[today]) {
-          const todayScheduleDates = schedule.schedule_dates[today];
-          if (Array.isArray(todayScheduleDates) && todayScheduleDates.includes(todayDate)) {
+        // Check if employee is scheduled today using the new template system
+        if (schedule.specific_date) {
+          // New template system: check if specific_date matches today's date
+          if (schedule.specific_date === todayDate) {
+            console.log(`    ✅ Adding employee ${schedule.employee_id} (specific_date match)`);
+            scheduledEmployeeIds.add(schedule.employee_id);
+          } else {
+            console.log(`    ❌ Date mismatch: ${schedule.specific_date} !== ${todayDate}`);
+          }
+        } else {
+          console.log(`    ⚠️ No specific_date, checking legacy system...`);
+          // Legacy system: check schedule_dates object for today's date
+          if (schedule.schedule_dates && schedule.schedule_dates[today]) {
+            const todayScheduleDates = schedule.schedule_dates[today];
+            if (Array.isArray(todayScheduleDates) && todayScheduleDates.includes(todayDate)) {
+              console.log(`    ✅ Adding employee ${schedule.employee_id} (legacy schedule_dates)`);
+              scheduledEmployeeIds.add(schedule.employee_id);
+            }
+          }
+          // Fallback: check if today is in the days array (for schedules without specific dates)
+          else if (schedule.days && Array.isArray(schedule.days) && schedule.days.includes(today)) {
+            console.log(`    ✅ Adding employee ${schedule.employee_id} (legacy days array)`);
             scheduledEmployeeIds.add(schedule.employee_id);
           }
-        }
-        // Fallback: check if today is in the days array (for schedules without specific dates)
-        else if (schedule.days && Array.isArray(schedule.days) && schedule.days.includes(today)) {
-          scheduledEmployeeIds.add(schedule.employee_id);
         }
       });
 
       const scheduled = scheduledEmployeeIds.size;
+      
+      console.log('🔍 TeamMetrics: Final results:', {
+        scheduledEmployeeIds: Array.from(scheduledEmployeeIds),
+        scheduledCount: scheduled
+      });
 
       // Filter attendances for this department (include team leaders)
       const departmentAttendances = attendanceData.filter(att => 
@@ -96,7 +141,14 @@ export default function TeamMetrics({ department }) {
 
       setMetrics({ present, absent, late, overtime, scheduled, totalOvertimeHours });
     } catch (error) {
-      console.error("Error fetching metrics:", error);
+      console.error("❌ TeamMetrics Error:", error);
+      console.error("❌ Error details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      // Set default values on error
+      setMetrics({ present: 0, absent: 0, late: 0, overtime: 0, scheduled: 0, totalOvertimeHours: 0 });
     }
   };
 

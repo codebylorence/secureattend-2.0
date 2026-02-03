@@ -64,7 +64,21 @@ export const authenticateToken = async (req, res, next) => {
 };
 
 export const requireAdmin = (req, res, next) => {
-  if (req.user.role !== "admin" && req.user.role !== "superadmin") {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ message: "HR Admin access required" });
+  }
+  next();
+};
+
+export const requireWarehouseAdmin = (req, res, next) => {
+  if (req.user.role !== "warehouseadmin") {
+    return res.status(403).json({ message: "Warehouse Admin access required" });
+  }
+  next();
+};
+
+export const requireAnyAdmin = (req, res, next) => {
+  if (req.user.role !== "admin" && req.user.role !== "warehouseadmin") {
     return res.status(403).json({ message: "Admin access required" });
   }
   next();
@@ -73,7 +87,7 @@ export const requireAdmin = (req, res, next) => {
 export const requireAdminOrTeamLeader = (req, res, next) => {
   console.log(`🔐 Role check: User role is "${req.user.role}", checking for admin/teamleader/supervisor access`);
   
-  if (req.user.role !== "admin" && req.user.role !== "superadmin" && req.user.role !== "teamleader" && req.user.role !== "supervisor") {
+  if (req.user.role !== "admin" && req.user.role !== "teamleader" && req.user.role !== "supervisor") {
     console.log(`❌ Access denied: Role "${req.user.role}" is not authorized for this endpoint`);
     return res.status(403).json({ message: "Admin, Team Leader, or Supervisor access required" });
   }
@@ -83,15 +97,29 @@ export const requireAdminOrTeamLeader = (req, res, next) => {
 };
 
 export const requireSupervisor = (req, res, next) => {
-  if (req.user.role !== "admin" && req.user.role !== "superadmin" && req.user.role !== "supervisor") {
+  if (req.user.role !== "admin" && req.user.role !== "supervisor") {
     return res.status(403).json({ message: "Admin or Supervisor access required" });
   }
   next();
 };
 
 export const requireAdminOrSupervisor = (req, res, next) => {
-  if (req.user.role !== "admin" && req.user.role !== "superadmin" && req.user.role !== "supervisor") {
+  if (req.user.role !== "admin" && req.user.role !== "supervisor") {
     return res.status(403).json({ message: "Admin or Supervisor access required" });
+  }
+  next();
+};
+
+export const requireAttendanceAccess = (req, res, next) => {
+  if (req.user.role !== "admin" && req.user.role !== "warehouseadmin" && req.user.role !== "supervisor" && req.user.role !== "teamleader") {
+    return res.status(403).json({ message: "Admin, Warehouse Admin, Supervisor, or Team Leader access required for attendance" });
+  }
+  next();
+};
+
+export const requireConfigRead = (req, res, next) => {
+  if (req.user.role !== "admin" && req.user.role !== "warehouseadmin" && req.user.role !== "supervisor" && req.user.role !== "teamleader") {
+    return res.status(403).json({ message: "Admin, Warehouse Admin, Supervisor, or Team Leader access required to read configuration" });
   }
   next();
 };

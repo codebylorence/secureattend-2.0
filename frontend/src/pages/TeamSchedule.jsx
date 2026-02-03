@@ -8,7 +8,7 @@ import {
   removeDaysFromEmployeeSchedule,
   removeEmployeesFromTemplate
 } from "../api/ScheduleApi";
-import { fetchEmployees } from "../api/EmployeeApi";
+import { fetchEmployees, getFingerprintStatus } from "../api/EmployeeApi";
 import { useSocket } from "../context/SocketContext";
 import { toast } from 'react-toastify';
 import { confirmAction } from "../utils/confirmToast.jsx";
@@ -26,6 +26,8 @@ export default function TeamSchedule() {
   const [shiftFilter, setShiftFilter] = useState('all'); // NEW: Filter state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [fingerprintStatus, setFingerprintStatus] = useState({});
+  const [loadingFingerprints, setLoadingFingerprints] = useState(true);
   
   // Safely get socket with error handling
   let socket = null;
@@ -38,6 +40,17 @@ export default function TeamSchedule() {
   
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userDepartment = user.employee?.department || "";
+  
+  console.log("🔍 TeamSchedule Debug - Current user:", {
+    username: user.username,
+    role: user.role,
+    employee_id: user.employee?.employee_id,
+    department: userDepartment,
+    fullname: `${user.employee?.firstname || ''} ${user.employee?.lastname || ''}`.trim() || user.employee?.employee_id
+  });
+  
+  console.log("🔍 TeamSchedule Debug - Available templates will be logged after fetch");
+  console.log("🔍 TeamSchedule Debug - Assigned schedules will be logged after fetch");
 
   useEffect(() => {
     const initializeData = async () => {
@@ -56,7 +69,8 @@ export default function TeamSchedule() {
         await Promise.all([
           fetchTemplates(),
           fetchTeamMembers(),
-          fetchAssignedSchedules()
+          fetchAssignedSchedules(),
+          fetchFingerprintStatus()
         ]);
         
         console.log("✅ TeamSchedule data initialized successfully");
@@ -196,6 +210,22 @@ export default function TeamSchedule() {
     }
   };
 
+  const fetchFingerprintStatus = async () => {
+    try {
+      setLoadingFingerprints(true);
+      console.log("👆 Fetching fingerprint status for all employees...");
+      
+      const status = await getFingerprintStatus();
+      setFingerprintStatus(status);
+      console.log('👆 Fingerprint status loaded:', status);
+    } catch (error) {
+      console.error('❌ Error fetching fingerprint status:', error);
+      setFingerprintStatus({});
+    } finally {
+      setLoadingFingerprints(false);
+    }
+  };
+
   const fetchAssignedSchedules = async () => {
     try {
       console.log("🔄 Fetching assigned schedules...");
@@ -215,6 +245,7 @@ export default function TeamSchedule() {
       });
       
       console.log("🏢 Team schedules for department", userDepartment, ":", teamSchedules);
+      console.log("📋 Available templates:", templates.map(t => ({ id: t.id, shift_name: t.shift_name })));
       
       // Transform to match old structure for display
       const transformedSchedules = teamSchedules.map(schedule => {
@@ -223,7 +254,8 @@ export default function TeamSchedule() {
           employee_id: schedule.employee_id,
           shift_name: schedule.shift_name || schedule.template?.shift_name,
           template_id: schedule.template_id,
-          specific_date: schedule.specific_date
+          specific_date: schedule.specific_date,
+          assigned_by: schedule.assigned_by
         });
         return {
           id: schedule.id, // Keep the original employee schedule ID
@@ -234,7 +266,8 @@ export default function TeamSchedule() {
           days: schedule.days || [],
           department: schedule.department || schedule.template?.department,
           template_id: schedule.template_id,
-          specific_date: schedule.specific_date || schedule.template?.specific_date
+          specific_date: schedule.specific_date || schedule.template?.specific_date,
+          assigned_by: schedule.assigned_by
         };
       });
       
@@ -242,6 +275,24 @@ export default function TeamSchedule() {
       const mergedSchedules = mergeSchedulesByShift(transformedSchedules);
       
       console.log("🔄 Final merged schedules:", mergedSchedules);
+      console.log("🔍 Debug - Current user employee_id:", user.employee?.employee_id);
+      console.log("🔍 Debug - Available templates:", templates.map(t => ({ id: t.id, shift_name: t.shift_name, department: t.department, specific_date: t.specific_date })));
+      console.log("🔍 Debug - Schedules with assigned_by field:", mergedSchedules.map(s => ({
+        employee_id: s.employee_id,
+        shift_name: s.shift_name,
+        template_id: s.template_id,
+        assigned_by: s.assigned_by,
+        specific_date: s.specific_date
+      })));
+      
+      // Check specifically for Carl Pena (Employee 010)
+      const carlSchedule = mergedSchedules.find(s => s.employee_id === '010');
+      if (carlSchedule) {
+        console.log("🎯 Found Carl Pena schedule:", carlSchedule);
+      } else {
+        console.log("❌ Carl Pena schedule not found in merged schedules");
+      }
+      
       setAssignedSchedules(mergedSchedules);
     } catch (error) {
       console.error("Error fetching assigned schedules:", error);
@@ -250,45 +301,27 @@ export default function TeamSchedule() {
   };
 
   // Function to merge schedules with same employee, shift name, and time
+  // NOTE: Each employee should have their own row, so we don't merge across employees
   const mergeSchedulesByShift = (schedules) => {
-    const groupedSchedules = {};
-    
-    schedules.forEach(schedule => {
-      // Create a unique key for grouping: employee_id + shift_name + start_time + end_time
-      const groupKey = `${schedule.employee_id}-${schedule.shift_name}-${schedule.start_time}-${schedule.end_time}`;
-      
-      if (groupedSchedules[groupKey]) {
-        // Merge days and keep track of all IDs for deletion
-        groupedSchedules[groupKey].days = [...new Set([...groupedSchedules[groupKey].days, ...schedule.days])];
-        groupedSchedules[groupKey].ids.push(schedule.id); // Use the actual employee schedule ID
-      } else {
-        // Create new group
-        groupedSchedules[groupKey] = {
-          ...schedule,
-          id: `merged-${groupKey}`, // Create a unique ID for merged schedules (for display only)
-          originalId: schedule.id, // Keep original employee schedule ID for single schedules
-          days: [...schedule.days], // Create a copy of the days array
-          ids: [schedule.id] // Keep track of all actual employee schedule IDs for deletion
-        };
-      }
-    });
-    
-    // Convert back to array and sort days for consistent display
-    return Object.values(groupedSchedules).map(schedule => {
-      console.log("🔄 Merged schedule:", {
-        displayId: schedule.id,
-        originalId: schedule.originalId,
-        realIds: schedule.ids,
+    // Don't merge schedules - each employee assignment should be its own row
+    // Just ensure consistent day sorting and add necessary IDs for deletion
+    return schedules.map(schedule => {
+      console.log("🔄 Processing schedule:", {
         employee_id: schedule.employee_id,
-        shift_name: schedule.shift_name
+        shift_name: schedule.shift_name,
+        template_id: schedule.template_id,
+        assigned_by: schedule.assigned_by
       });
       
       return {
         ...schedule,
-        days: schedule.days.sort((a, b) => {
+        id: schedule.id || `schedule-${schedule.employee_id}-${schedule.template_id}`,
+        originalId: schedule.id,
+        ids: [schedule.id], // Keep track of actual employee schedule IDs for deletion
+        days: Array.isArray(schedule.days) ? schedule.days.sort((a, b) => {
           const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
           return dayOrder.indexOf(a) - dayOrder.indexOf(b);
-        })
+        }) : []
       };
     });
   };
@@ -544,6 +577,13 @@ export default function TeamSchedule() {
       return;
     }
     
+    // Check if employee has fingerprint enrolled before allowing selection
+    const hasFingerprint = fingerprintStatus[employeeId];
+    if (!hasFingerprint) {
+      toast.error(`Cannot assign employee ${employeeId}. Employee must have fingerprint enrolled in the biometric system before being scheduled.`);
+      return;
+    }
+    
     // Check if employee already has this shift on the selected day
     const hasConflictOnDay = assignedSchedules.some(schedule => {
       if (schedule.employee_id !== employeeId) return false;
@@ -741,6 +781,14 @@ export default function TeamSchedule() {
       return toast.warning("Please select at least one team member!");
     }
 
+    // Validate that all selected employees have fingerprints enrolled
+    const employeesWithoutFingerprints = selectedEmployees.filter(empId => !fingerprintStatus[empId]);
+    if (employeesWithoutFingerprints.length > 0) {
+      const employeeNames = employeesWithoutFingerprints.map(empId => getEmployeeName(empId));
+      toast.error(`Cannot assign employees ${employeeNames.join(', ')}. These employees must have fingerprints enrolled in the biometric system before being scheduled.`);
+      return;
+    }
+
     // Debug: Check authentication status
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -763,13 +811,14 @@ export default function TeamSchedule() {
           assigned_by: user.employee?.employee_id || "teamleader"
         });
 
-        await assignSchedule({
+        const result = await assignSchedule({
           employee_id: employeeId,
           template_id: selectedTemplate.id,
           days: [assignmentDay], // Use the calculated assignment day
           assigned_by: user.employee?.employee_id || "teamleader"
         });
         
+        console.log("✅ Assignment result:", result);
         results.success.push(getEmployeeName(employeeId));
       } catch (err) {
         console.error("❌ Assignment failed:", err);
@@ -828,7 +877,13 @@ export default function TeamSchedule() {
     if (results.success.length > 0) {
       setSelectedDay(null);
       setSelectedEmployees([]);
-      fetchAssignedSchedules();
+      
+      // Add a small delay to ensure backend has processed the assignment
+      setTimeout(async () => {
+        console.log("🔄 Refreshing schedules after assignment...");
+        await fetchAssignedSchedules();
+        await fetchTemplates();
+      }, 500);
     }
   };
 
@@ -1231,11 +1286,6 @@ export default function TeamSchedule() {
                     return (
                       <div className="mt-2 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          {isSpecificDate && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              One Day
-                            </span>
-                          )}
                           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                             assignedCount > 0 
                               ? 'bg-green-100 text-green-800' 
@@ -1384,7 +1434,8 @@ export default function TeamSchedule() {
                   const availableDays = getAvailableDays(member.employee_id);
                   const existingSchedule = getExistingSchedule(member.employee_id);
                   const isSelected = selectedEmployees.includes(member.employee_id);
-                  const cannotSelect = (hasConflict || limitReached) && !isSelected;
+                  const hasFingerprint = fingerprintStatus[member.employee_id];
+                  const cannotSelect = (hasConflict || limitReached || (!hasFingerprint && !isSelected)) && !isSelected;
                   
                   return (
                     <div
@@ -1398,8 +1449,22 @@ export default function TeamSchedule() {
                           : "border-gray-200 hover:border-gray-400 cursor-pointer"
                       }`}
                     >
-                      <p className="font-medium text-gray-800">{getDisplayName(member)}</p>
-                      <p className="text-xs text-gray-500">{member.position}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">{getDisplayName(member)}</p>
+                          <p className="text-xs text-gray-500">{member.position}</p>
+                        </div>
+                        {/* Fingerprint Status Indicator */}
+                        {loadingFingerprints ? (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-medium">
+                            Checking...
+                          </span>
+                        ) : !hasFingerprint ? (
+                          <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-medium">
+                            No Fingerprint
+                          </span>
+                        ) : null}
+                      </div>
                       {existingSchedule && conflictDays.length > 0 && (
                         <p className="text-xs text-purple-600 mt-1 font-medium flex items-center gap-1">
                           <MdEventNote size={14} /> Already has: {conflictDays.join(", ")}
@@ -1483,34 +1548,91 @@ export default function TeamSchedule() {
               );
               
               if (teamMemberSchedules.length > 0) {
-                // Get unique shift names for filter options
-                const uniqueShifts = [...new Set(teamMemberSchedules.map(schedule => schedule.shift_name))];
+                // Get unique shift names from ACTIVE TEMPLATES only (not from all assigned schedules)
+                const activeTemplateShifts = [...new Set(templates.map(template => template.shift_name))];
                 
-                return (
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600">Filter by shift:</label>
-                    <select
-                      value={shiftFilter}
-                      onChange={(e) => setShiftFilter(e.target.value)}
-                      className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    >
-                      <option value="all">All Shifts</option>
-                      {uniqueShifts.map(shift => (
-                        <option key={shift} value={shift}>{shift}</option>
-                      ))}
-                    </select>
-                  </div>
-                );
+                // Only show the filter if there are active template shifts
+                if (activeTemplateShifts.length > 0) {
+                  return (
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-gray-600">Filter by shift:</label>
+                      <select
+                        value={shiftFilter}
+                        onChange={(e) => setShiftFilter(e.target.value)}
+                        className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="all">All Shifts</option>
+                        {activeTemplateShifts.map(shift => (
+                          <option key={shift} value={shift}>{shift}</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
               }
               return null;
             })()}
           </div>
         
         {(() => {
-          // Filter out the team leader's own schedule - only show team members' schedules
-          let teamMemberSchedules = assignedSchedules.filter(schedule => 
-            schedule.employee_id !== user.employee?.employee_id
-          );
+          // Debug: Show what data we're working with
+          console.log("🔍 Table filtering - Active templates:", templates.map(t => ({ 
+            id: t.id, 
+            shift_name: t.shift_name, 
+            department: t.department, 
+            specific_date: t.specific_date 
+          })));
+          
+          console.log("🔍 Table filtering - All assigned schedules:", assignedSchedules.map(s => ({
+            employee_id: s.employee_id,
+            shift_name: s.shift_name,
+            template_id: s.template_id,
+            assigned_by: s.assigned_by,
+            specific_date: s.specific_date
+          })));
+          
+          // Filter schedules to only show those assigned to active templates (visible in Available Shifts)
+          let teamMemberSchedules = assignedSchedules.filter(schedule => {
+            // Exclude the team leader's own schedule
+            if (schedule.employee_id === user.employee?.employee_id) {
+              return false;
+            }
+            
+            // Only show schedules that have a template_id (indicating they were assigned via templates)
+            if (!schedule.template_id) {
+              console.log(`🔍 Schedule ${schedule.employee_id} filtered out: No template_id`);
+              return false;
+            }
+            
+            // Check if the template is currently active/available (visible in Available Shifts section)
+            const templateIsActive = templates.some(template => template.id === schedule.template_id);
+            
+            if (!templateIsActive) {
+              console.log(`🔍 Schedule ${schedule.employee_id} filtered out: Template ${schedule.template_id} not in active templates`);
+              return false;
+            }
+            
+            // Check if the schedule was assigned by a team leader OR by admin
+            const currentUserEmployeeId = user.employee?.employee_id;
+            const wasAssignedByCurrentUser = schedule.assigned_by === currentUserEmployeeId;
+            const wasAssignedByTeamLeaderRole = schedule.assigned_by === "teamleader";
+            const wasAssignedByAdmin = schedule.assigned_by === "admin";
+            
+            // Accept assignments made by:
+            // 1. Current team leader
+            // 2. "teamleader" role
+            // 3. Admin (for team members in this department)
+            const wasAssignedByAuthorizedUser = schedule.assigned_by && 
+              (wasAssignedByCurrentUser || wasAssignedByTeamLeaderRole || wasAssignedByAdmin);
+            
+            if (!wasAssignedByAuthorizedUser) {
+              console.log(`🔍 Schedule ${schedule.employee_id} filtered out: Not assigned by authorized user (assigned_by: ${schedule.assigned_by}, current user: ${currentUserEmployeeId})`);
+              return false;
+            }
+            
+            console.log(`🔍 Schedule ${schedule.employee_id} INCLUDED: ${schedule.shift_name} (Template: ${schedule.template_id}, assigned_by: ${schedule.assigned_by})`);
+            return true;
+          });
           
           // Apply shift filter
           if (shiftFilter !== 'all') {
@@ -1519,19 +1641,29 @@ export default function TeamSchedule() {
             );
           }
           
+          console.log("🔍 Final filtered team schedules:", teamMemberSchedules.map(s => ({
+            employee_id: s.employee_id,
+            shift_name: s.shift_name,
+            template_id: s.template_id,
+            assigned_by: s.assigned_by,
+            specific_date: s.specific_date
+          })));
+          
           if (teamMemberSchedules.length === 0) {
             return (
               <div className="text-center py-8 text-gray-500">
                 <MdSchedule size={48} className="mx-auto mb-3 text-gray-300" />
                 {shiftFilter === 'all' ? (
                   <>
-                    <p className="text-lg">No schedules assigned yet</p>
-                    <p className="text-sm">Assign shifts to your team using the options above</p>
+                    <p className="text-lg">No team schedules found</p>
+                    <p className="text-sm">Only schedules assigned by team leaders using available templates are shown here</p>
+                    <p className="text-xs text-gray-400 mt-1">Assign shifts to your team using the options above</p>
                   </>
                 ) : (
                   <>
                     <p className="text-lg">No {shiftFilter} schedules found</p>
-                    <p className="text-sm">Try selecting a different shift or "All Shifts"</p>
+                    <p className="text-sm">No team leader assigned {shiftFilter} schedules found</p>
+                    <p className="text-xs text-gray-400 mt-1">Try selecting a different shift or "All Shifts"</p>
                   </>
                 )}
               </div>

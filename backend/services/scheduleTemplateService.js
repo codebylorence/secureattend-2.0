@@ -1,6 +1,42 @@
 import ScheduleTemplate from "../models/scheduleTemplate.js";
 import { Op } from "sequelize";
 
+// Helper function to check if employee has fingerprint enrolled
+const checkEmployeeFingerprintStatus = async (employeeId) => {
+  try {
+    const sqlite3 = await import('sqlite3');
+    const { open } = await import('sqlite');
+    
+    // Path to biometric app's local database
+    const dbPath = process.env.BIOMETRIC_DB_PATH || '../BiometricEnrollmentApp/bin/Debug/net9.0-windows/biometric_local.db';
+    
+    console.log(`🔍 Checking fingerprint status for employee ${employeeId}`);
+    
+    // Open connection to biometric database
+    const db = await open({
+      filename: dbPath,
+      driver: sqlite3.default.Database
+    });
+    
+    // Query to check if this specific employee has fingerprints enrolled
+    const enrollment = await db.get(
+      'SELECT employee_id FROM Enrollments WHERE employee_id = ? AND fingerprint_template IS NOT NULL AND fingerprint_template != ""',
+      [employeeId]
+    );
+    
+    await db.close();
+    
+    const hasFingerprint = !!enrollment;
+    console.log(`👆 Employee ${employeeId} fingerprint status: ${hasFingerprint ? 'ENROLLED' : 'NOT ENROLLED'}`);
+    
+    return hasFingerprint;
+  } catch (error) {
+    console.error(`❌ Error checking fingerprint status for employee ${employeeId}:`, error);
+    // If we can't check the database, assume no fingerprint for safety
+    return false;
+  }
+};
+
 export const getAllTemplates = async () => {
   const templates = await ScheduleTemplate.findAll({
     where: { status: "Active" }, // Only get active templates
@@ -202,6 +238,26 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
   
   console.log(`🎯 Starting assignment process for template ${templateId} (${template.department} - ${template.shift_name})`);
   console.log(`📋 Original employee IDs to assign:`, employeeIds);
+  
+  // Validate that all employees have fingerprints enrolled before proceeding
+  console.log("🔍 Checking fingerprint status for all employees...");
+  const fingerprintValidation = await Promise.all(
+    employeeIds.map(async (employeeId) => {
+      const hasFingerprint = await checkEmployeeFingerprintStatus(employeeId);
+      return { employeeId, hasFingerprint };
+    })
+  );
+  
+  // Check if any employees don't have fingerprints
+  const employeesWithoutFingerprints = fingerprintValidation.filter(result => !result.hasFingerprint);
+  
+  if (employeesWithoutFingerprints.length > 0) {
+    const missingEmployeeIds = employeesWithoutFingerprints.map(result => result.employeeId);
+    console.log(`❌ Cannot assign employees without fingerprints: ${missingEmployeeIds.join(', ')}`);
+    throw new Error(`Cannot schedule employees ${missingEmployeeIds.join(', ')}. These employees must have fingerprints enrolled in the biometric system before being scheduled.`);
+  }
+  
+  console.log(`✅ All employees have fingerprints enrolled, proceeding with assignment...`);
   
   // Get existing assignments
   let existingAssignments = [];

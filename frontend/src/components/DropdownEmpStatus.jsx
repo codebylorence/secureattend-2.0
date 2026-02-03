@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function DropdownEmpStatus({ value = "Active", onChange }) {
+export default function DropdownEmpStatus({ value = "All Employees", onChange }) {
   const handleChange = (e) => {
     if (onChange) {
       onChange(e.target.value);
@@ -14,6 +14,7 @@ export default function DropdownEmpStatus({ value = "Active", onChange }) {
         value={value}
         onChange={handleChange}
       >
+        <option value="All Employees">All Employees</option>
         <option value="Active">Active</option>
         <option value="Inactive">Inactive</option>
       </select>

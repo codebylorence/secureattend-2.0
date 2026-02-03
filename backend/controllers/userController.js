@@ -52,7 +52,7 @@ export const getTeamLeaders = async (req, res) => {
         {
           model: Employee,
           as: "employee",
-          attributes: ["employee_id", "firstname", "lastname", "fullname", "department"],
+          attributes: ["employee_id", "firstname", "lastname", "department"],
         },
       ],
     });

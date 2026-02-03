@@ -910,6 +910,7 @@ namespace BiometricEnrollmentApp.Services
                     SELECT shift_name, start_time, end_time
                     FROM EmployeeSchedules
                     WHERE employee_id = $emp_id AND days LIKE '%' || $today || '%'
+                    ORDER BY id DESC
                     LIMIT 1
                 ";
                 cmd.Parameters.AddWithValue("$emp_id", employeeId);
@@ -936,6 +937,7 @@ namespace BiometricEnrollmentApp.Services
                         SELECT shift_name, start_time, end_time
                         FROM EmployeeSchedules
                         WHERE employee_id = $emp_id AND days LIKE '%' || $yesterday || '%'
+                        ORDER BY id DESC
                         LIMIT 1
                     ";
                     cmd.Parameters.Clear();

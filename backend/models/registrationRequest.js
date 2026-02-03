@@ -29,7 +29,7 @@ const RegistrationRequest = sequelize.define("RegistrationRequest", {
     allowNull: false,
   },
   role: {
-    type: DataTypes.ENUM("employee", "teamleader", "supervisor", "admin"),
+    type: DataTypes.ENUM("employee", "teamleader", "supervisor", "admin", "warehouseadmin"),
     allowNull: false,
     defaultValue: "employee",
   },

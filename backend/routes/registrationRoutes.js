@@ -36,8 +36,12 @@ router.post("/register", async (req, res) => {
     // Function to determine role based on position
     const getRoleFromPosition = (position) => {
       const positionLower = position.toLowerCase();
-      if (positionLower.includes('admin')) {
+      if (positionLower.includes('admin') && !positionLower.includes('warehouse')) {
         return 'admin';
+      } else if (positionLower.includes('warehouse admin') || 
+                 positionLower.includes('warehouse manager') ||
+                 positionLower.includes('inventory manager')) {
+        return 'warehouseadmin';
       } else if (positionLower.includes('supervisor') || positionLower.includes('manager')) {
         return 'supervisor';
       } else if (positionLower.includes('team leader') || positionLower.includes('lead')) {
@@ -50,9 +54,9 @@ router.post("/register", async (req, res) => {
     // Derive role from position (use frontend role as fallback)
     const derivedRole = role || getRoleFromPosition(position);
 
-    // Auto-set department to "Company-wide" for admin and supervisor roles
+    // Auto-set department to "Company-wide" for admin, supervisor, and warehouseadmin roles
     let finalDepartment = department;
-    if ((derivedRole === 'admin' || derivedRole === 'supervisor') && !department) {
+    if ((derivedRole === 'admin' || derivedRole === 'supervisor' || derivedRole === 'warehouseadmin') && !department) {
       finalDepartment = 'Company-wide';
     }
 
@@ -68,7 +72,7 @@ router.post("/register", async (req, res) => {
     // Validate required fields
     const requiredFields = ['employee_id', 'firstname', 'lastname', 'position', 'contact_number', 'email', 'username', 'password'];
     
-    // Department is only required for employees and team leaders (admin/supervisor get "Company-wide")
+    // Department is only required for employees and team leaders (admin/supervisor/warehouseadmin get "Company-wide")
     if (derivedRole === 'employee' || derivedRole === 'teamleader') {
       if (!finalDepartment) {
         requiredFields.push('department');

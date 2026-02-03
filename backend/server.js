@@ -20,7 +20,9 @@ import backupRoutes from "./routes/backupRoutes.js";
 import systemConfigRoutes from "./routes/systemConfigRoutes.js";
 import scheduleNotificationRoutes from "./routes/scheduleNotificationRoutes.js";
 import shiftTemplateRoutes from "./routes/shiftTemplateRoutes.js";
+import absentMarkingRoutes from "./routes/absentMarkingRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
+import absentMarkingService from "./services/absentMarkingService.js";
 // Import models first
 import "./models/employee.js";
 import "./models/user.js";
@@ -92,6 +94,7 @@ app.use("/api/positions", positionRoutes);
 app.use("/api/backup", backupRoutes);
 app.use("/api/system", systemConfigRoutes);
 app.use("/api/shift-templates", shiftTemplateRoutes);
+app.use("/api/absent-marking", absentMarkingRoutes);
 app.use("/employees", employeeRoutes);
 
 // Biometric app specific routes
@@ -118,7 +121,9 @@ httpServer.listen(PORT, async () => {
   // Start the schedule cleanup job
   startScheduleCleanupJob();
   
-
+  // Start the automatic absent marking and missed clock-out service
+  console.log('🔄 Starting automatic absent marking and missed clock-out service...');
+  absentMarkingService.start();
 });
 
 export { io };

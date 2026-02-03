@@ -13,9 +13,11 @@ export default function AttendanceSummary() {
     { name: "Absent", value: 0 },
     { name: "Missed Clock-out", value: 0 },
   ]);
-  const [totalDays, setTotalDays] = useState(0);
   const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'syncing', 'error'
   const [lastSyncTime, setLastSyncTime] = useState(null);
+
+  // Calculate total records
+  const totalRecords = attendanceData.reduce((sum, item) => sum + item.value, 0);
 
   useEffect(() => {
     fetchAttendanceSummary();
@@ -104,7 +106,6 @@ export default function AttendanceSummary() {
         currentDate.setDate(currentDate.getDate() + 1);
       }
 
-      setTotalDays(workingDays);
       setAttendanceData([
         { name: "Present", value: present },
         { name: "Late", value: late },
@@ -222,7 +223,7 @@ export default function AttendanceSummary() {
         <div className="text-center mb-4">
           <p className="text-sm text-gray-600">{getFilterLabel()}</p>
           <p className="text-xs text-gray-500">
-            Total Records: {attendanceData[0].value + attendanceData[1].value + attendanceData[2].value + attendanceData[3].value}
+            Total Records: {totalRecords}
           </p>
         </div>
 
@@ -257,49 +258,42 @@ export default function AttendanceSummary() {
 
         {/* Summary Stats */}
         <div className="grid grid-cols-4 gap-2 mt-4 text-center">
-          {(() => {
-            const totalRecords = attendanceData[0].value + attendanceData[1].value + attendanceData[2].value + attendanceData[3].value;
-            return (
-              <>
-                <div className="bg-green-50 p-2 rounded">
-                  <div className="text-lg font-semibold text-green-600">{attendanceData[0].value}</div>
-                  <div className="text-xs text-green-600">Present</div>
-                  {totalRecords > 0 && (
-                    <div className="text-xs text-green-500">
-                      {Math.round((attendanceData[0].value / totalRecords) * 100)}%
-                    </div>
-                  )}
-                </div>
-                <div className="bg-yellow-50 p-2 rounded">
-                  <div className="text-lg font-semibold text-yellow-600">{attendanceData[1].value}</div>
-                  <div className="text-xs text-yellow-600">Late</div>
-                  {totalRecords > 0 && (
-                    <div className="text-xs text-yellow-500">
-                      {Math.round((attendanceData[1].value / totalRecords) * 100)}%
-                    </div>
-                  )}
-                </div>
-                <div className="bg-red-50 p-2 rounded">
-                  <div className="text-lg font-semibold text-red-600">{attendanceData[2].value}</div>
-                  <div className="text-xs text-red-600">Absent</div>
-                  {totalRecords > 0 && (
-                    <div className="text-xs text-red-500">
-                      {Math.round((attendanceData[2].value / totalRecords) * 100)}%
-                    </div>
-                  )}
-                </div>
-                <div className="bg-amber-50 p-2 rounded">
-                  <div className="text-lg font-semibold text-amber-600">{attendanceData[3].value}</div>
-                  <div className="text-xs text-amber-600">Missed</div>
-                  {totalRecords > 0 && (
-                    <div className="text-xs text-amber-500">
-                      {Math.round((attendanceData[3].value / totalRecords) * 100)}%
-                    </div>
-                  )}
-                </div>
-              </>
-            );
-          })()}
+          <div className="bg-green-50 p-2 rounded">
+            <div className="text-lg font-semibold text-green-600">{attendanceData[0].value}</div>
+            <div className="text-xs text-green-600">Present</div>
+            {totalRecords > 0 && (
+              <div className="text-xs text-green-500">
+                {Math.round((attendanceData[0].value / totalRecords) * 100)}%
+              </div>
+            )}
+          </div>
+          <div className="bg-yellow-50 p-2 rounded">
+            <div className="text-lg font-semibold text-yellow-600">{attendanceData[1].value}</div>
+            <div className="text-xs text-yellow-600">Late</div>
+            {totalRecords > 0 && (
+              <div className="text-xs text-yellow-500">
+                {Math.round((attendanceData[1].value / totalRecords) * 100)}%
+              </div>
+            )}
+          </div>
+          <div className="bg-red-50 p-2 rounded">
+            <div className="text-lg font-semibold text-red-600">{attendanceData[2].value}</div>
+            <div className="text-xs text-red-600">Absent</div>
+            {totalRecords > 0 && (
+              <div className="text-xs text-red-500">
+                {Math.round((attendanceData[2].value / totalRecords) * 100)}%
+              </div>
+            )}
+          </div>
+          <div className="bg-amber-50 p-2 rounded">
+            <div className="text-lg font-semibold text-amber-600">{attendanceData[3].value}</div>
+            <div className="text-xs text-amber-600">Missed</div>
+            {totalRecords > 0 && (
+              <div className="text-xs text-amber-500">
+                {Math.round((attendanceData[3].value / totalRecords) * 100)}%
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

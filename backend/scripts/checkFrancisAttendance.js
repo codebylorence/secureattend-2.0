@@ -18,9 +18,9 @@ async function checkFrancisAttendance() {
     
     // Check if Francis exists in Employee table
     const employee = await sequelize.query(
-      `SELECT employee_id, fullname, firstname, lastname, status 
+      `SELECT employee_id, firstname, lastname, status 
        FROM Employees 
-       WHERE employee_id LIKE '%francis%' OR fullname LIKE '%Francis%' OR firstname LIKE '%Francis%'`,
+       WHERE employee_id LIKE '%francis%' OR firstname LIKE '%Francis%'`,
       { type: QueryTypes.SELECT }
     );
     

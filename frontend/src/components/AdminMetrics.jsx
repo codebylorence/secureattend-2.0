@@ -90,16 +90,23 @@ export default function AdminMetrics() {
       const scheduledEmployeeIds = new Set();
       filteredSchedules.forEach(schedule => {
         // Check if employee is scheduled today
-        // First check schedule_dates object for today's date
-        if (schedule.schedule_dates && schedule.schedule_dates[today]) {
+        // For template-based schedules, prioritize specific_date over days array
+        if (schedule.specific_date) {
+          // If template has a specific date, only count it if it matches today
+          if (schedule.specific_date === todayDate) {
+            scheduledEmployeeIds.add(schedule.employee_id);
+          }
+        }
+        // For legacy schedules or templates without specific_date, check days array
+        else if (schedule.days && Array.isArray(schedule.days) && schedule.days.includes(today)) {
+          scheduledEmployeeIds.add(schedule.employee_id);
+        }
+        // Fallback: check schedule_dates object for today's date (legacy system)
+        else if (schedule.schedule_dates && schedule.schedule_dates[today]) {
           const todayScheduleDates = schedule.schedule_dates[today];
           if (Array.isArray(todayScheduleDates) && todayScheduleDates.includes(todayDate)) {
             scheduledEmployeeIds.add(schedule.employee_id);
           }
-        }
-        // Fallback: check if today is in the days array (for schedules without specific dates)
-        else if (schedule.days && Array.isArray(schedule.days) && schedule.days.includes(today)) {
-          scheduledEmployeeIds.add(schedule.employee_id);
         }
       });
 

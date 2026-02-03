@@ -38,7 +38,7 @@ export default function Login() {
 
       // Redirect user based on role
       if (data.user.role === "admin") navigate("/admin/dashboard");
-      else if (data.user.role === "superadmin") navigate("/admin/dashboard");
+      else if (data.user.role === "warehouseadmin") navigate("/warehouseadmin/dashboard");
       else if (data.user.role === "supervisor") navigate("/admin/dashboard");
       else if (data.user.role === "teamleader") navigate("/team/dashboard");
       else navigate("/employee/dashboard");

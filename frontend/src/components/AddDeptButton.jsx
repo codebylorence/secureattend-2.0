@@ -91,8 +91,8 @@ export default function AddDeptButton({ onDepartmentAdded }) {
                 >
                   <option value="">No Manager</option>
                   {teamLeaders.map((leader) => (
-                    <option key={leader.id} value={leader.employee?.fullname || leader.username}>
-                      {leader.employee?.fullname || leader.username}
+                    <option key={leader.id} value={`${leader.employee?.firstname || ''} ${leader.employee?.lastname || ''}`.trim() || leader.username}>
+                      {`${leader.employee?.firstname || ''} ${leader.employee?.lastname || ''}`.trim() || leader.username}
                     </option>
                   ))}
                 </select>

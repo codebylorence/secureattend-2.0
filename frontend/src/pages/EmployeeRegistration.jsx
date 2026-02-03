@@ -130,8 +130,12 @@ export default function EmployeeRegistration() {
   // Function to determine role based on position
   const getRoleFromPosition = (position) => {
     const positionLower = position.toLowerCase();
-    if (positionLower.includes('admin')) {
+    if (positionLower.includes('admin') && !positionLower.includes('warehouse')) {
       return 'admin';
+    } else if (positionLower.includes('warehouse admin') || 
+               positionLower.includes('warehouse manager') ||
+               positionLower.includes('inventory manager')) {
+      return 'warehouseadmin';
     } else if (positionLower.includes('supervisor') || positionLower.includes('manager')) {
       return 'supervisor';
     } else if (positionLower.includes('team leader') || positionLower.includes('lead')) {
@@ -179,7 +183,7 @@ export default function EmployeeRegistration() {
       return;
     }
     
-    // If position changes, automatically set department for admin/supervisor roles
+    // If position changes, automatically set department for admin/supervisor/warehouseadmin roles
     if (name === 'position') {
       const role = getRoleFromPosition(value);
       const updatedFormData = {
@@ -187,8 +191,8 @@ export default function EmployeeRegistration() {
         [name]: value
       };
       
-      // Auto-set department to "Company-wide" for admin and supervisor roles
-      if (role === 'admin' || role === 'supervisor') {
+      // Auto-set department to "Company-wide" for admin, supervisor, and warehouseadmin roles
+      if (role === 'admin' || role === 'supervisor' || role === 'warehouseadmin') {
         updatedFormData.department = 'Company-wide';
       }
       

@@ -13,7 +13,7 @@ namespace BiometricEnrollmentApp
         private readonly ZKTecoService _zkService;
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
-        private readonly DispatcherTimer _autoSyncTimer;
+        private readonly SyncService _syncService;
 
         public AdminAttendancePage(ZKTecoService zkService)
         {
@@ -21,13 +21,7 @@ namespace BiometricEnrollmentApp
             _zkService = zkService ?? new ZKTecoService();
             _dataService = new DataService();
             _apiService = new ApiService();
-
-            // Initialize auto-sync timer (every 10 minutes)
-            _autoSyncTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMinutes(10)
-            };
-            _autoSyncTimer.Tick += AutoSyncTimer_Tick;
+            _syncService = new SyncService(_dataService, _apiService);
 
             Loaded += AdminAttendancePage_Loaded;
             Unloaded += AdminAttendancePage_Unloaded;
@@ -37,47 +31,14 @@ namespace BiometricEnrollmentApp
         {
             RefreshAttendanceData();
             
-            // Start automatic schedule syncing
-            await AutoSyncSchedules();
-            _autoSyncTimer.Start();
-            LogHelper.Write("🔄 Started automatic schedule sync (every 10 minutes)");
+            // Note: SyncService is now started globally from MainWindow
+            LogHelper.Write("ℹ️ Admin attendance page loaded - using global sync service");
         }
 
         private void AdminAttendancePage_Unloaded(object sender, RoutedEventArgs e)
         {
-            // Stop the timer when page is unloaded
-            _autoSyncTimer?.Stop();
-            LogHelper.Write("⏹️ Stopped automatic schedule sync");
-        }
-
-        private async void AutoSyncTimer_Tick(object sender, EventArgs e)
-        {
-            await AutoSyncSchedules();
-        }
-
-        private async Task AutoSyncSchedules()
-        {
-            try
-            {
-                LogHelper.Write("🔄 Auto-syncing schedules from server...");
-                
-                var schedules = await _apiService.GetAllSchedulesAsync();
-
-                if (schedules != null && schedules.Count > 0)
-                {
-                    int updatedCount = _dataService.UpdateSchedules(schedules);
-                    LogHelper.Write($"✅ Auto-sync: Updated {updatedCount} schedule(s) from server");
-                }
-                else
-                {
-                    LogHelper.Write("ℹ️ Auto-sync: No schedules found on server");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Write($"⚠️ Auto-sync failed: {ex.Message}");
-                // Don't show message box for auto-sync failures to avoid interrupting user
-            }
+            // Note: SyncService cleanup is handled globally from MainWindow
+            LogHelper.Write("ℹ️ Admin attendance page unloaded");
         }
 
         private void RefreshBtn_Click(object sender, RoutedEventArgs e)

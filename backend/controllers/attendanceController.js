@@ -345,7 +345,7 @@ export const getAttendances = async (req, res) => {
         {
           model: Employee,
           as: 'employee',
-          attributes: ['employee_id', 'firstname', 'lastname', 'fullname', 'email', 'department', 'position'],
+          attributes: ['employee_id', 'firstname', 'lastname', 'email', 'department', 'position'],
           required: false // LEFT JOIN to include attendances even if employee is deleted
         }
       ],
@@ -362,8 +362,6 @@ export const getAttendances = async (req, res) => {
       if (employee) {
         if (employee.firstname && employee.lastname) {
           employeeName = `${employee.firstname} ${employee.lastname}`;
-        } else if (employee.fullname) {
-          employeeName = employee.fullname;
         }
       }
 
@@ -477,7 +475,7 @@ export const getTodayAttendances = async (req, res) => {
         {
           model: Employee,
           as: 'employee',
-          attributes: ['employee_id', 'firstname', 'lastname', 'fullname', 'email', 'department', 'position'],
+          attributes: ['employee_id', 'firstname', 'lastname', 'email', 'department', 'position'],
           required: false // LEFT JOIN to include attendances even if employee is deleted
         }
       ],
@@ -504,8 +502,6 @@ export const getTodayAttendances = async (req, res) => {
       if (employee) {
         if (employee.firstname && employee.lastname) {
           employeeName = `${employee.firstname} ${employee.lastname}`;
-        } else if (employee.fullname) {
-          employeeName = employee.fullname;
         }
       }
 
@@ -630,7 +626,7 @@ export const assignOvertime = async (req, res) => {
         results.push({ 
           employee_id: empId, 
           success: true, 
-          employee_name: employee.fullname || `${employee.firstname} ${employee.lastname}`,
+          employee_name: `${employee?.firstname || ''} ${employee?.lastname || ''}`.trim() || employee.employee_id,
           overtime_id: overtimeRecord.id
         });
         successCount++;
@@ -807,27 +803,17 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
       if (!hasOvertime) {
         const employeeData = employee.toJSON();
         
-        // Ensure fullname is populated
-        let fullname = employeeData.fullname;
-        if (!fullname || fullname.trim() === '' || fullname === 'null') {
-          if (employeeData.firstname && employeeData.lastname) {
-            fullname = `${employeeData.firstname} ${employeeData.lastname}`;
-          } else if (employeeData.firstname) {
-            fullname = employeeData.firstname;
-          } else {
-            fullname = `Employee ${employeeData.employee_id}`;
-          }
-        }
-
+        // Return employee data with firstname and lastname
         employeesWithoutOvertime.push({
           ...employeeData,
-          fullname: fullname
+          firstname: employeeData.firstname || '',
+          lastname: employeeData.lastname || ''
         });
       }
     }
 
     console.log(`📊 Final result: ${employeesWithoutOvertime.length} overtime eligible employees`);
-    console.log(`📋 Eligible employees:`, employeesWithoutOvertime.map(e => `${e.employee_id} - ${e.fullname}`));
+    console.log(`📋 Eligible employees:`, employeesWithoutOvertime.map(e => `${e.employee_id} - ${e.firstname} ${e.lastname}`));
     
     res.status(200).json(employeesWithoutOvertime);
   } catch (error) {
@@ -852,7 +838,7 @@ export const getOvertimeAssignments = async (req, res) => {
         {
           model: Employee,
           as: 'employee',
-          attributes: ['employee_id', 'firstname', 'lastname', 'fullname', 'department', 'position'],
+          attributes: ['employee_id', 'firstname', 'lastname', 'department', 'position'],
           required: true
         }
       ],
@@ -870,8 +856,6 @@ export const getOvertimeAssignments = async (req, res) => {
       if (employee) {
         if (employee.firstname && employee.lastname) {
           employeeName = `${employee.firstname} ${employee.lastname}`;
-        } else if (employee.fullname) {
-          employeeName = employee.fullname;
         }
       }
 
@@ -962,7 +946,7 @@ export const updateOvertimeHours = async (req, res) => {
       include: [{
         model: Employee,
         as: 'employee',
-        attributes: ['employee_id', 'fullname', 'firstname', 'lastname']
+        attributes: ['employee_id', 'firstname', 'lastname']
       }]
     });
     

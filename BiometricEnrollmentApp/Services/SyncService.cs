@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Timers;
+using System.Threading;
 
 namespace BiometricEnrollmentApp.Services
 {
@@ -10,16 +11,20 @@ namespace BiometricEnrollmentApp.Services
     {
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
-        private readonly Timer _syncTimer;
+        private readonly System.Timers.Timer _syncTimer;
+        private readonly CancellationTokenSource _cancellationTokenSource;
         private bool _isRunning = false;
+        private bool _isScheduleSyncRunning = false;
+        private DateTime _lastScheduleSync = DateTime.MinValue;
 
         public SyncService(DataService dataService, ApiService apiService)
         {
             _dataService = dataService;
             _apiService = apiService;
+            _cancellationTokenSource = new CancellationTokenSource();
             
             // Set up timer to retry failed syncs every 5 minutes
-            _syncTimer = new Timer(5 * 60 * 1000); // 5 minutes
+            _syncTimer = new System.Timers.Timer(5 * 60 * 1000); // 5 minutes
             _syncTimer.Elapsed += OnSyncTimerElapsed;
             _syncTimer.AutoReset = true;
         }
@@ -27,13 +32,59 @@ namespace BiometricEnrollmentApp.Services
         public void StartSyncService()
         {
             LogHelper.Write("🔄 Starting sync service...");
+            LogHelper.Write($"🔄 Attendance sync timer: {_syncTimer.Interval}ms ({_syncTimer.Interval / 1000}s)");
+            
             _syncTimer.Start();
+            
+            LogHelper.Write("✅ Sync timer started successfully");
+            
+            // Start background schedule sync task
+            LogHelper.Write("🔄 Starting background schedule sync task...");
+            Task.Run(async () => await BackgroundScheduleSyncLoop(_cancellationTokenSource.Token));
+            
+            // Perform initial schedule sync
+            LogHelper.Write("🔄 Performing initial schedule sync...");
+            Task.Run(async () => await SyncSchedulesAsync());
         }
 
         public void StopSyncService()
         {
             LogHelper.Write("⏹️ Stopping sync service...");
             _syncTimer.Stop();
+            _cancellationTokenSource.Cancel();
+        }
+
+        private async Task BackgroundScheduleSyncLoop(CancellationToken cancellationToken)
+        {
+            LogHelper.Write("🔄 Background schedule sync loop started");
+            
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    if (!_isScheduleSyncRunning)
+                    {
+                        LogHelper.Write("⏰ Background schedule sync triggered");
+                        await SyncSchedulesAsync();
+                    }
+                    
+                    // Wait 30 seconds before next sync
+                    await Task.Delay(30000, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    LogHelper.Write("🛑 Background schedule sync loop cancelled");
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Write($"💥 Error in background schedule sync loop: {ex.Message}");
+                    // Wait a bit before retrying
+                    await Task.Delay(5000, cancellationToken);
+                }
+            }
+            
+            LogHelper.Write("🔄 Background schedule sync loop ended");
         }
 
         private async void OnSyncTimerElapsed(object sender, ElapsedEventArgs e)
@@ -51,6 +102,59 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
+        public async Task SyncSchedulesAsync()
+        {
+            if (_isScheduleSyncRunning)
+            {
+                LogHelper.Write("⚠️ Schedule sync already running, skipping");
+                return;
+            }
+            
+            _isScheduleSyncRunning = true;
+            
+            try
+            {
+                LogHelper.Write("🔄 SyncSchedulesAsync called");
+                
+                // Check if network is available
+                if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+                {
+                    LogHelper.Write("🌐 Network not available - skipping schedule sync");
+                    return;
+                }
+
+                LogHelper.Write("🔄 Auto-syncing schedules from server...");
+                
+                var schedules = await _apiService.GetAllSchedulesAsync();
+                
+                if (schedules != null)
+                {
+                    LogHelper.Write($"📥 Received {schedules.Count} schedules from server");
+                    int updated = _dataService.UpdateSchedules(schedules);
+                    
+                    LogHelper.Write($"✅ Schedule sync: Updated {updated} schedule(s) from server");
+                    
+                    // Notify about schedule update
+                    OnSchedulesUpdated?.Invoke(updated);
+                    
+                    _lastScheduleSync = DateTime.Now;
+                }
+                else
+                {
+                    LogHelper.Write("⚠️ Schedule sync: No schedules received from server (null response)");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in schedule sync: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+            }
+            finally
+            {
+                _isScheduleSyncRunning = false;
+            }
+        }
+
         public async Task ProcessPendingSyncs()
         {
             try
@@ -59,8 +163,7 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (pendingItems.Count == 0)
                 {
-                    LogHelper.Write("🔄 No pending sync items");
-                    return;
+                    return; // Don't log when no pending items to reduce spam
                 }
 
                 LogHelper.Write($"🔄 Processing {pendingItems.Count} pending sync items...");
@@ -151,6 +254,45 @@ namespace BiometricEnrollmentApp.Services
                 return false;
             }
         }
+
+        /// <summary>
+        /// Force an immediate schedule sync
+        /// </summary>
+        public async Task<int> ForceScheduleSyncAsync()
+        {
+            try
+            {
+                LogHelper.Write("🔄 Force syncing schedules from server...");
+                
+                var schedules = await _apiService.GetAllSchedulesAsync();
+                
+                if (schedules != null)
+                {
+                    int updated = _dataService.UpdateSchedules(schedules);
+                    LogHelper.Write($"✅ Force sync: Updated {updated} schedule(s) from server");
+                    
+                    _lastScheduleSync = DateTime.Now;
+                    
+                    // Notify about schedule update
+                    OnSchedulesUpdated?.Invoke(updated);
+                    
+                    return updated;
+                }
+                else
+                {
+                    LogHelper.Write("⚠️ Force sync: No schedules received from server");
+                    return 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in force schedule sync: {ex.Message}");
+                return -1;
+            }
+        }
+
+        // Event to notify when schedules are updated
+        public event Action<int>? OnSchedulesUpdated;
     }
 
     public class AttendancePayload
