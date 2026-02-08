@@ -17,9 +17,12 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     // Use environment variable for backend URL, remove /api suffix for socket connection
-    const backendUrl = import.meta.env.VITE_API_URL 
-      ? import.meta.env.VITE_API_URL.replace('/api', '') 
-      : 'http://localhost:5000';
+    let backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    
+    // Remove /api suffix if present
+    if (backendUrl.includes('/api')) {
+      backendUrl = backendUrl.replace('/api', '');
+    }
     
     console.log('🔌 Connecting to WebSocket at:', backendUrl);
     
