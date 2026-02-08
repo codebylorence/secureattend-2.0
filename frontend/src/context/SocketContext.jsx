@@ -16,7 +16,14 @@ export const SocketProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const newSocket = io('http://localhost:5000', {
+    // Use environment variable for backend URL, remove /api suffix for socket connection
+    const backendUrl = import.meta.env.VITE_API_URL 
+      ? import.meta.env.VITE_API_URL.replace('/api', '') 
+      : 'http://localhost:5000';
+    
+    console.log('🔌 Connecting to WebSocket at:', backendUrl);
+    
+    const newSocket = io(backendUrl, {
       transports: ['websocket', 'polling'],
       timeout: 20000,
       reconnection: true,
