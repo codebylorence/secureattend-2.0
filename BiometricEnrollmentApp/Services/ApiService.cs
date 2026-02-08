@@ -295,6 +295,50 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
+        /// <summary>
+        /// Sync multiple attendance records to the server in bulk
+        /// </summary>
+        public async Task<bool> SyncAttendanceRecordsAsync(List<object> records)
+        {
+            try
+            {
+                var payload = new
+                {
+                    records = records
+                };
+
+                var options = new JsonSerializerOptions
+                {
+                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+                    WriteIndented = false
+                };
+
+                var json = JsonSerializer.Serialize(payload, options);
+                LogHelper.Write($"📤 Syncing {records.Count} attendance records to server...");
+                
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync($"{_baseUrl}/api/attendances/sync-from-biometric", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"✅ Bulk sync successful: {responseContent}");
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"❌ Bulk sync failed: {response.StatusCode} - {errorContent}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in bulk sync: {ex.Message}");
+                return false;
+            }
+        }
+
     }
 
     public class EmployeeDetails

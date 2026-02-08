@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { fetchEmployees } from "../api/EmployeeApi";
 import { getTodayAttendances } from "../api/AttendanceApi";
-import { getEmployeeSchedules } from "../api/ScheduleApi";
+import { getEmployeeSchedules, getTemplates } from "../api/ScheduleApi";
 import { isAuthenticated } from "../utils/auth";
 
 export default function AdminMetrics() {
@@ -42,34 +42,38 @@ export default function AdminMetrics() {
 
       console.log('📊 Fetching metrics for:', { userRole, userDepartment, isSupervisor });
 
-      const [employees, todayAttendances, schedules] = await Promise.all([
+      const [employees, todayAttendances, employeeSchedules, templates] = await Promise.all([
         fetchEmployees(),
         getTodayAttendances(),
-        getEmployeeSchedules()
+        getEmployeeSchedules(),
+        getTemplates()
       ]);
 
       console.log('📊 Raw data received:', {
         employees: employees.length,
         attendances: todayAttendances.length,
-        schedules: schedules.length
+        employeeSchedules: employeeSchedules.length,
+        templates: templates.length
       });
 
       let filteredEmployees = employees;
       let filteredAttendances = todayAttendances;
-      let filteredSchedules = schedules;
+      let filteredEmployeeSchedules = employeeSchedules;
+      let filteredTemplates = templates;
 
       // For supervisors, show all employees (no department filtering)
       // Only filter out inactive employees
       if (isSupervisor) {
         filteredEmployees = employees.filter(emp => emp.status === "Active");
-        // No need to filter attendances and schedules by department for supervisors
-        // They should see all attendance data
+        // No need to filter attendances, schedules, and templates by department for supervisors
+        // They should see all data
       }
 
       console.log('📊 Filtered data:', {
         employees: filteredEmployees.length,
         attendances: filteredAttendances.length,
-        schedules: filteredSchedules.length
+        employeeSchedules: filteredEmployeeSchedules.length,
+        templates: filteredTemplates.length
       });
 
       // Count total active employees
@@ -88,7 +92,9 @@ export default function AdminMetrics() {
 
       // Find employees scheduled for today
       const scheduledEmployeeIds = new Set();
-      filteredSchedules.forEach(schedule => {
+      
+      // Process employee schedules
+      filteredEmployeeSchedules.forEach(schedule => {
         // Check if employee is scheduled today
         // For template-based schedules, prioritize specific_date over days array
         if (schedule.specific_date) {
@@ -110,7 +116,49 @@ export default function AdminMetrics() {
         }
       });
 
+      // Also check template assigned_employees field
+      console.log('📊 AdminMetrics: Processing template assignments...');
+      filteredTemplates.forEach((template, index) => {
+        console.log(`  Template ${index + 1}:`, {
+          id: template.id,
+          shift_name: template.shift_name,
+          specific_date: template.specific_date,
+          department: template.department,
+          assigned_employees: template.assigned_employees
+        });
+        
+        if (template.assigned_employees) {
+          let assignedEmployees = [];
+          try {
+            assignedEmployees = typeof template.assigned_employees === 'string' 
+              ? JSON.parse(template.assigned_employees) 
+              : template.assigned_employees;
+          } catch (e) {
+            console.error('Error parsing assigned_employees for template', template.id, e);
+            return;
+          }
+          
+          // Check if template is for today
+          const isForToday = template.specific_date === todayDate;
+          
+          if (isForToday) {
+            console.log(`    Template is for today! Assigned employees:`, assignedEmployees);
+            assignedEmployees.forEach(assignment => {
+              console.log(`    ✅ Adding employee ${assignment.employee_id} from template`);
+              scheduledEmployeeIds.add(assignment.employee_id);
+            });
+          } else {
+            console.log(`    Template not for today: ${template.specific_date} !== ${todayDate}`);
+          }
+        }
+      });
+
       const scheduled = scheduledEmployeeIds.size;
+      
+      console.log('📊 AdminMetrics: Scheduled employees:', {
+        scheduledEmployeeIds: Array.from(scheduledEmployeeIds),
+        count: scheduled
+      });
 
       // Count by status using the new status system
       const present = filteredAttendances.filter(att => 

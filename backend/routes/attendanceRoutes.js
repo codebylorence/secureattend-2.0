@@ -9,7 +9,8 @@ import {
   removeOvertime,
   getOvertimeAssignments,
   getOvertimeEligibleEmployees,
-  updateOvertimeHours
+  updateOvertimeHours,
+  syncAttendanceFromBiometric
 } from "../controllers/attendanceController.js";
 import { authenticateToken, requireAttendanceAccess, requireAdmin } from "../middleware/auth.js";
 
@@ -20,6 +21,9 @@ router.get("/", authenticateToken, requireAttendanceAccess, getAttendances);
 router.get("/today", authenticateToken, requireAttendanceAccess, getTodayAttendances);
 router.post("/test", authenticateToken, requireAdmin, createTestAttendance); // Test endpoint - admin only
 router.delete("/test", authenticateToken, requireAdmin, clearTestAttendance); // Clear test data - admin only
+
+// Biometric sync endpoint - no auth required (called by biometric app)
+router.post("/sync-from-biometric", syncAttendanceFromBiometric);
 
 // Overtime management routes - attendance access required
 router.get("/overtime/eligible", authenticateToken, requireAttendanceAccess, getOvertimeEligibleEmployees);

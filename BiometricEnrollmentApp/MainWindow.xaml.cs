@@ -13,6 +13,7 @@ namespace BiometricEnrollmentApp
         private readonly DataService _dataService = new();
         private readonly SyncService _syncService;
         private DispatcherTimer? _clockTimer;
+        private DispatcherTimer? _absentMarkingTimer;
         private bool _isAdminMode = false;
 
         public MainWindow()
@@ -42,6 +43,39 @@ namespace BiometricEnrollmentApp
             // Start global sync service for automatic schedule synchronization
             _syncService.StartSyncService();
             LogHelper.Write("🔄 Global sync service started from MainWindow");
+            
+            // Start absent marking timer (runs every 5 minutes)
+            _absentMarkingTimer = new DispatcherTimer();
+            _absentMarkingTimer.Interval = TimeSpan.FromMinutes(5);
+            _absentMarkingTimer.Tick += AbsentMarkingTimer_Tick;
+            _absentMarkingTimer.Start();
+            LogHelper.Write("⏰ Absent marking timer started (runs every 5 minutes)");
+            
+            // Run absent marking immediately on startup - check last 7 days to catch missed absences
+            Task.Run(() => RunAbsentMarking(daysToCheck: 7));
+        }
+
+        private void AbsentMarkingTimer_Tick(object? sender, EventArgs e)
+        {
+            // Run absent marking in background thread - check last 2 days (yesterday and today)
+            Task.Run(() => RunAbsentMarking(daysToCheck: 2));
+        }
+
+        private void RunAbsentMarking(int daysToCheck = 2)
+        {
+            try
+            {
+                var result = _dataService.MarkAbsentAndMissedClockouts(daysToCheck);
+                
+                if (result.markedAbsent > 0 || result.markedMissedClockout > 0)
+                {
+                    LogHelper.Write($"✅ Absent marking complete: {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Absent marking error: {ex.Message}");
+            }
         }
 
         private void ClockTimer_Tick(object? sender, EventArgs e)

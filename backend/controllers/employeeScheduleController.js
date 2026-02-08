@@ -9,11 +9,12 @@ import {
   regenerateWeeklySchedules,
   getScheduleById,
 } from "../services/employeeScheduleService.js";
-import { 
-  getEmployeeSchedulesFromTemplates, 
-  getTodaysScheduleFromTemplates,
-  assignEmployeesToTemplate 
-} from "../services/scheduleTemplateService.js";
+// DISABLED: scheduleTemplateService - table dropped
+// import { 
+//   getEmployeeSchedulesFromTemplates, 
+//   getTodaysScheduleFromTemplates,
+//   assignEmployeesToTemplate 
+// } from "../services/scheduleTemplateService.js";
 import { getTodaysSchedule } from "../utils/scheduleDateGenerator.js";
 import { createScheduleNotification } from "./scheduleNotificationController.js";
 import User from "../models/user.js";
@@ -59,23 +60,22 @@ const checkEmployeeFingerprintStatus = async (employeeId) => {
 export const getEmployeeSchedules = async (req, res) => {
   try {
     console.log('🌐 API: getEmployeeSchedules called by user:', req.user?.role, req.user?.employeeId);
+    console.log('🌐 API: Request headers:', req.headers);
+    console.log('🌐 API: Request query:', req.query);
     
-    // Get schedules from both old system and new template system
-    const legacySchedules = await getAllEmployeeSchedules();
-    const templateSchedules = await getEmployeeSchedulesFromTemplates();
+    // Get schedules from employee_schedules table only (schedule_templates dropped)
+    const allSchedules = await getAllEmployeeSchedules();
+    // DISABLED: Template schedules - table dropped
+    // const templateSchedules = await getEmployeeSchedulesFromTemplates();
     
-    console.log('📊 API: Schedule counts:', {
-      legacy: legacySchedules.length,
-      template: templateSchedules.length,
-      total: legacySchedules.length + templateSchedules.length
-    });
+    console.log('📊 API: Schedule count:', allSchedules.length);
+    console.log('📊 API: Sample schedule:', allSchedules[0]);
     
-    // Combine and return both
-    const allSchedules = [...legacySchedules, ...templateSchedules];
     res.status(200).json(allSchedules);
   } catch (error) {
-    console.error("Error fetching employee schedules:", error);
-    res.status(500).json({ message: "Error fetching employee schedules" });
+    console.error("❌ Error fetching employee schedules:", error);
+    console.error("❌ Error stack:", error.stack);
+    res.status(500).json({ message: "Error fetching employee schedules", error: error.message });
   }
 };
 
@@ -84,12 +84,11 @@ export const getEmployeeSchedule = async (req, res) => {
   try {
     const { employee_id } = req.params;
     
-    // Get schedules from both old system and new template system
-    const legacySchedules = await getSchedulesByEmployeeId(employee_id);
-    const templateSchedules = await getEmployeeSchedulesFromTemplates(employee_id);
+    // Get schedules from employee_schedules table only (schedule_templates dropped)
+    const allSchedules = await getSchedulesByEmployeeId(employee_id);
+    // DISABLED: Template schedules - table dropped
+    // const templateSchedules = await getEmployeeSchedulesFromTemplates(employee_id);
     
-    // Combine and return both
-    const allSchedules = [...legacySchedules, ...templateSchedules];
     res.status(200).json(allSchedules);
   } catch (error) {
     console.error("Error fetching employee schedule:", error);
@@ -115,7 +114,7 @@ export const assignSchedule = async (req, res) => {
     console.log("📥 Assigning schedule with data:", req.body);
     console.log("👤 Request user:", req.user);
     
-    const { employee_id, template_id, days, assigned_by, shift_name, start_time, end_time } = req.body;
+    const { employee_id, template_id, days, assigned_by, shift_name, start_time, end_time, department } = req.body;
     
     // Validate that employee has fingerprint enrolled before scheduling
     console.log("🔍 Checking fingerprint status before scheduling...");
@@ -134,11 +133,12 @@ export const assignSchedule = async (req, res) => {
     
     let result;
     
-    if (template_id) {
-      // Use template-based assignment
-      result = await assignEmployeesToTemplate(template_id, [employee_id], assigned_by || req.user?.username || "System");
-      console.log("✅ Schedule assigned successfully to template:", template_id);
-    } else if (shift_name && start_time && end_time && days) {
+    // DISABLED: Template-based assignment - schedule_templates table dropped
+    // if (template_id) {
+    //   result = await assignEmployeesToTemplate(template_id, [employee_id], assigned_by || req.user?.username || "System");
+    //   console.log("✅ Schedule assigned successfully to template:", template_id);
+    // } else 
+    if (shift_name && start_time && end_time && days) {
       // Use direct assignment for role-based scheduling
       const scheduleData = {
         employee_id,
@@ -146,13 +146,14 @@ export const assignSchedule = async (req, res) => {
         start_time,
         end_time,
         days,
+        department,
         assigned_by: assigned_by || req.user?.username || "System"
       };
       
       result = await assignScheduleToEmployee(scheduleData);
       console.log("✅ Schedule assigned successfully with direct assignment:", result.id);
     } else {
-      throw new Error("Either template_id or (shift_name, start_time, end_time, days) must be provided");
+      throw new Error("shift_name, start_time, end_time, and days are required");
     }
     
     // Create notification for biometric app
@@ -369,14 +370,15 @@ export const getTodaysEmployeeSchedule = async (req, res) => {
   try {
     const { employee_id } = req.params;
     
-    // First try to get from new template system
-    let todaysSchedule = await getTodaysScheduleFromTemplates(employee_id);
+    // DISABLED: Template system - schedule_templates table dropped
+    // let todaysSchedule = await getTodaysScheduleFromTemplates(employee_id);
+    let todaysSchedule = null;
     
-    // If not found, fall back to legacy system
+    // Get from employee_schedules table
     if (!todaysSchedule) {
       const schedules = await getSchedulesByEmployeeId(employee_id);
       
-      // Find today's schedule from legacy system
+      // Find today's schedule
       for (const schedule of schedules) {
         const todayInfo = getTodaysSchedule(schedule);
         if (todayInfo) {

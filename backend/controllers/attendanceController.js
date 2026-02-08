@@ -1,7 +1,7 @@
 import Attendance from "../models/attendance.js";
 import Employee from "../models/employee.js";
 import EmployeeSchedule from "../models/employeeSchedule.js";
-import ScheduleTemplate from "../models/scheduleTemplate.js";
+// import ScheduleTemplate from "../models/scheduleTemplate.js"; // DISABLED - table dropped
 import { Op } from "sequelize";
 import sequelize from "../config/database.js";
 import { getCurrentDateInTimezone, getDateInTimezone, getConfiguredTimezone } from "../utils/timezone.js";
@@ -14,23 +14,30 @@ export const recordAttendance = async (req, res) => {
 
     console.log(`📥 Attendance request: employee_id=${employee_id}, clock_in=${clock_in}, clock_out=${clock_out}, status=${status}`);
 
-    // For absent records, clock_in can be null
+    // For absent records, clock_in can be null or empty string
     if (!employee_id) {
       console.log("❌ Missing employee_id");
       return res.status(400).json({ error: "employee_id is required" });
     }
 
-    // If status is Absent, clock_in is not required
+    // If status is Absent, clock_in is not required (can be null or empty string)
     if (!clock_in && status !== "Absent") {
       console.log("❌ Missing clock_in for non-absent record");
       return res.status(400).json({ error: "clock_in is required for non-absent records" });
     }
+    
+    // Normalize empty strings to null for absent records
+    const normalizedClockIn = (status === "Absent" && clock_in === '') ? null : clock_in;
+    const normalizedClockOut = (clock_out === '') ? null : clock_out;
 
     // Verify employee exists
     const employee = await Employee.findOne({ where: { employee_id } });
     if (!employee) {
       return res.status(404).json({ error: "Employee not found" });
     }
+
+    // Get Socket.IO instance
+    const io = req.app.get('io');
 
     // Double-tap prevention: Check for recent attendance activity (within last 10 seconds)
     const tenSecondsAgo = new Date(Date.now() - 10000);
@@ -67,13 +74,13 @@ export const recordAttendance = async (req, res) => {
       // For normal records, parse the clock_in time
       // Handle both ISO format with timezone and without
       try {
-        if (clock_in.includes('Z') || clock_in.includes('+') || clock_in.includes('-')) {
+        if (normalizedClockIn.includes('Z') || normalizedClockIn.includes('+') || normalizedClockIn.includes('-')) {
           // ISO format with timezone - this is already UTC from biometric app
-          clockInDate = new Date(clock_in);
+          clockInDate = new Date(normalizedClockIn);
           console.log(`📅 Parsed clock_in as UTC: ${clockInDate.toISOString()}`);
         } else {
           // Assume local time if no timezone specified
-          clockInDate = new Date(clock_in + 'Z'); // Treat as UTC then convert
+          clockInDate = new Date(normalizedClockIn + 'Z'); // Treat as UTC then convert
           console.log(`📅 Parsed clock_in as assumed UTC: ${clockInDate.toISOString()}`);
         }
         
@@ -88,38 +95,38 @@ export const recordAttendance = async (req, res) => {
         console.log(`📅 Calculated date in configured timezone: ${date}`);
         console.log(`📅 Current timezone date for comparison: ${getCurrentDateInTimezone()}`);
       } catch (error) {
-        console.log("❌ Invalid clock_in format:", clock_in);
+        console.log("❌ Invalid clock_in format:", normalizedClockIn);
         return res.status(400).json({ error: "Invalid clock_in date format" });
       }
     }
     
     // Handle clock_out if provided
-    if (clock_out) {
+    if (normalizedClockOut) {
       try {
-        if (clock_out.includes('Z') || clock_out.includes('+') || clock_out.includes('-')) {
-          clockOutDate = new Date(clock_out);
+        if (normalizedClockOut.includes('Z') || normalizedClockOut.includes('+') || normalizedClockOut.includes('-')) {
+          clockOutDate = new Date(normalizedClockOut);
         } else {
-          clockOutDate = new Date(clock_out + 'Z');
+          clockOutDate = new Date(normalizedClockOut + 'Z');
         }
         
         if (isNaN(clockOutDate.getTime())) {
           throw new Error("Invalid clock_out date format");
         }
       } catch (error) {
-        console.log("❌ Invalid clock_out format:", clock_out);
+        console.log("❌ Invalid clock_out format:", normalizedClockOut);
         return res.status(400).json({ error: "Invalid clock_out date format" });
       }
     }
 
     // For clock-out requests, we need to find the open session
     // This could be on today's date OR yesterday's date for overnight shifts
-    if (clock_out) {
+    if (normalizedClockOut) {
       console.log(`🌙 Clock-out request - searching for open session for ${employee_id}`);
       
       // If both clock_in and clock_out are provided, this is a complete session update
       // We should look for the session based on the clock_in time, not current time
       let searchDate;
-      if (clock_in) {
+      if (normalizedClockIn) {
         // Use the date from the provided clock_in time
         searchDate = getDateInTimezone(clockInDate);
         console.log(`📅 Using clock_in date for session search: ${searchDate}`);
@@ -141,7 +148,7 @@ export const recordAttendance = async (req, res) => {
       });
 
       // If no session found and this is a clock-out only request, check yesterday for overnight shifts
-      if (!openSession && !clock_in) {
+      if (!openSession && !normalizedClockIn) {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayDate = getDateInTimezone(yesterday);
@@ -194,6 +201,17 @@ export const recordAttendance = async (req, res) => {
         await openSession.save();
 
         console.log(`✅ Clock-out recorded for ${employee_id}, total hours: ${totalHours.toFixed(2)} (session date: ${openSession.date})`);
+        
+        // Emit WebSocket event for real-time update
+        if (io) {
+          io.emit('attendance:updated', {
+            type: 'clock-out',
+            employee_id,
+            attendance: openSession
+          });
+          console.log(`📡 WebSocket event emitted: attendance:updated (clock-out)`);
+        }
+        
         return res.status(200).json({
           message: "Clock-out recorded successfully",
           attendance: openSession
@@ -205,7 +223,7 @@ export const recordAttendance = async (req, res) => {
     }
 
     // Handle clock-in only requests (no clock_out provided)
-    if (!clock_out) {
+    if (!normalizedClockOut) {
       // Check if ANY attendance record exists for this employee on the calculated date (including Absent)
       console.log(`🔍 Checking for existing attendance record: employee_id=${employee_id}, date=${date}`);
       const existingRecord = await Attendance.findOne({
@@ -228,6 +246,17 @@ export const recordAttendance = async (req, res) => {
           await existingRecord.save();
           
           console.log(`✅ Absent record updated to clock-in for ${employee_id}`);
+          
+          // Emit WebSocket event for real-time update
+          if (io) {
+            io.emit('attendance:updated', {
+              type: 'absent-to-clockin',
+              employee_id,
+              attendance: existingRecord
+            });
+            console.log(`📡 WebSocket event emitted: attendance:updated (absent-to-clockin)`);
+          }
+          
           return res.status(200).json({
             message: "Absent record updated to clock-in",
             attendance: existingRecord
@@ -244,7 +273,7 @@ export const recordAttendance = async (req, res) => {
         }
         
         // If there's already a completed record (has both clock_in and clock_out), allow a new clock-in
-        if (existingRecord.clock_in && existingRecord.clock_out && !clock_out) {
+        if (existingRecord.clock_in && existingRecord.clock_out && !normalizedClockOut) {
           console.log(`🔄 Employee ${employee_id} clocking in again after completing previous session`);
           // Create a new attendance record for the new session
           const newAttendance = await Attendance.create({
@@ -255,6 +284,17 @@ export const recordAttendance = async (req, res) => {
           });
           
           console.log(`✅ New clock-in session created for ${employee_id} on ${date}`);
+          
+          // Emit WebSocket event for real-time update
+          if (io) {
+            io.emit('attendance:created', {
+              type: 'new-session',
+              employee_id,
+              attendance: newAttendance
+            });
+            console.log(`📡 WebSocket event emitted: attendance:created (new-session)`);
+          }
+          
           return res.status(201).json({
             message: "New clock-in session created",
             attendance: newAttendance
@@ -262,7 +302,7 @@ export const recordAttendance = async (req, res) => {
         }
         
         // If there's an open session (no clock_out) and trying to clock in again, return error
-        if (existingRecord.clock_in && !existingRecord.clock_out && !clock_out) {
+        if (existingRecord.clock_in && !existingRecord.clock_out && !normalizedClockOut) {
           console.log(`⚠️ Employee ${employee_id} already has an open session`);
           return res.status(400).json({ 
             error: "Employee already has an open session today",
@@ -298,11 +338,21 @@ export const recordAttendance = async (req, res) => {
       const message = status === "Absent" ? "Absent record created successfully" : "Clock-in recorded successfully";
       console.log(`✅ ${message} for ${employee_id} on ${date}`);
       
+      // Emit WebSocket event for real-time update
+      if (io) {
+        io.emit('attendance:created', {
+          type: status === "Absent" ? 'absent' : 'clock-in',
+          employee_id,
+          attendance
+        });
+        console.log(`📡 WebSocket event emitted: attendance:created (${status === "Absent" ? 'absent' : 'clock-in'})`);
+      }
+      
       return res.status(201).json({
         message,
         attendance
       });
-    } else if (openSession && !clock_out) {
+    } else if (openSession && !normalizedClockOut) {
       return res.status(400).json({ error: "Employee already has an open session today" });
     } else {
       return res.status(400).json({ error: "No open session found for clock-out" });
@@ -574,13 +624,14 @@ export const assignOvertime = async (req, res) => {
         const todaySchedule = await EmployeeSchedule.findOne({
           where: {
             employee_id: empId
-          },
-          include: [{
-            model: ScheduleTemplate,
-            as: 'template',
-            required: true,
-            where: sequelize.literal(`JSON_CONTAINS(template.days, '"${today}"')`)
-          }]
+          }
+          // DISABLED: ScheduleTemplate include - table dropped
+          // include: [{
+          //   model: ScheduleTemplate,
+          //   as: 'template',
+          //   required: true,
+          //   where: sequelize.literal(`JSON_CONTAINS(template.days, '"${today}"')`)
+          // }]
         });
 
         if (!todaySchedule) {
@@ -743,19 +794,26 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     // Step 3: Get all employee schedules for today's weekday
     // Use JSON_CONTAINS for MySQL or JSON array operations for PostgreSQL
     const employeeSchedules = await EmployeeSchedule.findAll({
-      include: [{
-        model: ScheduleTemplate,
-        as: 'template',
-        required: true,
-        where: sequelize.literal(`JSON_CONTAINS(template.days, '"${todayWeekday}"')`)
-      }]
+      where: {
+        // Filter by employee schedules that match today
+        days: {
+          [Op.like]: `%${todayWeekday}%`
+        }
+      }
+      // DISABLED: ScheduleTemplate include - table dropped
+      // include: [{
+      //   model: ScheduleTemplate,
+      //   as: 'template',
+      //   required: true,
+      //   where: sequelize.literal(`JSON_CONTAINS(template.days, '"${todayWeekday}"')`)
+      // }]
     });
 
     console.log(`📊 Found ${employeeSchedules.length} employee schedules for ${todayWeekday}`);
     console.log(`📋 Schedule details:`, employeeSchedules.map(s => ({
       employee_id: s.employee_id,
-      template_days: s.template.days,
-      shift_name: s.template.shift_name
+      days: s.days,
+      shift_name: s.shift_name
     })));
     
     // Step 4: Get employee IDs who are scheduled today
@@ -888,17 +946,21 @@ async function calculateScheduledHours(employeeId, date) {
     // Find the employee's schedule for this day
     const schedule = await EmployeeSchedule.findOne({
       where: {
-        employee_id: employeeId
-      },
-      include: [{
-        model: ScheduleTemplate,
-        as: 'template',
-        required: true,
-        where: sequelize.literal(`JSON_CONTAINS(template.days, '"${dayOfWeek}"')`)
-      }]
+        employee_id: employeeId,
+        days: {
+          [Op.like]: `%${dayOfWeek}%`
+        }
+      }
+      // DISABLED: ScheduleTemplate include - table dropped
+      // include: [{
+      //   model: ScheduleTemplate,
+      //   as: 'template',
+      //   required: true,
+      //   where: sequelize.literal(`JSON_CONTAINS(template.days, '"${dayOfWeek}"')`)
+      // }]
     });
     
-    if (!schedule || !schedule.template) {
+    if (!schedule) {
       console.log(`⚠️ No schedule found for ${employeeId} on ${dayOfWeek}`);
       return 8; // Default to 8 hours
     }
@@ -984,5 +1046,186 @@ export const updateOvertimeHours = async (req, res) => {
   } catch (error) {
     console.error("❌ Error updating overtime hours:", error);
     res.status(500).json({ error: "Failed to update overtime hours" });
+  }
+};
+
+// Sync attendance records from biometric app to web app
+export const syncAttendanceFromBiometric = async (req, res) => {
+  try {
+    const { records } = req.body;
+    
+    console.log(`📥 Biometric sync request: ${records?.length || 0} records`);
+    
+    if (!records || !Array.isArray(records)) {
+      return res.status(400).json({ error: "records array is required" });
+    }
+    
+    const results = {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      details: []
+    };
+    
+    for (const record of records) {
+      try {
+        const { employee_id, date, clock_in, clock_out, status, total_hours, overtime_hours } = record;
+        
+        if (!employee_id || !date) {
+          results.errors++;
+          results.details.push({
+            employee_id: employee_id || 'unknown',
+            action: 'error',
+            message: 'Missing employee_id or date'
+          });
+          continue;
+        }
+        
+        // Verify employee exists
+        const employee = await Employee.findOne({ where: { employee_id } });
+        if (!employee) {
+          results.errors++;
+          results.details.push({
+            employee_id,
+            action: 'error',
+            message: 'Employee not found'
+          });
+          continue;
+        }
+        
+        // Check if record exists in web app
+        const existingRecord = await Attendance.findOne({
+          where: {
+            employee_id,
+            date
+          }
+        });
+        
+        if (existingRecord) {
+          // Update existing record if biometric app has more recent data
+          let updated = false;
+          
+          // Update clock_in if biometric has it and web app doesn't
+          if (clock_in && !existingRecord.clock_in) {
+            existingRecord.clock_in = new Date(clock_in);
+            updated = true;
+          }
+          
+          // Update clock_out if biometric has it and web app doesn't
+          if (clock_out && !existingRecord.clock_out) {
+            existingRecord.clock_out = new Date(clock_out);
+            updated = true;
+          }
+          
+          // Update total_hours if provided
+          if (total_hours !== undefined && total_hours !== null) {
+            existingRecord.total_hours = parseFloat(total_hours);
+            updated = true;
+          }
+          
+          // Update status with smart logic:
+          // 1. Allow upgrading Present/Late to Missed Clock-out (shift ended without clock-out)
+          // 2. Allow upgrading to Overtime
+          // 3. Don't downgrade from better statuses
+          const canUpgradeToMissedClockout = 
+            status === 'Missed Clock-out' && 
+            (existingRecord.status === 'Present' || existingRecord.status === 'Late' || existingRecord.status === 'IN');
+          
+          const canUpgradeToOvertime = 
+            status === 'Overtime' && 
+            existingRecord.status !== 'Overtime';
+          
+          // Status priority for other cases: Overtime > Missed Clock-out > Late > Present > Absent
+          const statusPriority = {
+            'Overtime': 5,
+            'Missed Clock-out': 4,
+            'Late': 3,
+            'Present': 2,
+            'Absent': 1,
+            'IN': 1
+          };
+          
+          const currentPriority = statusPriority[existingRecord.status] || 0;
+          const newPriority = statusPriority[status] || 0;
+          
+          if (canUpgradeToMissedClockout || canUpgradeToOvertime || newPriority > currentPriority) {
+            existingRecord.status = status;
+            updated = true;
+            console.log(`📊 Status updated: ${existingRecord.status} → ${status} for ${employee_id}`);
+          }
+          
+          // Update overtime_hours if provided
+          if (overtime_hours !== undefined && overtime_hours !== null) {
+            existingRecord.overtime_hours = parseFloat(overtime_hours);
+            updated = true;
+          }
+          
+          if (updated) {
+            await existingRecord.save();
+            results.updated++;
+            results.details.push({
+              employee_id,
+              action: 'updated',
+              message: 'Record updated from biometric app'
+            });
+            console.log(`✅ Updated attendance for ${employee_id} on ${date}`);
+          } else {
+            results.skipped++;
+            results.details.push({
+              employee_id,
+              action: 'skipped',
+              message: 'No updates needed'
+            });
+          }
+        } else {
+          // Create new record
+          const newRecord = await Attendance.create({
+            employee_id,
+            date,
+            clock_in: clock_in ? new Date(clock_in) : null,
+            clock_out: clock_out ? new Date(clock_out) : null,
+            status: status || 'Present',
+            total_hours: total_hours ? parseFloat(total_hours) : null,
+            overtime_hours: overtime_hours ? parseFloat(overtime_hours) : null
+          });
+          
+          results.created++;
+          results.details.push({
+            employee_id,
+            action: 'created',
+            message: 'New record created from biometric app'
+          });
+          console.log(`✅ Created attendance for ${employee_id} on ${date}`);
+        }
+        
+      } catch (error) {
+        results.errors++;
+        results.details.push({
+          employee_id: record.employee_id || 'unknown',
+          action: 'error',
+          message: error.message
+        });
+        console.error(`❌ Error syncing record for ${record.employee_id}:`, error);
+      }
+    }
+    
+    console.log(`📊 Sync complete: ${results.created} created, ${results.updated} updated, ${results.skipped} skipped, ${results.errors} errors`);
+    
+    res.status(200).json({
+      message: 'Sync completed',
+      summary: {
+        total: records.length,
+        created: results.created,
+        updated: results.updated,
+        skipped: results.skipped,
+        errors: results.errors
+      },
+      details: results.details
+    });
+    
+  } catch (error) {
+    console.error("❌ Error syncing attendance from biometric:", error);
+    res.status(500).json({ error: "Failed to sync attendance records" });
   }
 };

@@ -15,6 +15,7 @@ namespace BiometricEnrollmentApp
         private readonly ZKTecoService _zkService;
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
+        private readonly SyncService _syncService;
         private CancellationTokenSource? _continuousScanCts;
         private static bool _isPageActive = false;
         private DispatcherTimer? _clockTimer;
@@ -25,6 +26,7 @@ namespace BiometricEnrollmentApp
             _zkService = zkService ?? new ZKTecoService();
             _dataService = new DataService();
             _apiService = new ApiService();
+            _syncService = new SyncService(_dataService, _apiService);
 
             // Clear configuration cache to ensure fresh settings are loaded
             _clockOutConfirmationEnabled = null;
@@ -258,7 +260,23 @@ namespace BiometricEnrollmentApp
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                     {
                         clockInTime = DateTime.Parse(session.ClockIn);
-                        LogHelper.Write($"🔍 Session found - Clock-in: {clockInTime}, checking confirmation setting...");
+                        LogHelper.Write($"🔍 Session found - Clock-in: {clockInTime}, checking if clock-out is allowed...");
+
+                        // FIRST: Check if clock-out is allowed based on shift end time
+                        // This prevents showing the confirmation dialog if shift has already ended
+                        if (!_dataService.IsClockOutAllowed(employeeId, now, out string shiftEndTime, out string allowMessage))
+                        {
+                            LogHelper.Write($"🚫 Clock-out denied for {employeeId}: {allowMessage}");
+                            Dispatcher.Invoke(() =>
+                            {
+                                UpdateInstruction($"❌ Clock-out not allowed. Shift has ended.");
+                                ShowEmployeeResult(employeeId, employeeName, "Clock-out Denied", now);
+                            });
+                            Thread.Sleep(3000); // Show message for 3 seconds
+                            return;
+                        }
+                        
+                        LogHelper.Write($"✅ Clock-out allowed: {allowMessage}");
                         
                         // Check if confirmation is enabled
                         if (IsClockOutConfirmationEnabled())
@@ -364,11 +382,36 @@ namespace BiometricEnrollmentApp
                     LogHelper.Write("💾 Saving clock-out to database...");
                     double hours = _dataService.SaveClockOut(openSessionId, employeeId, now);
                     
+                    if (hours == -2)
+                    {
+                        // Clock-out not allowed - shift has ended
+                        LogHelper.Write($"🚫 Clock-out denied for {employeeId} - shift has ended");
+                        Dispatcher.Invoke(() =>
+                        {
+                            UpdateInstruction($"❌ Clock-out not allowed. Shift has ended.");
+                            ShowEmployeeResult(employeeId, employeeName, "Clock-out Denied", now);
+                        });
+                        Thread.Sleep(3000);
+                        return;
+                    }
+                    
+                    if (hours < 0)
+                    {
+                        LogHelper.Write($"❌ Failed to save clock-out for {employeeId}");
+                        Dispatcher.Invoke(() =>
+                        {
+                            UpdateInstruction("❌ Failed to save clock-out. Please try again.");
+                            ShowEmployeeResult(employeeId, employeeName, "Error", now);
+                        });
+                        Thread.Sleep(2000);
+                        return;
+                    }
+                    
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                     {
                         clockInTime = DateTime.Parse(session.ClockIn);
                         string finalStatus = session.Status;
-                        Task.Run(async () => await _apiService.SendAttendanceAsync(employeeId, clockInTime, now, finalStatus));
+                        Task.Run(async () => await _syncService.QueueAttendanceSync(employeeId, openSessionId, clockInTime, now, finalStatus));
                     }
                     
                     Dispatcher.Invoke(() => ShowEmployeeResult(employeeId, employeeName, "Clock-out", now));
@@ -410,7 +453,7 @@ namespace BiometricEnrollmentApp
                     string status = _dataService.DetermineAttendanceStatus(now, scheduleCheck.StartTime);
                     long sid = _dataService.SaveClockIn(employeeId, now, status);
                     
-                    Task.Run(async () => await _apiService.SendAttendanceAsync(employeeId, now, null, status));
+                    Task.Run(async () => await _syncService.QueueAttendanceSync(employeeId, sid, now, null, status));
                     
                     Dispatcher.Invoke(() => ShowEmployeeResult(employeeId, employeeName, status, now));
                 }
@@ -487,6 +530,7 @@ namespace BiometricEnrollmentApp
                 "Present" => ("#4CAF50", "✅", "ON-TIME CLOCK-IN", $"Successfully clocked in at {timeStr}\nStatus: Present"),
                 "Late" => ("#FF9800", "⚠️", "LATE CLOCK-IN", $"Clocked in late at {timeStr}\nStatus: Late Arrival"),
                 "Clock-out" => ("#2196F3", "🏁", "CLOCK-OUT COMPLETED", $"Successfully clocked out at {timeStr}\nShift ended"),
+                "Clock-out Denied" => ("#FF5722", "🚫", "CLOCK-OUT DENIED", "Shift has ended\nClock-out not allowed"),
                 "Overtime" => ("#9C27B0", "⏰", "OVERTIME CLOCK-OUT", $"Clocked out during overtime at {timeStr}\nOvertime hours recorded"),
                 "Missed Clock-out" => ("#FFC107", "⚠️", "MISSED CLOCK-OUT", $"Late clock-out at {timeStr}\nBeyond scheduled shift time"),
                 "DoubleTap" => ("#FF5722", "🚫", "SCAN TOO SOON", "Please wait before scanning again\nCooldown period active"),

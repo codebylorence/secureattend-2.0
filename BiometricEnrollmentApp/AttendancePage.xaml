@@ -3,6 +3,7 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:sys="clr-namespace:System;assembly=mscorlib"
       mc:Ignorable="d"
       Title="Attendance"
       FontFamily="Segoe UI"
@@ -240,8 +241,42 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Margin="0,0,0,20">
-                    <TextBlock Text="Attendance Log" FontSize="20" FontWeight="Bold" Foreground="{StaticResource DarkTextBrush}"/>
-                    <TextBlock Text="Today's real-time scanning activity" FontSize="14" Foreground="{StaticResource LightTextBrush}"/>
+                    <TextBlock Text="Attendance Records" FontSize="20" FontWeight="Bold" Foreground="{StaticResource DarkTextBrush}"/>
+                    <TextBlock Text="View and filter attendance records by date" FontSize="14" Foreground="{StaticResource LightTextBrush}"/>
+                    
+                    <!-- Date Filter Controls -->
+                    <Border Background="{StaticResource GrayBackgroundBrush}" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,15,0,0">
+                        <StackPanel>
+                            <!-- Date Range Selectors -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <TextBlock Grid.Column="0" Text="From:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold" Foreground="{StaticResource DarkTextBrush}"/>
+                                <DatePicker x:Name="FromDatePicker" Grid.Column="1" SelectedDate="{x:Static sys:DateTime.Today}" Margin="0,0,15,0"/>
+                                
+                                <TextBlock Grid.Column="2" Text="To:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold" Foreground="{StaticResource DarkTextBrush}"/>
+                                <DatePicker x:Name="ToDatePicker" Grid.Column="3" SelectedDate="{x:Static sys:DateTime.Today}" Margin="0,0,15,0"/>
+                                
+                                <Button x:Name="FilterBtn" Grid.Column="4" Content="🔍 Filter" Click="FilterBtn_Click" Style="{StaticResource PrimaryButtonStyle}" Padding="12,8"/>
+                            </Grid>
+                            
+                            <!-- Quick Filter Buttons -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                <TextBlock Text="Quick filters:" VerticalAlignment="Center" Margin="0,0,10,0" FontSize="12" Foreground="{StaticResource LightTextBrush}"/>
+                                <Button x:Name="TodayBtn" Content="Today" Click="TodayBtn_Click" Margin="0,0,5,0" Padding="8,4" FontSize="12"/>
+                                <Button x:Name="YesterdayBtn" Content="Yesterday" Click="YesterdayBtn_Click" Margin="0,0,5,0" Padding="8,4" FontSize="12"/>
+                                <Button x:Name="ThisWeekBtn" Content="This Week" Click="ThisWeekBtn_Click" Margin="0,0,5,0" Padding="8,4" FontSize="12"/>
+                                <Button x:Name="LastWeekBtn" Content="Last Week" Click="LastWeekBtn_Click" Margin="0,0,5,0" Padding="8,4" FontSize="12"/>
+                                <Button x:Name="ThisMonthBtn" Content="This Month" Click="ThisMonthBtn_Click" Padding="8,4" FontSize="12"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <Border Grid.Row="1" Background="White" CornerRadius="10" BorderBrush="#E5E7EB" BorderThickness="1" Effect="{StaticResource CardShadow}">

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -29,6 +30,15 @@ namespace BiometricEnrollmentApp
 
         private async void AdminAttendancePage_Loaded(object sender, RoutedEventArgs e)
         {
+            // Initialize date pickers to today's date
+            var fromDatePicker = this.FindName("FromDatePicker") as DatePicker;
+            var toDatePicker = this.FindName("ToDatePicker") as DatePicker;
+            
+            if (fromDatePicker != null)
+                fromDatePicker.SelectedDate = DateTime.Today;
+            if (toDatePicker != null)
+                toDatePicker.SelectedDate = DateTime.Today;
+            
             RefreshAttendanceData();
             
             // Note: SyncService is now started globally from MainWindow
@@ -61,9 +71,33 @@ namespace BiometricEnrollmentApp
 
         private void RefreshAttendanceData()
         {
+            RefreshAttendanceData(null, null);
+        }
+
+        private void RefreshAttendanceData(DateTime? fromDate, DateTime? toDate)
+        {
             try
             {
-                var sessions = _dataService.GetTodaySessions();
+                List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> sessions;
+                string headerText;
+                
+                if (fromDate.HasValue && toDate.HasValue)
+                {
+                    sessions = _dataService.GetSessionsByDateRange(fromDate.Value, toDate.Value);
+                    if (fromDate.Value.Date == toDate.Value.Date)
+                    {
+                        headerText = $"Attendance Records - {fromDate.Value:yyyy-MM-dd}";
+                    }
+                    else
+                    {
+                        headerText = $"Attendance Records - {fromDate.Value:yyyy-MM-dd} to {toDate.Value:yyyy-MM-dd}";
+                    }
+                }
+                else
+                {
+                    sessions = _dataService.GetTodaySessions();
+                    headerText = $"Today's Attendance Records - {DateTime.Today:yyyy-MM-dd}";
+                }
                 
                 // Get all enrollments to map employee IDs to names
                 var enrollments = _dataService.GetAllEnrollments();
@@ -83,12 +117,108 @@ namespace BiometricEnrollmentApp
 
                 AttendanceGrid.ItemsSource = rows;
                 
+                // Update header text and record count
+                var gridHeaderText = this.FindName("GridHeaderText") as TextBlock;
+                var recordCountText = this.FindName("RecordCountText") as TextBlock;
+                
+                if (gridHeaderText != null)
+                    gridHeaderText.Text = headerText;
+                if (recordCountText != null)
+                    recordCountText.Text = $"({rows.Count} records)";
+                
                 LogHelper.Write($"📊 Refreshed attendance data: {rows.Count} records");
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Failed to load attendance data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 LogHelper.Write($"Failed to load attendance data: {ex}");
+            }
+        }
+
+        private void FilterBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var fromDatePicker = this.FindName("FromDatePicker") as DatePicker;
+                var toDatePicker = this.FindName("ToDatePicker") as DatePicker;
+                
+                if (fromDatePicker?.SelectedDate != null && toDatePicker?.SelectedDate != null)
+                {
+                    var fromDate = fromDatePicker.SelectedDate.Value;
+                    var toDate = toDatePicker.SelectedDate.Value;
+                    
+                    if (fromDate > toDate)
+                    {
+                        MessageBox.Show("From date cannot be later than To date", "Invalid Date Range", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    
+                    RefreshAttendanceData(fromDate, toDate);
+                }
+                else
+                {
+                    MessageBox.Show("Please select both From and To dates", "Missing Dates", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Filter error: {ex.Message}");
+                MessageBox.Show($"Filter error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void TodayBtn_Click(object sender, RoutedEventArgs e)
+        {
+            SetDateRange(DateTime.Today, DateTime.Today);
+        }
+
+        private void YesterdayBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var yesterday = DateTime.Today.AddDays(-1);
+            SetDateRange(yesterday, yesterday);
+        }
+
+        private void ThisWeekBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var today = DateTime.Today;
+            var startOfWeek = today.AddDays(-(int)today.DayOfWeek);
+            SetDateRange(startOfWeek, today);
+        }
+
+        private void LastWeekBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var today = DateTime.Today;
+            var startOfLastWeek = today.AddDays(-(int)today.DayOfWeek - 7);
+            var endOfLastWeek = startOfLastWeek.AddDays(6);
+            SetDateRange(startOfLastWeek, endOfLastWeek);
+        }
+
+        private void ThisMonthBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var today = DateTime.Today;
+            var startOfMonth = new DateTime(today.Year, today.Month, 1);
+            SetDateRange(startOfMonth, today);
+        }
+
+        private void SetDateRange(DateTime fromDate, DateTime toDate)
+        {
+            try
+            {
+                var fromDatePicker = this.FindName("FromDatePicker") as DatePicker;
+                var toDatePicker = this.FindName("ToDatePicker") as DatePicker;
+                
+                if (fromDatePicker != null)
+                    fromDatePicker.SelectedDate = fromDate;
+                if (toDatePicker != null)
+                    toDatePicker.SelectedDate = toDate;
+                
+                // Automatically apply the filter
+                FilterBtn_Click(this, new RoutedEventArgs());
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 SetDateRange error: {ex.Message}");
+                MessageBox.Show($"Date range error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

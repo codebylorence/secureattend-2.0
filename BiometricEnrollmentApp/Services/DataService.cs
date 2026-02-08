@@ -527,12 +527,113 @@ namespace BiometricEnrollmentApp.Services
         }
 
         /// <summary>
-        /// Save clock-out with missed clock-out status checking
+        /// <summary>
+        /// Check if clock-out is allowed based on shift end time
+        /// Returns true if clock-out is within allowed time (before shift end + grace period)
+        /// </summary>
+        public bool IsClockOutAllowed(string employeeId, DateTime clockOutTime, out string shiftEndTime, out string message)
+        {
+            shiftEndTime = "";
+            message = "";
+            
+            try
+            {
+                // Get employee's schedule for today
+                var scheduleCheck = IsEmployeeScheduledToday(employeeId);
+                
+                if (!scheduleCheck.IsScheduled)
+                {
+                    // No schedule found - allow clock-out
+                    message = "No schedule found - clock-out allowed";
+                    return true;
+                }
+                
+                shiftEndTime = scheduleCheck.EndTime;
+                
+                // Parse shift end time
+                if (!TimeSpan.TryParse(scheduleCheck.EndTime, out var endTime))
+                {
+                    LogHelper.Write($"⚠️ Invalid shift end time format: {scheduleCheck.EndTime}");
+                    message = "Invalid shift end time - clock-out allowed";
+                    return true;
+                }
+                
+                // Get current time
+                var currentTime = clockOutTime.TimeOfDay;
+                
+                // Get grace period from settings
+                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
+                var gracePeriodMinutes = settingsService.GetClockOutGracePeriodMinutes();
+                var endTimeWithGrace = endTime.Add(TimeSpan.FromMinutes(gracePeriodMinutes));
+                
+                // Handle overnight shifts
+                if (IsOvernightShift(scheduleCheck.StartTime, scheduleCheck.EndTime))
+                {
+                    // For overnight shifts, the end time is on the next day
+                    // If current time is before noon, we're in the "next day" portion
+                    if (currentTime.Hours < 12)
+                    {
+                        // Current time is in the morning (after midnight)
+                        // Check if it's before the shift end time + grace period
+                        if (currentTime <= endTimeWithGrace)
+                        {
+                            message = "Clock-out allowed (within overnight shift window)";
+                            return true;
+                        }
+                        else
+                        {
+                            message = $"Clock-out not allowed. Shift ended at {scheduleCheck.EndTime} (grace period: {gracePeriodMinutes} min)";
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        // Current time is in the afternoon/evening (same day as shift start)
+                        // Always allow clock-out during the first day of overnight shift
+                        message = "Clock-out allowed (overnight shift - first day)";
+                        return true;
+                    }
+                }
+                else
+                {
+                    // Regular shift (not overnight)
+                    // Check if current time is before shift end + grace period
+                    if (currentTime <= endTimeWithGrace)
+                    {
+                        message = "Clock-out allowed (within shift window)";
+                        return true;
+                    }
+                    else
+                    {
+                        message = $"Clock-out not allowed. Shift ended at {scheduleCheck.EndTime} (grace period: {gracePeriodMinutes} min)";
+                        return false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error checking clock-out permission: {ex.Message}");
+                message = "Error checking schedule - clock-out allowed";
+                return true; // Allow clock-out on error to avoid blocking employees
+            }
+        }
+
+        /// <summary>
+        /// Save clock-out with missed clock-out status checking and shift end time validation
         /// </summary>
         public double SaveClockOut(long sessionId, string employeeId, DateTime clockOutLocal)
         {
             try
             {
+                // Check if clock-out is allowed based on shift end time
+                if (!IsClockOutAllowed(employeeId, clockOutLocal, out string shiftEndTime, out string message))
+                {
+                    LogHelper.Write($"🚫 Clock-out denied for {employeeId}: {message}");
+                    return -2; // Special return value to indicate clock-out not allowed
+                }
+                
+                LogHelper.Write($"✅ Clock-out allowed for {employeeId}: {message}");
+                
                 var tsOut = clockOutLocal.ToString("yyyy-MM-dd HH:mm:ss");
 
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
@@ -682,6 +783,42 @@ namespace BiometricEnrollmentApp.Services
                 ORDER BY clock_in DESC;
             ";
             cmd.Parameters.AddWithValue("$date", date);
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                string emp = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                string dt = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+                string cin = reader.IsDBNull(3) ? string.Empty : reader.GetString(3);
+                string cout = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
+                double hrs = reader.IsDBNull(5) ? 0.0 : reader.GetDouble(5);
+                string status = reader.IsDBNull(6) ? string.Empty : reader.GetString(6);
+
+                list.Add((id, emp, dt, cin, cout, hrs, status));
+            }
+
+            return list;
+        }
+
+        public List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> GetSessionsByDateRange(DateTime fromDate, DateTime toDate)
+        {
+            var list = new List<(long, string, string, string, string, double, string)>();
+            var fromDateStr = fromDate.ToString("yyyy-MM-dd");
+            var toDateStr = toDate.ToString("yyyy-MM-dd");
+
+            using var conn = new SqliteConnection($"Data Source={_dbPath}");
+            conn.Open();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT id, employee_id, date, clock_in, IFNULL(clock_out,''), IFNULL(total_hours,0), status
+                FROM AttendanceSessions
+                WHERE date >= $fromDate AND date <= $toDate
+                ORDER BY date DESC, clock_in DESC;
+            ";
+            cmd.Parameters.AddWithValue("$fromDate", fromDateStr);
+            cmd.Parameters.AddWithValue("$toDate", toDateStr);
 
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
@@ -1388,9 +1525,10 @@ namespace BiometricEnrollmentApp.Services
         /// 2. Employee's shift has started
         /// 3. Employee's shift has ended + grace period (30 minutes)
         /// 4. Employee has not clocked in today
-        /// This should be called periodically (e.g., every hour or at end of day)
+        /// Also marks employees as "Missed Clock-out" if they clocked in but didn't clock out after shift ended
+        /// This should be called periodically (e.g., every minute)
         /// </summary>
-        public int MarkAbsentEmployees()
+        public (int markedAbsent, int markedMissedClockout) MarkAbsentEmployees()
         {
             try
             {
@@ -1399,7 +1537,7 @@ namespace BiometricEnrollmentApp.Services
                 var dayOfWeek = now.DayOfWeek.ToString();
                 var currentTime = TimezoneHelper.FormatTimeDisplayShort(now);
                 
-                LogHelper.Write($"🔍 ========== ABSENT MARKING CHECK ==========");
+                LogHelper.Write($"🔍 ========== ABSENT & MISSED CLOCK-OUT CHECK ==========");
                 LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} ({dayOfWeek}) - Philippines time");
                 
                 // Get all schedules for today
@@ -1414,7 +1552,7 @@ namespace BiometricEnrollmentApp.Services
                     LogHelper.Write("   1. No schedules synced from server");
                     LogHelper.Write("   2. No employees assigned to work on " + dayOfWeek);
                     LogHelper.Write("   3. Schedules not published in admin panel");
-                    return 0;
+                    return (0, 0);
                 }
                 
                 // Get all enrolled employees (those with fingerprints)
@@ -1422,6 +1560,7 @@ namespace BiometricEnrollmentApp.Services
                 LogHelper.Write($"👆 Found {enrolledEmployees.Count} employees with enrolled fingerprints");
                 
                 int markedAbsent = 0;
+                int markedMissedClockout = 0;
                 
                 foreach (var schedule in schedulesToday)
                 {
@@ -1430,7 +1569,7 @@ namespace BiometricEnrollmentApp.Services
                     // Check if employee has enrolled fingerprints
                     if (!enrolledEmployees.Contains(schedule.EmployeeId))
                     {
-                        LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - No enrolled fingerprints, skipping absent marking");
+                        LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - No enrolled fingerprints, skipping");
                         continue;
                     }
                     
@@ -1441,85 +1580,101 @@ namespace BiometricEnrollmentApp.Services
                     // FIRST: Check if shift has started (must start before we can mark absent)
                     if (!HasShiftStarted(schedule.StartTime))
                     {
-                        LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift hasn't started yet ({schedule.StartTime}), cannot mark absent");
+                        LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift hasn't started yet ({schedule.StartTime})");
                         continue;
                     }
                     
-                    // SECOND: Check if shift has ended with grace period (configurable minutes after shift end)
+                    // SECOND: Check if shift has ended with grace period
                     var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
                     int clockOutGracePeriod = settingsService.GetClockOutGracePeriodMinutes();
                     
-                    if (!HasShiftEndedWithGracePeriod(schedule.EndTime, clockOutGracePeriod))
+                    bool shiftEnded = HasShiftEndedWithGracePeriod(schedule.EndTime, clockOutGracePeriod);
+                    
+                    if (!shiftEnded)
                     {
                         LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet or within grace period ({schedule.EndTime} + {clockOutGracePeriod} min)");
                         continue;
                     }
                     
-                    // Check if employee has clocked in today
+                    // Check if employee has attendance session today
                     var sessions = GetTodaySessions();
-                    bool hasAttendance = false;
-                    foreach (var s in sessions)
+                    var employeeSession = sessions.FirstOrDefault(s => s.EmployeeId == schedule.EmployeeId);
+                    
+                    if (employeeSession.EmployeeId == null)
                     {
-                        if (s.EmployeeId == schedule.EmployeeId && 
-                            (s.Status == "Present" || s.Status == "Late" || s.Status == "IN"))
-                        {
-                            hasAttendance = true;
-                            LogHelper.Write($"  ✓ {schedule.EmployeeId} - Found attendance record: {s.Status} at {s.ClockIn}");
-                            break;
-                        }
-                    }
-                    
-                    if (hasAttendance)
-                    {
-                        LogHelper.Write($"  ✓ {schedule.EmployeeId} - Has attendance, not marking absent");
-                        continue;
-                    }
-                    
-                    // Employee is absent - create absent record locally
-                    using var conn = new SqliteConnection(_connString);
-                    conn.Open();
-                    
-                    // Check if absent record already exists
-                    using var checkCmd = conn.CreateCommand();
-                    checkCmd.CommandText = @"
-                        SELECT COUNT(1) FROM AttendanceSessions 
-                        WHERE employee_id = $id AND date = $date AND status = 'Absent'
-                    ";
-                    checkCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
-                    checkCmd.Parameters.AddWithValue("$date", today);
-                    
-                    var exists = Convert.ToInt32(checkCmd.ExecuteScalar()) > 0;
-                    
-                    if (!exists)
-                    {
-                        // Create absent record with NULL values for clock_in and clock_out
-                        using var insertCmd = conn.CreateCommand();
-                        insertCmd.CommandText = @"
-                            INSERT INTO AttendanceSessions (employee_id, date, clock_in, clock_out, total_hours, status)
-                            VALUES ($id, $date, NULL, NULL, 0, 'Absent')
-                        ";
-                        insertCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
-                        insertCmd.Parameters.AddWithValue("$date", today);
-                        insertCmd.ExecuteNonQuery();
+                        // No attendance session - mark as absent
+                        using var conn = new SqliteConnection(_connString);
+                        conn.Open();
                         
-                        markedAbsent++;
-                        LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent (shift: {schedule.StartTime}-{schedule.EndTime}, overnight: {isOvernightShift})");
+                        // Check if absent record already exists
+                        using var checkCmd = conn.CreateCommand();
+                        checkCmd.CommandText = @"
+                            SELECT COUNT(1) FROM AttendanceSessions 
+                            WHERE employee_id = $id AND date = $date AND status = 'Absent'
+                        ";
+                        checkCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
+                        checkCmd.Parameters.AddWithValue("$date", today);
+                        
+                        var exists = Convert.ToInt32(checkCmd.ExecuteScalar()) > 0;
+                        
+                        if (!exists)
+                        {
+                            // Create absent record with NULL values for clock_in and clock_out
+                            using var insertCmd = conn.CreateCommand();
+                            insertCmd.CommandText = @"
+                                INSERT INTO AttendanceSessions (employee_id, date, clock_in, clock_out, total_hours, status)
+                                VALUES ($id, $date, NULL, NULL, 0, 'Absent')
+                            ";
+                            insertCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
+                            insertCmd.Parameters.AddWithValue("$date", today);
+                            insertCmd.ExecuteNonQuery();
+                            
+                            markedAbsent++;
+                            LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent (shift: {schedule.StartTime}-{schedule.EndTime})");
+                        }
+                        else
+                        {
+                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent");
+                        }
                     }
                     else
                     {
-                        LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent");
+                        // Has attendance session - check if needs to be marked as missed clock-out
+                        if (employeeSession.Status == "Absent")
+                        {
+                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent");
+                        }
+                        else if (employeeSession.Status == "Missed Clock-out")
+                        {
+                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked as missed clock-out");
+                        }
+                        else if (!string.IsNullOrEmpty(employeeSession.ClockIn) && string.IsNullOrEmpty(employeeSession.ClockOut))
+                        {
+                            // Clocked in but didn't clock out, and shift has ended - mark as missed clock-out
+                            MarkSessionAsMissedClockout(employeeSession.Id, schedule.EndTime);
+                            markedMissedClockout++;
+                            LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime})");
+                        }
+                        else if (!string.IsNullOrEmpty(employeeSession.ClockOut))
+                        {
+                            LogHelper.Write($"  ✅ {schedule.EmployeeId} - Has complete attendance ({employeeSession.Status})");
+                        }
+                        else
+                        {
+                            LogHelper.Write($"  ✓ {schedule.EmployeeId} - Has attendance, not marking");
+                        }
                     }
                 }
                 
-                LogHelper.Write($"✅ Absent marking complete: {markedAbsent} employees marked absent");
-                LogHelper.Write($"🔍 ========== END ABSENT MARKING CHECK ==========");
-                return markedAbsent;
+                LogHelper.Write($"✅ Check complete: {markedAbsent} marked absent, {markedMissedClockout} marked missed clock-out");
+                LogHelper.Write($"🔍 ========== END ABSENT & MISSED CLOCK-OUT CHECK ==========");
+                return (markedAbsent, markedMissedClockout);
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error marking absent employees: {ex.Message}");
+                LogHelper.Write($"💥 Error in MarkAbsentEmployees: {ex.Message}");
                 LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
-                return 0;
+                return (0, 0);
             }
         }
         
@@ -1881,26 +2036,38 @@ namespace BiometricEnrollmentApp.Services
                 var today = now.Date;
                 var shiftEndTime = today.AddHours(hours).AddMinutes(minutes);
                 
-                // CRITICAL FIX: Handle overnight shifts properly
-                // If end time is early morning (00:00-06:00), it likely ends the next day
+                // CRITICAL: For early morning shifts (00:00-06:00), we need to determine if they're
+                // ending today or if they started yesterday and are ending today
+                // The key is: if current time is BEFORE the shift end time (same day), shift hasn't ended yet
                 if (hours >= 0 && hours < 6)
                 {
-                    // Check if we're currently in the afternoon/evening (after 12 PM)
-                    // If so, the shift ends tomorrow
-                    if (now.Hour >= 12)
+                    // If we're currently in early morning (00:00-06:00) and shift ends in early morning
+                    if (now.Hour >= 0 && now.Hour < 6)
+                    {
+                        // Both current time and shift end are in early morning
+                        // Simple comparison: if now < shiftEndTime, shift hasn't ended
+                        if (now < shiftEndTime)
+                        {
+                            LogHelper.Write($"  🌅 Early morning shift still active - ends at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
+                            return false;
+                        }
+                        else
+                        {
+                            LogHelper.Write($"  🌅 Early morning shift ended at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
+                        }
+                    }
+                    // If we're in afternoon/evening (after 12 PM) and shift ends in early morning
+                    // The shift ends tomorrow
+                    else if (now.Hour >= 12)
                     {
                         shiftEndTime = shiftEndTime.AddDays(1);
-                        LogHelper.Write($"  🌙 Overnight shift detected - end time is tomorrow: {shiftEndTime:yyyy-MM-dd HH:mm}");
+                        LogHelper.Write($"  🌙 Overnight shift detected - ends tomorrow at {shiftEndTime:yyyy-MM-dd HH:mm}");
                     }
-                    // If we're in the early morning and past the end time, shift ended today
-                    else if (now >= shiftEndTime)
-                    {
-                        LogHelper.Write($"  🌅 Overnight shift ended today: {shiftEndTime:yyyy-MM-dd HH:mm}");
-                    }
-                    // If we're in early morning but before end time, shift ends later today
+                    // If we're in late morning (06:00-12:00) and shift ends in early morning
+                    // The shift already ended earlier today
                     else
                     {
-                        LogHelper.Write($"  🌅 Overnight shift ends later today: {shiftEndTime:yyyy-MM-dd HH:mm}");
+                        LogHelper.Write($"  🌅 Early morning shift already ended at {shiftEndTime:HH:mm}");
                     }
                 }
                 
@@ -2157,6 +2324,419 @@ namespace BiometricEnrollmentApp.Services
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Diagnostic failed for {employeeId}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Mark absent employees and handle missed clock-outs for past dates
+        /// This runs when the biometric app starts to catch any missed absences
+        /// </summary>
+        /// <param name="daysToCheck">Number of days to check back (default 7 for startup, 2 for periodic checks)</param>
+        public (int markedAbsent, int markedMissedClockout) MarkAbsentAndMissedClockouts(int daysToCheck = 2)
+        {
+            int totalAbsent = 0;
+            int totalMissedClockout = 0;
+
+            try
+            {
+                var now = TimezoneHelper.Now;
+                
+                LogHelper.Write($"🔍 ========== BIOMETRIC APP ABSENT MARKING ==========");
+                LogHelper.Write($"📅 Checking last {daysToCheck} day(s) for missed absences and clock-outs");
+
+                // Check the specified number of days back
+                for (int daysAgo = daysToCheck - 1; daysAgo >= 0; daysAgo--)
+                {
+                    var dateToCheck = now.AddDays(-daysAgo).ToString("yyyy-MM-dd");
+                    var result = MarkAbsentForDate(dateToCheck);
+                    totalAbsent += result.markedAbsent;
+                    totalMissedClockout += result.markedMissedClockout;
+                }
+
+                LogHelper.Write($"📊 Overall summary (last {daysToCheck} day(s)):");
+                LogHelper.Write($"   Total marked absent: {totalAbsent}");
+                LogHelper.Write($"   Total marked missed clock-out: {totalMissedClockout}");
+                LogHelper.Write($"🔍 ========== END BIOMETRIC APP ABSENT MARKING ==========");
+
+                return (totalAbsent, totalMissedClockout);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 MarkAbsentAndMissedClockouts error: {ex.Message}");
+                return (0, 0);
+            }
+        }
+
+        /// <summary>
+        /// Mark absent employees for a specific date
+        /// </summary>
+        private (int markedAbsent, int markedMissedClockout) MarkAbsentForDate(string targetDate)
+        {
+            int markedAbsent = 0;
+            int markedMissedClockout = 0;
+
+            try
+            {
+                var now = TimezoneHelper.Now;
+                var today = now.ToString("yyyy-MM-dd");
+                var isToday = targetDate == today;
+
+                LogHelper.Write($"\n📅 Processing date: {targetDate}");
+
+                // Get all schedules for this date
+                var schedules = GetSchedulesForDate(targetDate);
+                LogHelper.Write($"📋 Found {schedules.Count} schedules for {targetDate}");
+
+                foreach (var schedule in schedules)
+                {
+                    var employeeId = schedule.EmployeeId;
+                    var shiftName = schedule.ShiftName;
+                    var startTime = schedule.StartTime;
+                    var endTime = schedule.EndTime;
+
+                    LogHelper.Write($"  👤 Checking {employeeId} - {shiftName} ({startTime}-{endTime})");
+
+                    // For today, check if shift has started
+                    if (isToday && !HasShiftStarted(startTime))
+                    {
+                        LogHelper.Write($"    ⏰ Shift hasn't started yet");
+                        continue;
+                    }
+
+                    // Check if employee has attendance session for this date
+                    var existingSession = GetSessionForEmployeeAndDate(employeeId, targetDate);
+
+                    // Check if shift has ended (with grace period)
+                    var shouldProcessShiftEnd = !isToday || HasShiftEndedWithGracePeriod(endTime, 60);
+
+                    if (existingSession == null)
+                    {
+                        // No attendance session - mark as absent if shift has ended
+                        if (shouldProcessShiftEnd)
+                        {
+                            CreateAbsentSession(employeeId, targetDate, startTime);
+                            markedAbsent++;
+                            LogHelper.Write($"    ❌ Marked as Absent");
+                        }
+                        else
+                        {
+                            LogHelper.Write($"    ⏳ Shift still active, not marking absent yet");
+                        }
+                    }
+                    else
+                    {
+                        // Has attendance session - check status
+                        if (existingSession.Value.Status == "Absent")
+                        {
+                            LogHelper.Write($"    ℹ️ Already marked as absent");
+                        }
+                        else if (existingSession.Value.Status == "Missed Clock-out")
+                        {
+                            LogHelper.Write($"    ℹ️ Already marked as missed clock-out");
+                        }
+                        else if (!string.IsNullOrEmpty(existingSession.Value.ClockIn) && 
+                                 string.IsNullOrEmpty(existingSession.Value.ClockOut) && 
+                                 shouldProcessShiftEnd)
+                        {
+                            // Clocked in but didn't clock out, and shift has ended
+                            MarkSessionAsMissedClockout(existingSession.Value.Id, endTime);
+                            markedMissedClockout++;
+                            LogHelper.Write($"    🕐 Marked as Missed Clock-out");
+                        }
+                        else if (!string.IsNullOrEmpty(existingSession.Value.ClockOut))
+                        {
+                            LogHelper.Write($"    ✅ Has complete attendance ({existingSession.Value.Status})");
+                        }
+                        else
+                        {
+                            LogHelper.Write($"    ⏳ Clocked in, waiting for clock-out or shift end");
+                        }
+                    }
+                }
+
+                LogHelper.Write($"📊 Summary for {targetDate}: Absent={markedAbsent}, Missed Clock-out={markedMissedClockout}");
+                return (markedAbsent, markedMissedClockout);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 MarkAbsentForDate error for {targetDate}: {ex.Message}");
+                return (0, 0);
+            }
+        }
+
+        /// <summary>
+        /// Get schedules for a specific date (public for manual absent marking)
+        /// </summary>
+        public List<(string EmployeeId, string ShiftName, string StartTime, string EndTime)> GetSchedulesForDate(string date)
+        {
+            var schedules = new List<(string, string, string, string)>();
+
+            try
+            {
+                LogHelper.Write($"🔧 GetSchedulesForDate called: date={date}");
+                
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT employee_id, shift_name, start_time, end_time
+                    FROM EmployeeSchedules
+                    WHERE schedule_dates LIKE '%' || $date || '%'
+                ";
+                cmd.Parameters.AddWithValue("$date", date);
+
+                LogHelper.Write($"🔧 Executing query: {cmd.CommandText}");
+                LogHelper.Write($"🔧 Parameter: date={date}");
+
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var empId = reader.GetString(0);
+                    var shiftName = reader.GetString(1);
+                    var startTime = reader.GetString(2);
+                    var endTime = reader.GetString(3);
+                    
+                    schedules.Add((empId, shiftName, startTime, endTime));
+                    LogHelper.Write($"🔧 Found schedule: {empId} - {shiftName} ({startTime} - {endTime})");
+                }
+                
+                LogHelper.Write($"🔧 GetSchedulesForDate complete: {schedules.Count} schedule(s) found");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 GetSchedulesForDate error: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+            }
+
+            return schedules;
+        }
+
+        /// <summary>
+        /// Get attendance session for employee and date (public for manual absent marking)
+        /// </summary>
+        public (long Id, string ClockIn, string ClockOut, string Status)? GetSessionForEmployeeAndDate(string employeeId, string date)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT id, clock_in, IFNULL(clock_out, ''), status
+                    FROM AttendanceSessions
+                    WHERE employee_id = $empId AND date = $date
+                    ORDER BY id DESC
+                    LIMIT 1
+                ";
+                cmd.Parameters.AddWithValue("$empId", employeeId);
+                cmd.Parameters.AddWithValue("$date", date);
+
+                using var reader = cmd.ExecuteReader();
+                if (reader.Read())
+                {
+                    return (
+                        reader.GetInt64(0),
+                        reader.GetString(1),
+                        reader.GetString(2),
+                        reader.GetString(3)
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 GetSessionForEmployeeAndDate error: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Get attendance session by ID (for sync retry)
+        /// </summary>
+        public (long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, string Status)? GetSessionById(long sessionId)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT id, employee_id, date, IFNULL(clock_in, ''), IFNULL(clock_out, ''), status
+                    FROM AttendanceSessions
+                    WHERE id = $id
+                ";
+                cmd.Parameters.AddWithValue("$id", sessionId);
+
+                using var reader = cmd.ExecuteReader();
+                if (reader.Read())
+                {
+                    return (
+                        reader.GetInt64(0),
+                        reader.GetString(1),
+                        reader.GetString(2),
+                        reader.GetString(3),
+                        reader.GetString(4),
+                        reader.GetString(5)
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 GetSessionById error: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Create absent attendance session (public for manual absent marking)
+        /// </summary>
+        public void CreateAbsentSession(string employeeId, string date, string shiftStartTime)
+        {
+            try
+            {
+                LogHelper.Write($"🔧 CreateAbsentSession called: employeeId={employeeId}, date={date}, shiftStartTime={shiftStartTime}");
+                
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                
+                LogHelper.Write($"🔧 Database connection opened: {_connString}");
+
+                using var cmd = conn.CreateCommand();
+                // Use empty string for clock_in instead of NULL since the column has NOT NULL constraint
+                cmd.CommandText = @"
+                    INSERT INTO AttendanceSessions (employee_id, date, clock_in, clock_out, total_hours, status)
+                    VALUES ($empId, $date, '', '', 0, 'Absent')
+                ";
+                cmd.Parameters.AddWithValue("$empId", employeeId);
+                cmd.Parameters.AddWithValue("$date", date);
+
+                LogHelper.Write($"🔧 Executing INSERT query...");
+                int rowsAffected = cmd.ExecuteNonQuery();
+                LogHelper.Write($"🔧 INSERT complete: {rowsAffected} row(s) affected");
+                
+                // Get the inserted session ID
+                cmd.CommandText = "SELECT last_insert_rowid()";
+                var sessionId = Convert.ToInt64(cmd.ExecuteScalar());
+                
+                LogHelper.Write($"🔧 Session ID: {sessionId}");
+                
+                // Add to sync queue for backend synchronization
+                AddToSyncQueue(employeeId, sessionId, "absent", $"{{\"date\":\"{date}\",\"status\":\"Absent\"}}");
+                
+                LogHelper.Write($"✅ Created absent session for {employeeId} on {date} (session ID: {sessionId})");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 CreateAbsentSession error: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// Mark session as missed clock-out (public for manual absent marking)
+        /// </summary>
+        public void MarkSessionAsMissedClockout(long sessionId, string shiftEndTime)
+        {
+            try
+            {
+                // Calculate hours worked from clock-in to shift end
+                double hoursWorked = CalculateHoursToShiftEnd(sessionId, shiftEndTime);
+
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                // Get employee ID for sync queue
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT employee_id, date FROM AttendanceSessions WHERE id = $id";
+                cmd.Parameters.AddWithValue("$id", sessionId);
+                
+                using var reader = cmd.ExecuteReader();
+                string? employeeId = null;
+                string? date = null;
+                
+                if (reader.Read())
+                {
+                    employeeId = reader.GetString(0);
+                    date = reader.GetString(1);
+                }
+                reader.Close();
+
+                // Update session status
+                cmd.CommandText = @"
+                    UPDATE AttendanceSessions
+                    SET status = 'Missed Clock-out', total_hours = $hours
+                    WHERE id = $id
+                ";
+                cmd.Parameters.Clear();
+                cmd.Parameters.AddWithValue("$hours", hoursWorked);
+                cmd.Parameters.AddWithValue("$id", sessionId);
+
+                cmd.ExecuteNonQuery();
+                
+                // Add to sync queue if we have employee ID
+                if (!string.IsNullOrEmpty(employeeId) && !string.IsNullOrEmpty(date))
+                {
+                    AddToSyncQueue(employeeId, sessionId, "missed_clockout", $"{{\"date\":\"{date}\",\"status\":\"Missed Clock-out\",\"hours\":{hoursWorked}}}");
+                    LogHelper.Write($"✅ Marked session {sessionId} as Missed Clock-out for {employeeId} on {date}");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 MarkSessionAsMissedClockout error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Calculate hours worked from clock-in to shift end time
+        /// </summary>
+        private double CalculateHoursToShiftEnd(long sessionId, string shiftEndTime)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT clock_in FROM AttendanceSessions WHERE id = $id";
+                cmd.Parameters.AddWithValue("$id", sessionId);
+
+                var clockInStr = cmd.ExecuteScalar()?.ToString();
+                if (string.IsNullOrEmpty(clockInStr) || !DateTime.TryParse(clockInStr, out var clockIn))
+                {
+                    return 0;
+                }
+
+                // Parse shift end time
+                var timeParts = shiftEndTime.Split(':');
+                if (timeParts.Length < 2)
+                {
+                    return 0;
+                }
+
+                int hours = int.Parse(timeParts[0]);
+                int minutes = int.Parse(timeParts[1]);
+
+                var now = TimezoneHelper.Now;
+                var shiftEnd = now.Date.AddHours(hours).AddMinutes(minutes);
+
+                // Handle overnight shifts
+                if (hours >= 0 && hours < 6 && now.Hour >= 12)
+                {
+                    shiftEnd = shiftEnd.AddDays(1);
+                }
+
+                // Calculate hours worked
+                var hoursWorked = (shiftEnd - clockIn).TotalHours;
+                return Math.Max(0, Math.Round(hoursWorked, 2));
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 CalculateHoursToShiftEnd error: {ex.Message}");
+                return 0;
             }
         }
     }

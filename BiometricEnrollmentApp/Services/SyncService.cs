@@ -12,9 +12,11 @@ namespace BiometricEnrollmentApp.Services
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
         private readonly System.Timers.Timer _syncTimer;
+        private readonly System.Timers.Timer _bulkSyncTimer;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private bool _isRunning = false;
         private bool _isScheduleSyncRunning = false;
+        private bool _isBulkSyncRunning = false;
         private DateTime _lastScheduleSync = DateTime.MinValue;
 
         public SyncService(DataService dataService, ApiService apiService)
@@ -27,16 +29,23 @@ namespace BiometricEnrollmentApp.Services
             _syncTimer = new System.Timers.Timer(5 * 60 * 1000); // 5 minutes
             _syncTimer.Elapsed += OnSyncTimerElapsed;
             _syncTimer.AutoReset = true;
+
+            // Set up timer for bulk attendance sync every 5 seconds
+            _bulkSyncTimer = new System.Timers.Timer(5 * 1000); // 5 seconds
+            _bulkSyncTimer.Elapsed += OnBulkSyncTimerElapsed;
+            _bulkSyncTimer.AutoReset = true;
         }
 
         public void StartSyncService()
         {
             LogHelper.Write("🔄 Starting sync service...");
             LogHelper.Write($"🔄 Attendance sync timer: {_syncTimer.Interval}ms ({_syncTimer.Interval / 1000}s)");
+            LogHelper.Write($"🔄 Bulk sync timer: {_bulkSyncTimer.Interval}ms ({_bulkSyncTimer.Interval / 1000}s)");
             
             _syncTimer.Start();
+            _bulkSyncTimer.Start();
             
-            LogHelper.Write("✅ Sync timer started successfully");
+            LogHelper.Write("✅ Sync timers started successfully");
             
             // Start background schedule sync task
             LogHelper.Write("🔄 Starting background schedule sync task...");
@@ -51,6 +60,7 @@ namespace BiometricEnrollmentApp.Services
         {
             LogHelper.Write("⏹️ Stopping sync service...");
             _syncTimer.Stop();
+            _bulkSyncTimer.Stop();
             _cancellationTokenSource.Cancel();
         }
 
@@ -99,6 +109,21 @@ namespace BiometricEnrollmentApp.Services
             finally
             {
                 _isRunning = false;
+            }
+        }
+
+        private async void OnBulkSyncTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            if (_isBulkSyncRunning) return; // Prevent overlapping sync operations
+            
+            _isBulkSyncRunning = true;
+            try
+            {
+                await SyncTodayAttendanceRecords();
+            }
+            finally
+            {
+                _isBulkSyncRunning = false;
             }
         }
 
@@ -175,18 +200,53 @@ namespace BiometricEnrollmentApp.Services
                 {
                     try
                     {
-                        LogHelper.Write($"🔄 Retrying sync for {item.EmployeeId} (attempt {item.RetryCount + 1}/5)");
+                        LogHelper.Write($"🔄 Retrying sync for {item.EmployeeId} (type: {item.SyncType}, attempt {item.RetryCount + 1}/5)");
 
-                        // Parse the payload to extract attendance data
-                        var payload = JsonSerializer.Deserialize<AttendancePayload>(item.Payload);
-                        
-                        // Attempt to sync
-                        bool success = await _apiService.SendAttendanceAsync(
-                            payload.employee_id,
-                            !string.IsNullOrEmpty(payload.clock_in) ? DateTime.Parse(payload.clock_in) : null,
-                            !string.IsNullOrEmpty(payload.clock_out) ? DateTime.Parse(payload.clock_out) : null,
-                            payload.status
-                        );
+                        bool success = false;
+
+                        // Handle different sync types
+                        if (item.SyncType == "attendance")
+                        {
+                            // Regular attendance with clock in/out times
+                            var payload = JsonSerializer.Deserialize<AttendancePayload>(item.Payload);
+                            success = await _apiService.SendAttendanceAsync(
+                                payload.employee_id,
+                                !string.IsNullOrEmpty(payload.clock_in) ? DateTime.Parse(payload.clock_in) : null,
+                                !string.IsNullOrEmpty(payload.clock_out) ? DateTime.Parse(payload.clock_out) : null,
+                                payload.status
+                            );
+                        }
+                        else if (item.SyncType == "absent" || item.SyncType == "missed_clockout")
+                        {
+                            // Absent or missed clock-out - get full session data from database
+                            var session = _dataService.GetSessionById(item.AttendanceSessionId);
+                            if (session != null)
+                            {
+                                DateTime? clockIn = !string.IsNullOrEmpty(session.Value.ClockIn) ? DateTime.Parse(session.Value.ClockIn) : null;
+                                DateTime? clockOut = !string.IsNullOrEmpty(session.Value.ClockOut) ? DateTime.Parse(session.Value.ClockOut) : null;
+                                
+                                success = await _apiService.SendAttendanceAsync(
+                                    item.EmployeeId,
+                                    clockIn,
+                                    clockOut,
+                                    session.Value.Status
+                                );
+                            }
+                            else
+                            {
+                                LogHelper.Write($"⚠️ Session {item.AttendanceSessionId} not found for {item.EmployeeId}");
+                                _dataService.MarkSyncFailed(item.Id);
+                                failed++;
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            LogHelper.Write($"⚠️ Unknown sync type: {item.SyncType}");
+                            _dataService.MarkSyncFailed(item.Id);
+                            failed++;
+                            continue;
+                        }
 
                         if (success)
                         {
@@ -293,6 +353,75 @@ namespace BiometricEnrollmentApp.Services
 
         // Event to notify when schedules are updated
         public event Action<int>? OnSchedulesUpdated;
+
+        /// <summary>
+        /// Sync all today's attendance records to the server in bulk
+        /// This is more efficient than syncing one by one
+        /// </summary>
+        public async Task<bool> SyncTodayAttendanceRecords()
+        {
+            try
+            {
+                // Get all today's sessions from local database
+                var todaySessions = _dataService.GetTodaySessions();
+                
+                if (todaySessions.Count == 0)
+                {
+                    return true; // No records to sync
+                }
+
+                LogHelper.Write($"📤 Syncing {todaySessions.Count} attendance records to server...");
+
+                // Prepare records for bulk sync
+                var records = new List<object>();
+                foreach (var session in todaySessions)
+                {
+                    // Parse dates
+                    DateTime? clockIn = null;
+                    DateTime? clockOut = null;
+                    
+                    if (!string.IsNullOrEmpty(session.ClockIn))
+                    {
+                        clockIn = DateTime.Parse(session.ClockIn);
+                    }
+                    
+                    if (!string.IsNullOrEmpty(session.ClockOut))
+                    {
+                        clockOut = DateTime.Parse(session.ClockOut);
+                    }
+
+                    records.Add(new
+                    {
+                        employee_id = session.EmployeeId,
+                        date = session.Date,
+                        clock_in = clockIn?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                        clock_out = clockOut?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                        status = session.Status,
+                        total_hours = session.TotalHours,
+                        overtime_hours = (object?)null // Will be calculated by server if needed
+                    });
+                }
+
+                // Send bulk sync request
+                bool success = await _apiService.SyncAttendanceRecordsAsync(records);
+                
+                if (success)
+                {
+                    LogHelper.Write($"✅ Successfully synced {records.Count} attendance records");
+                }
+                else
+                {
+                    LogHelper.Write($"❌ Failed to sync attendance records");
+                }
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error syncing attendance records: {ex.Message}");
+                return false;
+            }
+        }
     }
 
     public class AttendancePayload

@@ -172,6 +172,7 @@ namespace BiometricEnrollmentApp
                 "Present" => ("#4CAF50", "✅", "ON-TIME CLOCK-IN", $"Successfully clocked in at {timeStr}\nStatus: Present"),
                 "Late" => ("#FF9800", "⚠️", "LATE CLOCK-IN", $"Clocked in late at {timeStr}\nStatus: Late Arrival"),
                 "Clock-out" => ("#2196F3", "🏁", "CLOCK-OUT COMPLETED", $"Successfully clocked out at {timeStr}\nShift ended"),
+                "Clock-out Denied" => ("#FF5722", "🚫", "CLOCK-OUT DENIED", "Shift has ended\nClock-out not allowed"),
                 "Overtime" => ("#9C27B0", "⏰", "OVERTIME CLOCK-OUT", $"Clocked out during overtime at {timeStr}\nOvertime hours recorded"),
                 "Missed Clock-out" => ("#FFC107", "⚠️", "MISSED CLOCK-OUT", $"Late clock-out at {timeStr}\nBeyond scheduled shift time"),
                 "DoubleTap" => ("#FF5722", "🚫", "SCAN TOO SOON", "Please wait before scanning again\nCooldown period active"),
@@ -303,48 +304,63 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                LogHelper.Write("⏰ Running absent marking check...");
+                LogHelper.Write("⏰ Running absent & missed clock-out check...");
                 
-                // Mark absent employees locally (using current schedules in database)
-                int markedAbsent = _dataService.MarkAbsentEmployees();
+                // Mark absent employees and missed clock-outs locally
+                var result = _dataService.MarkAbsentEmployees();
                 
-                LogHelper.Write($"📊 Absent marking result: {markedAbsent} new absent record(s)");
+                LogHelper.Write($"📊 Result: {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs");
                 
-                // Only sync if new absent records were created
-                if (markedAbsent > 0)
+                // Only sync if new records were created
+                if (result.markedAbsent > 0 || result.markedMissedClockout > 0)
                 {
-                    LogHelper.Write($"📤 Syncing {markedAbsent} new absent record(s) to server...");
+                    LogHelper.Write($"📤 Syncing {result.markedAbsent + result.markedMissedClockout} new record(s) to server...");
                     
-                    // Get only the newly created absent records
+                    // Get the newly created records
                     var sessions = _dataService.GetTodaySessions();
-                    var absentSessions = sessions.Where(s => s.Status == "Absent").ToList();
+                    var recordsToSync = sessions.Where(s => s.Status == "Absent" || s.Status == "Missed Clock-out").ToList();
                     
                     int synced = 0;
                     int failed = 0;
-                    foreach (var session in absentSessions)
+                    foreach (var session in recordsToSync)
                     {
                         try
                         {
-                            LogHelper.Write($"  📤 Attempting to sync absent record for {session.EmployeeId}...");
+                            LogHelper.Write($"  📤 Attempting to sync {session.Status} record for {session.EmployeeId}...");
                             
-                            // Use sync service for absent records with retry mechanism
+                            // Parse clock times
+                            DateTime? clockIn = null;
+                            DateTime? clockOut = null;
+                            
+                            if (!string.IsNullOrEmpty(session.ClockIn))
+                            {
+                                clockIn = DateTime.Parse(session.ClockIn);
+                            }
+                            
+                            if (!string.IsNullOrEmpty(session.ClockOut))
+                            {
+                                clockOut = DateTime.Parse(session.ClockOut);
+                            }
+                            
+                            // Use sync service with retry mechanism
+                            string syncType = session.Status == "Absent" ? "absent" : "missed_clockout";
                             bool success = await _syncService.QueueAttendanceSync(
                                 session.EmployeeId,
                                 session.Id,
-                                null,
-                                null,
-                                "Absent"
+                                clockIn,
+                                clockOut,
+                                session.Status
                             );
                             
                             if (success)
                             {
                                 synced++;
-                                LogHelper.Write($"  ✅ Successfully synced absent record for {session.EmployeeId}");
+                                LogHelper.Write($"  ✅ Successfully synced {session.Status} record for {session.EmployeeId}");
                             }
                             else
                             {
                                 failed++;
-                                LogHelper.Write($"  📝 Queued absent record for retry: {session.EmployeeId}");
+                                LogHelper.Write($"  📝 Queued {session.Status} record for retry: {session.EmployeeId}");
                             }
                         }
                         catch (Exception ex)
@@ -362,17 +378,17 @@ namespace BiometricEnrollmentApp
                         RefreshAttendances();
                         if (failed == 0)
                         {
-                            UpdateStatus($"✅ {markedAbsent} new absent, all synced to server");
+                            UpdateStatus($"✅ {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs, all synced");
                         }
                         else
                         {
-                            UpdateStatus($"📝 {markedAbsent} new absent, {synced} synced, {failed} queued for retry");
+                            UpdateStatus($"📝 {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs, {synced} synced, {failed} queued");
                         }
                     });
                 }
                 else
                 {
-                    LogHelper.Write("ℹ️ No new absent records to sync");
+                    LogHelper.Write("ℹ️ No new records to sync");
                 }
             }
             catch (Exception ex)
@@ -435,6 +451,15 @@ namespace BiometricEnrollmentApp
         {
             // Mark attendance page as active
             _isAttendancePageActive = true;
+            
+            // Initialize date pickers to today's date
+            var fromDatePicker = this.FindName("FromDatePicker") as DatePicker;
+            var toDatePicker = this.FindName("ToDatePicker") as DatePicker;
+            
+            if (fromDatePicker != null)
+                fromDatePicker.SelectedDate = DateTime.Today;
+            if (toDatePicker != null)
+                toDatePicker.SelectedDate = DateTime.Today;
             
             // initialize device and try loading enrollments into SDK DB (best-effort)
             Task.Run(async () =>
@@ -662,8 +687,23 @@ namespace BiometricEnrollmentApp
                             if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                             {
                                 clockInTime = DateTime.Parse(session.ClockIn);
-                                LogHelper.Write($"🔍 Session found - Clock-in: {clockInTime}, checking confirmation setting...");
+                                LogHelper.Write($"🔍 Session found - Clock-in: {clockInTime}, checking if clock-out is allowed...");
 
+                                // FIRST: Check if clock-out is allowed based on shift end time
+                                // This prevents showing the confirmation dialog if shift has already ended
+                                if (!_dataService.IsClockOutAllowed(matchedEmployeeId, now, out string shiftEndTime, out string allowMessage))
+                                {
+                                    LogHelper.Write($"🚫 Clock-out denied for {matchedEmployeeId}: {allowMessage}");
+                                    Dispatcher.Invoke(() => 
+                                    {
+                                        UpdateStatus($"❌ Clock-out not allowed. Shift has ended.");
+                                        ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Clock-out Denied", now);
+                                    });
+                                    Thread.Sleep(3000); // Show message for 3 seconds
+                                    return;
+                                }
+                                
+                                LogHelper.Write($"✅ Clock-out allowed: {allowMessage}");
                                 
                                 // Check if confirmation is enabled
                                 if (IsClockOutConfirmationEnabled())
@@ -769,6 +809,25 @@ namespace BiometricEnrollmentApp
                             // User confirmed or confirmation disabled - proceed with clock-out
                             LogHelper.Write("💾 Saving clock-out to database...");
                             double hours = _data_service_get().SaveClockOut(openSessionId, matchedEmployeeId, now);
+                            
+                            if (hours == -2)
+                            {
+                                // Clock-out not allowed - shift has ended
+                                LogHelper.Write($"🚫 Clock-out denied for {matchedEmployeeId} - shift has ended");
+                                Dispatcher.Invoke(() => 
+                                {
+                                    UpdateStatus($"❌ Clock-out not allowed. Shift has ended.");
+                                    ShowEmployeeAttendanceResult(matchedEmployeeId, matchedName, "Clock-out Denied", now);
+                                });
+                                return;
+                            }
+                            
+                            if (hours < 0)
+                            {
+                                LogHelper.Write($"❌ Failed to save clock-out for {matchedEmployeeId}");
+                                Dispatcher.Invoke(() => UpdateStatus("❌ Failed to save clock-out. Please try again."));
+                                return;
+                            }
                             
                             // Send clock-out to server
                             if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
@@ -1087,6 +1146,21 @@ namespace BiometricEnrollmentApp
                         {
                             // User confirmed - proceed with clock-out
                             double hours = _dataService.SaveClockOut(sessionId, testEmployeeId, now);
+                            
+                            if (hours == -2)
+                            {
+                                LogHelper.Write($"🧪 TEST: Clock-out denied - shift has ended");
+                                UpdateStatus($"❌ TEST: Clock-out not allowed. Shift has ended.");
+                                return;
+                            }
+                            
+                            if (hours < 0)
+                            {
+                                LogHelper.Write($"🧪 TEST: Failed to save clock-out");
+                                UpdateStatus("❌ TEST: Failed to save clock-out.");
+                                return;
+                            }
+                            
                             LogHelper.Write($"🧪 TEST: Clock-out confirmed and saved. Hours: {hours:F2}");
                             UpdateStatus($"✅ TEST: Clock-out confirmed! Hours worked: {hours:F2}");
                             ShowEmployeeAttendanceResult(testEmployeeId, testEmployeeName, "Clock-out", now);
@@ -1234,11 +1308,114 @@ namespace BiometricEnrollmentApp
             }
         }
 
-        private void RefreshAttendances()
+        private void FilterBtn_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var sessions = _dataService.GetTodaySessions();
+                var fromDatePicker = this.FindName("FromDatePicker") as DatePicker;
+                var toDatePicker = this.FindName("ToDatePicker") as DatePicker;
+                
+                if (fromDatePicker?.SelectedDate != null && toDatePicker?.SelectedDate != null)
+                {
+                    var fromDate = fromDatePicker.SelectedDate.Value;
+                    var toDate = toDatePicker.SelectedDate.Value;
+                    
+                    if (fromDate > toDate)
+                    {
+                        UpdateStatus("❌ From date cannot be later than To date");
+                        return;
+                    }
+                    
+                    UpdateStatus($"🔍 Filtering attendance from {fromDate:yyyy-MM-dd} to {toDate:yyyy-MM-dd}...");
+                    RefreshAttendances(fromDate, toDate);
+                    UpdateStatus($"✅ Showing {((DataGrid)this.FindName("SessionsGrid"))?.Items.Count ?? 0} records");
+                }
+                else
+                {
+                    UpdateStatus("❌ Please select both From and To dates");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Filter error: {ex.Message}");
+                UpdateStatus($"❌ Filter error: {ex.Message}");
+            }
+        }
+
+        private void TodayBtn_Click(object sender, RoutedEventArgs e)
+        {
+            SetDateRange(DateTime.Today, DateTime.Today);
+        }
+
+        private void YesterdayBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var yesterday = DateTime.Today.AddDays(-1);
+            SetDateRange(yesterday, yesterday);
+        }
+
+        private void ThisWeekBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var today = DateTime.Today;
+            var startOfWeek = today.AddDays(-(int)today.DayOfWeek);
+            SetDateRange(startOfWeek, today);
+        }
+
+        private void LastWeekBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var today = DateTime.Today;
+            var startOfLastWeek = today.AddDays(-(int)today.DayOfWeek - 7);
+            var endOfLastWeek = startOfLastWeek.AddDays(6);
+            SetDateRange(startOfLastWeek, endOfLastWeek);
+        }
+
+        private void ThisMonthBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var today = DateTime.Today;
+            var startOfMonth = new DateTime(today.Year, today.Month, 1);
+            SetDateRange(startOfMonth, today);
+        }
+
+        private void SetDateRange(DateTime fromDate, DateTime toDate)
+        {
+            try
+            {
+                var fromDatePicker = this.FindName("FromDatePicker") as DatePicker;
+                var toDatePicker = this.FindName("ToDatePicker") as DatePicker;
+                
+                if (fromDatePicker != null)
+                    fromDatePicker.SelectedDate = fromDate;
+                if (toDatePicker != null)
+                    toDatePicker.SelectedDate = toDate;
+                
+                // Automatically apply the filter
+                FilterBtn_Click(this, new RoutedEventArgs());
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 SetDateRange error: {ex.Message}");
+                UpdateStatus($"❌ Date range error: {ex.Message}");
+            }
+        }
+
+        private void RefreshAttendances()
+        {
+            RefreshAttendances(null, null);
+        }
+
+        private void RefreshAttendances(DateTime? fromDate, DateTime? toDate)
+        {
+            try
+            {
+                List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> sessions;
+                
+                if (fromDate.HasValue && toDate.HasValue)
+                {
+                    sessions = _dataService.GetSessionsByDateRange(fromDate.Value, toDate.Value);
+                }
+                else
+                {
+                    sessions = _dataService.GetTodaySessions();
+                }
                 
                 // Get all enrollments to map employee IDs to names
                 var enrollments = _dataService.GetAllEnrollments();
@@ -1630,9 +1807,23 @@ namespace BiometricEnrollmentApp
                     var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
                     
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
-
                     {
                         clockInTime = DateTime.Parse(session.ClockIn);
+                        
+                        // FIRST: Check if clock-out is allowed based on shift end time
+                        if (!_dataService.IsClockOutAllowed(matchedEmployeeId, now, out string shiftEndTime, out string allowMessage))
+                        {
+                            LogHelper.Write($"🚫 Clock-out denied for {matchedEmployeeId}: {allowMessage}");
+                            Dispatcher.Invoke(() => 
+                            {
+                                window.UpdateStatus($"❌ Clock-out not allowed. Shift has ended.");
+                            });
+                            Thread.Sleep(3000);
+                            Dispatcher.Invoke(() => window.Close());
+                            return;
+                        }
+                        
+                        LogHelper.Write($"✅ Clock-out allowed: {allowMessage}");
                         
                         // Check if confirmation is enabled
                         if (IsClockOutConfirmationEnabled())
@@ -1687,24 +1878,42 @@ namespace BiometricEnrollmentApp
                     }
                     
                     // User confirmed or confirmation disabled - proceed with clock-out
-                    double hours = _data_service_get().SaveClockOut(openSessionId, matchedEmployeeId, now);
+                    double hours = _dataService.SaveClockOut(openSessionId, matchedEmployeeId, now);
                     
-                    // Send clock-out to server
+                    if (hours == -2)
+                    {
+                        // Clock-out not allowed - shift has ended
+                        LogHelper.Write($"🚫 Clock-out denied for {matchedEmployeeId} - shift has ended");
+                        window.UpdateStatus($"❌ Clock-out not allowed. Shift has ended.");
+                        Thread.Sleep(3000);
+                        Dispatcher.Invoke(() => window.Close());
+                        return;
+                    }
+                    
+                    if (hours < 0)
+                    {
+                        LogHelper.Write($"❌ Failed to save clock-out for {matchedEmployeeId}");
+                        window.UpdateStatus("❌ Failed to save clock-out. Please try again.");
+                        Thread.Sleep(2000);
+                        Dispatcher.Invoke(() => window.Close());
+                        return;
+                    }
+                    
+                    // Send clock-out to server with retry mechanism
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
-
                     {
                         // Keep the original status (Present or Late) when clocking out
                         string finalStatus = session.Status;
-                        Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, clockInTime, now, finalStatus));
+                        Task.Run(async () => await _syncService.QueueAttendanceSync(matchedEmployeeId, openSessionId, clockInTime, now, finalStatus));
                     }
                     
-                    window.UpdateStatus(hours >= 0 ? $"✅ Clock-out recorded. Hours: {hours:F2}" : "⚠️ Clock-out failed.");
+                    window.UpdateStatus($"✅ Clock-out recorded. Hours: {hours:F2}");
                     Thread.Sleep(2000);
                 }
                 else
                 {
                     // No open session. Check if employee is scheduled today
-                    var scheduleCheck = _data_service_get().IsEmployeeScheduledToday(matchedEmployeeId);
+                    var scheduleCheck = _dataService.IsEmployeeScheduledToday(matchedEmployeeId);
                     
                     if (!scheduleCheck.IsScheduled)
                     {
@@ -1736,10 +1945,10 @@ namespace BiometricEnrollmentApp
                             else
                             {
                                 // Create overtime clock-in
-                                long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, "Overtime");
+                                long sid = _dataService.SaveClockIn(matchedEmployeeId, now, "Overtime");
                                 
-                                // Send overtime clock-in to server
-                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, "Overtime"));
+                                // Send overtime clock-in to server with retry mechanism
+                                Task.Run(async () => await _syncService.QueueAttendanceSync(matchedEmployeeId, sid, now, null, "Overtime"));
                                 
                                 window.UpdateStatus(sid > 0 ? $"⏰ Overtime clock-in recorded at {now:HH:mm:ss}" : "⚠️ Overtime clock-in failed.");
                                 Thread.Sleep(2000);
@@ -1786,13 +1995,13 @@ namespace BiometricEnrollmentApp
                             else
                             {
                                 // Determine status based on shift start time
-                                string status = _data_service_get().DetermineAttendanceStatus(now, scheduleCheck.StartTime);
+                                string status = _dataService.DetermineAttendanceStatus(now, scheduleCheck.StartTime);
                                 
                                 // create new clock-in
-                                long sid = _data_service_get().SaveClockIn(matchedEmployeeId, now, status);
+                                long sid = _dataService.SaveClockIn(matchedEmployeeId, now, status);
                                 
-                                // Send clock-in to server
-                                Task.Run(async () => await _apiService.SendAttendanceAsync(matchedEmployeeId, now, null, status));
+                                // Send clock-in to server with retry mechanism
+                                Task.Run(async () => await _syncService.QueueAttendanceSync(matchedEmployeeId, sid, now, null, status));
                                 
                                 string statusEmoji = status == "Late" ? "⏰" : "✅";
                                 window.UpdateStatus(sid > 0 ? $"{statusEmoji} Clock-in recorded at {now:HH:mm:ss} - {status}" : "⚠️ Clock-in failed.");

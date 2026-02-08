@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { MdSchedule, MdPeople, MdDelete, MdAccessTime, MdCalendarToday, MdEventNote, MdClose, MdCheckCircle, MdWarning } from "react-icons/md";
 import { 
+  getTemplates,
   getTemplatesByDepartment, 
-  assignSchedule, 
+  assignEmployees,
   getEmployeeSchedules, 
   deleteEmployeeSchedule,
   removeDaysFromEmployeeSchedule,
@@ -230,68 +231,85 @@ export default function TeamSchedule() {
     try {
       console.log("🔄 Fetching assigned schedules...");
       
-      // Get schedules from both legacy system and new template system
-      const allSchedules = await getEmployeeSchedules();
+      // Get schedules from employee_schedules table
+      const employeeSchedules = await getEmployeeSchedules();
+      
+      // Get templates to check assigned_employees
+      const allTemplates = await getTemplates();
+      
       const allEmployees = await fetchEmployees();
       
-      console.log("📊 Raw schedules data:", allSchedules);
+      console.log("📊 Raw employee schedules:", employeeSchedules);
+      console.log("📊 Raw templates:", allTemplates);
       console.log("👥 All employees data:", allEmployees);
       
-      // Filter schedules for employees in the same department
-      // INCLUDE the team leader's schedule for counting purposes
-      const teamSchedules = allSchedules.filter((schedule) => {
+      // Parse template assignments and convert to schedule format
+      const templateSchedules = [];
+      allTemplates.forEach(template => {
+        if (template.assigned_employees) {
+          let assignedEmployees = [];
+          try {
+            assignedEmployees = typeof template.assigned_employees === 'string' 
+              ? JSON.parse(template.assigned_employees) 
+              : template.assigned_employees;
+          } catch (e) {
+            console.error('Error parsing assigned_employees for template', template.id, e);
+          }
+          
+          assignedEmployees.forEach(assignment => {
+            const employee = allEmployees.find(emp => emp.employee_id === assignment.employee_id);
+            if (employee && employee.department === userDepartment) {
+              templateSchedules.push({
+                id: `template-${template.id}-${assignment.employee_id}`,
+                employee_id: assignment.employee_id,
+                shift_name: template.shift_name,
+                start_time: template.start_time,
+                end_time: template.end_time,
+                days: template.days || [],
+                department: template.department,
+                template_id: template.id,
+                specific_date: template.specific_date,
+                assigned_by: assignment.assigned_by,
+                assigned_date: assignment.assigned_date
+              });
+            }
+          });
+        }
+      });
+      
+      console.log("📊 Template-based schedules:", templateSchedules);
+      
+      // Filter employee schedules for the department
+      const departmentEmployeeSchedules = employeeSchedules.filter((schedule) => {
         const employee = allEmployees.find(emp => emp.employee_id === schedule.employee_id);
         return employee && employee.department === userDepartment;
       });
       
-      console.log("🏢 Team schedules for department", userDepartment, ":", teamSchedules);
-      console.log("📋 Available templates:", templates.map(t => ({ id: t.id, shift_name: t.shift_name })));
+      console.log("📊 Department employee schedules:", departmentEmployeeSchedules);
       
-      // Transform to match old structure for display
-      const transformedSchedules = teamSchedules.map(schedule => {
-        console.log("🔄 Transforming schedule:", {
-          originalId: schedule.id,
-          employee_id: schedule.employee_id,
-          shift_name: schedule.shift_name || schedule.template?.shift_name,
-          template_id: schedule.template_id,
-          specific_date: schedule.specific_date,
-          assigned_by: schedule.assigned_by
-        });
-        return {
-          id: schedule.id, // Keep the original employee schedule ID
-          employee_id: schedule.employee_id,
-          shift_name: schedule.shift_name || schedule.template?.shift_name,
-          start_time: schedule.start_time || schedule.template?.start_time,
-          end_time: schedule.end_time || schedule.template?.end_time,
-          days: schedule.days || [],
-          department: schedule.department || schedule.template?.department,
-          template_id: schedule.template_id,
-          specific_date: schedule.specific_date || schedule.template?.specific_date,
-          assigned_by: schedule.assigned_by
-        };
-      });
+      // Transform employee schedules to match format
+      const transformedEmployeeSchedules = departmentEmployeeSchedules.map(schedule => ({
+        id: schedule.id,
+        employee_id: schedule.employee_id,
+        shift_name: schedule.shift_name || schedule.template?.shift_name,
+        start_time: schedule.start_time || schedule.template?.start_time,
+        end_time: schedule.end_time || schedule.template?.end_time,
+        days: schedule.days || [],
+        department: schedule.department || schedule.template?.department,
+        template_id: schedule.template_id,
+        specific_date: schedule.specific_date || schedule.template?.specific_date,
+        assigned_by: schedule.assigned_by
+      }));
+      
+      // Combine both sources
+      const allSchedules = [...templateSchedules, ...transformedEmployeeSchedules];
+      
+      console.log("📊 Combined schedules:", allSchedules);
       
       // Merge schedules with same employee, shift, and time but different days
-      const mergedSchedules = mergeSchedulesByShift(transformedSchedules);
+      const mergedSchedules = mergeSchedulesByShift(allSchedules);
       
       console.log("🔄 Final merged schedules:", mergedSchedules);
-      console.log("🔍 Debug - Current user employee_id:", user.employee?.employee_id);
-      console.log("🔍 Debug - Available templates:", templates.map(t => ({ id: t.id, shift_name: t.shift_name, department: t.department, specific_date: t.specific_date })));
-      console.log("🔍 Debug - Schedules with assigned_by field:", mergedSchedules.map(s => ({
-        employee_id: s.employee_id,
-        shift_name: s.shift_name,
-        template_id: s.template_id,
-        assigned_by: s.assigned_by,
-        specific_date: s.specific_date
-      })));
-      
-      // Check specifically for Carl Pena (Employee 010)
-      const carlSchedule = mergedSchedules.find(s => s.employee_id === '010');
-      if (carlSchedule) {
-        console.log("🎯 Found Carl Pena schedule:", carlSchedule);
-      } else {
-        console.log("❌ Carl Pena schedule not found in merged schedules");
-      }
       
       setAssignedSchedules(mergedSchedules);
     } catch (error) {
@@ -796,85 +814,32 @@ export default function TeamSchedule() {
     console.log("🔐 Debug - User data:", user);
     console.log("🔐 Debug - User role:", user.role);
 
-    const results = {
-      success: [],
-      failed: []
-    };
+    try {
+      console.log("📤 Assigning employees to template:", {
+        template_id: selectedTemplate.id,
+        employee_ids: selectedEmployees,
+        assigned_by: user.employee?.employee_id || "teamleader"
+      });
 
-    // Assign the selected day to each selected employee
-    for (const employeeId of selectedEmployees) {
-      try {
-        console.log("📤 Assigning schedule:", {
-          employee_id: employeeId,
-          template_id: selectedTemplate.id,
-          days: [assignmentDay],
-          assigned_by: user.employee?.employee_id || "teamleader"
-        });
-
-        const result = await assignSchedule({
-          employee_id: employeeId,
-          template_id: selectedTemplate.id,
-          days: [assignmentDay], // Use the calculated assignment day
-          assigned_by: user.employee?.employee_id || "teamleader"
-        });
-        
-        console.log("✅ Assignment result:", result);
-        results.success.push(getEmployeeName(employeeId));
-      } catch (err) {
-        console.error("❌ Assignment failed:", err);
-        console.error("❌ Error response:", err.response?.data);
-        
-        // Handle authentication errors specifically
-        if (err.response?.status === 401) {
-          const errorMsg = err.response?.data?.message || "Authentication failed";
-          console.error("🔐 Authentication error:", errorMsg);
-          
-          toast.error(`Authentication failed: ${errorMsg}. Please log out and log back in.`, {
-            autoClose: 8000
-          });
-          
-          results.failed.push({
-            name: getEmployeeName(employeeId),
-            error: "Authentication failed - please re-login"
-          });
-          
-          break;
-        } else {
-          const errorMsg = err.response?.data?.message || "Failed to assign schedule";
-          results.failed.push({
-            name: getEmployeeName(employeeId),
-            error: errorMsg
-          });
-        }
-      }
-    }
-
-    // Show summary
-    const displayDate = selectedTemplate.specific_date ? 
-      new Date(selectedTemplate.specific_date).toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        month: 'short', 
-        day: 'numeric' 
-      }) : 
-      assignmentDay;
-    
-    if (results.success.length > 0 && results.failed.length === 0) {
-      const totalAssigned = selectedTemplate.specific_date ? results.success.length : results.success.length;
-      toast.success(`Successfully assigned ${totalAssigned} people to ${selectedTemplate.shift_name} on ${displayDate}`);
-    } else if (results.success.length > 0 && results.failed.length > 0) {
-      toast.warning(`Assigned ${results.success.length} people, but ${results.failed.length} failed`);
-    } else if (results.failed.length > 0) {
-      const authFailures = results.failed.filter(f => f.error.includes("Authentication failed"));
-      if (authFailures.length === results.failed.length) {
-        toast.error("Please log out and log back in to continue.");
-      } else {
-        toast.error("Failed to assign schedules");
-      }
-    } else {
-      toast.info("No schedules were assigned");
-    }
-    
-    if (results.success.length > 0) {
+      // Use assignEmployees which assigns to templates
+      const result = await assignEmployees({
+        template_id: selectedTemplate.id,
+        employee_ids: selectedEmployees,
+        assigned_by: user.employee?.employee_id || "teamleader"
+      });
+      
+      console.log("✅ Assignment result:", result);
+      
+      const displayDate = selectedTemplate.specific_date ? 
+        new Date(selectedTemplate.specific_date).toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          month: 'short', 
+          day: 'numeric' 
+        }) : 
+        assignmentDay;
+      
+      toast.success(`Successfully assigned ${selectedEmployees.length} people to ${selectedTemplate.shift_name} on ${displayDate}`);
+      
       setSelectedDay(null);
       setSelectedEmployees([]);
       
@@ -884,6 +849,25 @@ export default function TeamSchedule() {
         await fetchAssignedSchedules();
         await fetchTemplates();
       }, 500);
+      
+    } catch (err) {
+      console.error("❌ Assignment failed:", err);
+      console.error("❌ Error response:", err.response?.data);
+      
+      // Handle authentication errors specifically
+      if (err.response?.status === 401) {
+        const errorMsg = err.response?.data?.message || "Authentication failed";
+        console.error("🔐 Authentication error:", errorMsg);
+        
+        toast.error(`Authentication failed: ${errorMsg}. Please log out and log back in.`, {
+          autoClose: 8000
+        });
+      } else if (err.response?.status === 403) {
+        toast.error("You don't have permission to assign schedules. Please contact your administrator.");
+      } else {
+        const errorMsg = err.response?.data?.message || err.response?.data?.error || "Failed to assign schedule";
+        toast.error(errorMsg);
+      }
     }
   };
 

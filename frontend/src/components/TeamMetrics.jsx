@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { getTodayAttendances } from "../api/AttendanceApi";
 import { fetchEmployees } from "../api/EmployeeApi";
-import { getEmployeeSchedules } from "../api/ScheduleApi";
+import { getEmployeeSchedules, getTemplates } from "../api/ScheduleApi";
 
 export default function TeamMetrics({ department }) {
   const [metrics, setMetrics] = useState({ present: 0, absent: 0, late: 0, overtime: 0, scheduled: 0, totalOvertimeHours: 0 });
@@ -16,16 +16,18 @@ export default function TeamMetrics({ department }) {
     try {
       console.log('🔍 TeamMetrics: Starting fetchMetrics for department:', department);
       
-      const [attendanceData, employeeData, schedules] = await Promise.all([
+      const [attendanceData, employeeData, employeeSchedules, templates] = await Promise.all([
         getTodayAttendances(),
         fetchEmployees(),
-        getEmployeeSchedules()
+        getEmployeeSchedules(),
+        getTemplates()
       ]);
 
       console.log('🔍 TeamMetrics: API responses received:', {
         attendances: attendanceData?.length || 0,
         employees: employeeData?.length || 0,
-        schedules: schedules?.length || 0
+        employeeSchedules: employeeSchedules?.length || 0,
+        templates: templates?.length || 0
       });
 
       // Filter employees by department (include team leaders in count)
@@ -56,9 +58,9 @@ export default function TeamMetrics({ department }) {
       // Find department employees scheduled for today
       const scheduledEmployeeIds = new Set();
       
-      console.log('🔍 TeamMetrics: Processing schedules...');
-      schedules.forEach((schedule, index) => {
-        console.log(`  Schedule ${index + 1}:`, {
+      console.log('🔍 TeamMetrics: Processing employee schedules...');
+      employeeSchedules.forEach((schedule, index) => {
+        console.log(`  Employee Schedule ${index + 1}:`, {
           employee_id: schedule.employee_id,
           specific_date: schedule.specific_date,
           department: schedule.department,
@@ -92,6 +94,45 @@ export default function TeamMetrics({ department }) {
           else if (schedule.days && Array.isArray(schedule.days) && schedule.days.includes(today)) {
             console.log(`    ✅ Adding employee ${schedule.employee_id} (legacy days array)`);
             scheduledEmployeeIds.add(schedule.employee_id);
+          }
+        }
+      });
+
+      // Also check template assigned_employees field
+      console.log('🔍 TeamMetrics: Processing template assignments...');
+      templates.forEach((template, index) => {
+        // Only process templates for this department
+        if (template.department !== department) return;
+        
+        console.log(`  Template ${index + 1}:`, {
+          id: template.id,
+          shift_name: template.shift_name,
+          specific_date: template.specific_date,
+          department: template.department,
+          assigned_employees: template.assigned_employees
+        });
+        
+        if (template.assigned_employees) {
+          let assignedEmployees = [];
+          try {
+            assignedEmployees = typeof template.assigned_employees === 'string' 
+              ? JSON.parse(template.assigned_employees) 
+              : template.assigned_employees;
+          } catch (e) {
+            console.error('Error parsing assigned_employees for template', template.id, e);
+            return;
+          }
+          
+          // Check if template is for today
+          const isForToday = template.specific_date === todayDate;
+          
+          if (isForToday) {
+            assignedEmployees.forEach(assignment => {
+              if (departmentEmployeeIds.has(assignment.employee_id)) {
+                console.log(`    ✅ Adding employee ${assignment.employee_id} from template (specific_date match)`);
+                scheduledEmployeeIds.add(assignment.employee_id);
+              }
+            });
           }
         }
       });
