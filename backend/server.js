@@ -118,11 +118,16 @@ app.get("/api/schedules/biometric", getBiometricSchedules);
 
 // --- DATABASE SYNC ---
 // Note: Database sync is handled by syncDatabase() function called below
-// Using alter: false to prevent "Too many keys" MySQL error
+// For production PostgreSQL, use force: true on first deploy to create tables
+// After first deploy, change back to alter: false
+const syncOptions = process.env.DATABASE_URL 
+  ? { force: false, alter: true } // PostgreSQL: alter tables if needed
+  : { alter: false }; // MySQL: don't alter to prevent "Too many keys" error
+
 sequelize
-  .sync({ alter: false })
-  .then(() => console.log("Database synced successfully"))
-  .catch((err) => console.error("Database connection failed:", err));
+  .sync(syncOptions)
+  .then(() => console.log("✅ Database synced successfully"))
+  .catch((err) => console.error("❌ Database connection failed:", err));
 
 // --- START SERVER ---
 const PORT = process.env.PORT || 5000;

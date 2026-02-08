@@ -6,16 +6,22 @@ import "./notification.js"; // Import notification model for sync
 const syncDatabase = async () => {
   try {
     await sequelize.authenticate();
-    console.log(" Database connected...");
+    console.log("✅ Database connected...");
 
-    await sequelize.sync({ alter: false }); // Disable alter to prevent key conflicts
-    console.log(" Tables synchronized successfully");
+    // Use alter: true for PostgreSQL to create/update tables
+    // Use alter: false for MySQL to prevent key conflicts
+    const syncOptions = process.env.DATABASE_URL 
+      ? { alter: true } // PostgreSQL: create/alter tables
+      : { alter: false }; // MySQL: don't alter
+
+    await sequelize.sync(syncOptions);
+    console.log("✅ Tables synchronized successfully");
 
     //  Create default admin account if not existing
     await createDefaultAdmin();
 
   } catch (error) {
-    console.error(" Database connection error:", error);
+    console.error("❌ Database connection error:", error);
   }
 };
 
