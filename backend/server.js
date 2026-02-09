@@ -116,25 +116,34 @@ app.use("/employees", employeeRoutes);
 import { getBiometricSchedules } from "./controllers/scheduleTemplateController.js";
 app.get("/api/schedules/biometric", getBiometricSchedules);
 
-// --- DATABASE SYNC ---
-// Sync database before starting server
-// syncDatabase() handles both authentication and table creation
-
-// --- START SERVER ---
+// --- DATABASE SYNC & START SERVER ---
+// Sync database BEFORE starting server to ensure tables exist
 const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, async () => {
-  // Sync database first
-  await syncDatabase();
-  
-  console.log(`✅ Node.js Server running on port ${PORT}`);
-  console.log(`📡 Connected Biometric Service expected at http://localhost:5000`);
-  console.log(`🔌 WebSocket server ready for real-time updates`);
-  
-  // Start the schedule cleanup job
-  startScheduleCleanupJob();
-  
-  // Note: Absent marking is handled by the biometric app
-  // All attendance records originate from the biometric app and sync via API
-});
+
+const startServer = async () => {
+  try {
+    // Sync database first
+    await syncDatabase();
+    
+    // Then start the server
+    httpServer.listen(PORT, () => {
+      console.log(`✅ Node.js Server running on port ${PORT}`);
+      console.log(`📡 Connected Biometric Service expected at http://localhost:5000`);
+      console.log(`🔌 WebSocket server ready for real-time updates`);
+      
+      // Start the schedule cleanup job
+      startScheduleCleanupJob();
+      
+      // Note: Absent marking is handled by the biometric app
+      // All attendance records originate from the biometric app and sync via API
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Start the server
+startServer();
 
 export { io };
