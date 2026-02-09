@@ -7,6 +7,7 @@ import {
   deleteTemplate,
   assignEmployeesToTemplate,
   removeEmployeesFromTemplate,
+  getEmployeeSchedulesFromTemplates,
 } from "../services/scheduleTemplateService.js";
 
 // GET /api/templates - Returns ALL active templates
@@ -333,6 +334,25 @@ export const getBiometricSchedules = async (req, res) => {
     console.error("❌ Error fetching biometric schedules:", error);
     res.status(500).json({ 
       message: "Error fetching schedules for biometric app",
+      error: error.message 
+    });
+  }
+};
+
+// GET /api/templates/employee/:employeeId - Get schedules for a specific employee
+export const getEmployeeSchedules = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    console.log(`📅 Fetching schedules for employee: ${employeeId}`);
+    
+    const schedules = await getEmployeeSchedulesFromTemplates(employeeId);
+    
+    console.log(`✅ Found ${schedules.length} schedule(s) for employee ${employeeId}`);
+    res.status(200).json(schedules);
+  } catch (error) {
+    console.error("❌ Error fetching employee schedules:", error);
+    res.status(500).json({ 
+      message: "Error fetching employee schedules",
       error: error.message 
     });
   }
