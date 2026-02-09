@@ -1,0 +1,457 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "Hello admin",
+      "password": "$2b$10$XjhOHXkJOruJpqcdU5QKAeqoKc87SidUVhhJ/2zvk8KTapGJXT6Bm",
+      "role": "admin",
+      "employeeId": null,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2025-12-09T07:03:17.000Z",
+      "updatedAt": "2026-01-13T15:41:12.000Z"
+    },
+    {
+      "id": 25,
+      "username": "superadmin",
+      "password": "$2b$10$g318.5Ymng3ZAOtwjnuYE.7Kh6ht0OExJwGCgNqHVfkwOliM0fBq2",
+      "role": "admin",
+      "employeeId": null,
+      "firstname": "Super Administrator",
+      "lastname": null,
+      "createdAt": "2026-01-13T15:24:51.000Z",
+      "updatedAt": "2026-01-13T15:24:51.000Z"
+    },
+    {
+      "id": 26,
+      "username": "admin",
+      "password": "$2b$10$DR497kjkL1Vv61dMP0IDC.NsTPIR5lQBTabPMkFYIYumbT5U8wEiy",
+      "role": "admin",
+      "employeeId": null,
+      "firstname": "Johnny",
+      "lastname": "Doees",
+      "createdAt": "2026-01-13T15:53:44.000Z",
+      "updatedAt": "2026-01-13T17:20:32.000Z"
+    },
+    {
+      "id": 29,
+      "username": "supervisor",
+      "password": "$2b$10$QT3IOlnLmhLg20ipqGZI6ur5mWJ1QI2M6kdFnLdvlvRAHxpnvTTU2",
+      "role": "supervisor",
+      "employeeId": null,
+      "firstname": "System",
+      "lastname": "Supervisor",
+      "createdAt": "2026-01-13T17:37:17.000Z",
+      "updatedAt": "2026-01-13T17:37:17.000Z"
+    },
+    {
+      "id": 34,
+      "username": "Resty",
+      "password": "$2b$10$7gSsiepuGzS2b2YfExb0eeVkcTDCi.ThnGnts84hGncjjKwlJUZHy",
+      "role": "supervisor",
+      "employeeId": 31,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:07:14.000Z",
+      "updatedAt": "2026-02-03T18:07:14.000Z"
+    },
+    {
+      "id": 36,
+      "username": "Fernando",
+      "password": "$2b$10$nyja5RHt5JLgn7C1VvHY6uXgl5BpVQ9MarnVWQeKnrlWA3.PC1x3.",
+      "role": "teamleader",
+      "employeeId": 33,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:07:18.000Z",
+      "updatedAt": "2026-02-03T18:07:18.000Z"
+    },
+    {
+      "id": 37,
+      "username": "Kenny",
+      "password": "$2b$10$dASQGi11boyvtG4J/cR3Qe1Y5mOcc4vCc93Eh7LwNuCbZWnR6.8FK",
+      "role": "teamleader",
+      "employeeId": 34,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:07:19.000Z",
+      "updatedAt": "2026-02-03T18:07:19.000Z"
+    },
+    {
+      "id": 38,
+      "username": "Jerico",
+      "password": "$2b$10$5j57/mqO1uDx/bUSwZIgIORqB1QLmtRmrrBa9Zaf//Q9HX2.5GqYu",
+      "role": "teamleader",
+      "employeeId": 35,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:07:21.000Z",
+      "updatedAt": "2026-02-03T18:07:21.000Z"
+    },
+    {
+      "id": 39,
+      "username": "Novaleen",
+      "password": "$2b$10$w8Jqo9G9MkS37SlsWaY2neVf8Z0geLWxUxgsDkXSO7./V9R7xBzbm",
+      "role": "teamleader",
+      "employeeId": 36,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:07:22.000Z",
+      "updatedAt": "2026-02-03T18:07:22.000Z"
+    },
+    {
+      "id": 40,
+      "username": "Jhonie",
+      "password": "$2b$10$v3I95ClXQ79DM20GEq7VsOIhnQZ/Q1jl23GNZ0ZGfhJgqWMfG2GlK",
+      "role": "employee",
+      "employeeId": 37,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:07:24.000Z",
+      "updatedAt": "2026-02-03T18:07:24.000Z"
+    },
+    {
+      "id": 41,
+      "username": "Warren",
+      "password": "$2b$10$ohisZiFxAo6iZk3IztrZQu36tl9JQMJ/GC9tv1HkuVyh/F2vVG/06",
+      "role": "employee",
+      "employeeId": 38,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:11:32.000Z",
+      "updatedAt": "2026-02-03T18:11:32.000Z"
+    },
+    {
+      "id": 42,
+      "username": "Rosalyn",
+      "password": "$2b$10$3MTRcNR8gSPM9BaLwvd76uVqlmVJnZs6dPAPcZojG9zdi/i9OnVZ6",
+      "role": "employee",
+      "employeeId": 39,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:11:34.000Z",
+      "updatedAt": "2026-02-03T18:11:34.000Z"
+    },
+    {
+      "id": 43,
+      "username": "Lester",
+      "password": "$2b$10$nRDUlgGDEjRgztG7D55IJehLVmbWsZIEIMqIY6lkfad/lDBajiXs.",
+      "role": "employee",
+      "employeeId": 40,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:11:35.000Z",
+      "updatedAt": "2026-02-03T18:11:35.000Z"
+    },
+    {
+      "id": 44,
+      "username": "Darshan",
+      "password": "$2b$10$k5PTHTOcr9VE7AnJVokzHujQSPqw9I13HrG6oJNcNiObkWBW0vpTm",
+      "role": "warehouseadmin",
+      "employeeId": 41,
+      "firstname": null,
+      "lastname": null,
+      "createdAt": "2026-02-03T18:30:51.000Z",
+      "updatedAt": "2026-02-03T18:30:51.000Z"
+    }
+  ],
+  "employees": [
+    {
+      "id": 31,
+      "employee_id": "TSI00001",
+      "firstname": "Resty",
+      "lastname": "Ellana",
+      "department": "Company-wide",
+      "position": "Supervisor",
+      "contact_number": "09198947992",
+      "email": "resty@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:07:14.000Z",
+      "updatedAt": "2026-02-03T18:07:14.000Z"
+    },
+    {
+      "id": 33,
+      "employee_id": "TSI00003",
+      "firstname": "Fernando",
+      "lastname": "Dela Cruz",
+      "department": "Zone A",
+      "position": "Team Leader",
+      "contact_number": "09123456789",
+      "email": "fernando@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:07:18.000Z",
+      "updatedAt": "2026-02-03T19:13:06.000Z"
+    },
+    {
+      "id": 34,
+      "employee_id": "TSI00004",
+      "firstname": "Kenny",
+      "lastname": "Siatita",
+      "department": "Zone B",
+      "position": "Team Leader",
+      "contact_number": "09123456789",
+      "email": "kenny@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:07:19.000Z",
+      "updatedAt": "2026-02-03T19:00:45.000Z"
+    },
+    {
+      "id": 35,
+      "employee_id": "TSI00005",
+      "firstname": "Jerico",
+      "lastname": "Llaneta",
+      "department": "Zone C",
+      "position": "Team Leader",
+      "contact_number": "09198947992",
+      "email": "jerico@gmail.comm",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:07:21.000Z",
+      "updatedAt": "2026-02-03T18:08:34.000Z"
+    },
+    {
+      "id": 36,
+      "employee_id": "TSI00006",
+      "firstname": "Novaleen",
+      "lastname": "Bonque",
+      "department": "Zone D",
+      "position": "Team Leader",
+      "contact_number": "09123456789",
+      "email": "novaleen@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:07:22.000Z",
+      "updatedAt": "2026-02-03T18:08:30.000Z"
+    },
+    {
+      "id": 37,
+      "employee_id": "TSI00007",
+      "firstname": "Jhonie",
+      "lastname": "Estriba",
+      "department": "Zone A",
+      "position": "Helper",
+      "contact_number": "09123456789",
+      "email": "jhonie@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:07:24.000Z",
+      "updatedAt": "2026-02-03T19:14:06.000Z"
+    },
+    {
+      "id": 38,
+      "employee_id": "TSI00008",
+      "firstname": "Warren",
+      "lastname": "Gabas",
+      "department": "Zone B",
+      "position": "Helper",
+      "contact_number": "09123456789",
+      "email": "warren@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:11:32.000Z",
+      "updatedAt": "2026-02-03T19:14:06.000Z"
+    },
+    {
+      "id": 39,
+      "employee_id": "TSI00009",
+      "firstname": "Rosalyyn",
+      "lastname": "Costales",
+      "department": "Zone C",
+      "position": "Helper",
+      "contact_number": "09123456789",
+      "email": "rosalyn@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:11:34.000Z",
+      "updatedAt": "2026-02-03T19:14:06.000Z"
+    },
+    {
+      "id": 40,
+      "employee_id": "TSI00010",
+      "firstname": "Lester",
+      "lastname": "Batiller",
+      "department": "Zone D",
+      "position": "Helper",
+      "contact_number": "09123456789",
+      "email": "lester@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:11:35.000Z",
+      "updatedAt": "2026-02-03T19:14:06.000Z"
+    },
+    {
+      "id": 41,
+      "employee_id": "TSI00002",
+      "firstname": "Darshan",
+      "lastname": "Lobarbio",
+      "department": "Company-wide",
+      "position": "Warehouse Admin",
+      "contact_number": "09123456789",
+      "email": "darshan@gmail.com",
+      "photo": null,
+      "status": "Active",
+      "createdAt": "2026-02-03T18:30:51.000Z",
+      "updatedAt": "2026-02-03T18:30:51.000Z"
+    }
+  ],
+  "positions": [
+    {
+      "id": 10,
+      "name": "Team Leader",
+      "description": "Leads and manages team operations",
+      "createdAt": "2025-12-10T07:21:42.000Z",
+      "updatedAt": "2025-12-10T07:21:42.000Z"
+    },
+    {
+      "id": 27,
+      "name": "Picker",
+      "description": "Selects and prepares items for orders based on warehouse requests",
+      "createdAt": "2025-12-10T08:18:08.000Z",
+      "updatedAt": "2026-01-21T17:35:47.000Z"
+    },
+    {
+      "id": 42,
+      "name": "Supervisor",
+      "description": "Manages departments and oversees overall warehouse operations.",
+      "createdAt": "2026-01-04T13:46:33.000Z",
+      "updatedAt": "2026-01-21T17:36:05.000Z"
+    },
+    {
+      "id": 43,
+      "name": "Helper",
+      "description": "Assists with general warehouse tasks and supports daily operations",
+      "createdAt": "2026-01-07T08:30:35.000Z",
+      "updatedAt": "2026-02-03T19:14:06.000Z"
+    },
+    {
+      "id": 45,
+      "name": "Warehouse Admin",
+      "description": "Handles warehouse records, reports, and administrative support",
+      "createdAt": "2026-01-12T04:03:50.000Z",
+      "updatedAt": "2026-01-21T17:36:23.000Z"
+    },
+    {
+      "id": 62,
+      "name": "Receiving",
+      "description": "Manages incoming goods and verifies deliveries",
+      "createdAt": "2026-01-21T17:33:55.000Z",
+      "updatedAt": "2026-01-21T17:36:43.000Z"
+    },
+    {
+      "id": 88,
+      "name": "Reach Truck Operator",
+      "description": "Operates reach truck equipment for pallet movement and storage.",
+      "createdAt": "2026-02-03T18:03:31.000Z",
+      "updatedAt": "2026-02-03T18:03:31.000Z"
+    }
+  ],
+  "departments": [
+    {
+      "id": 1,
+      "name": "Zone A",
+      "description": "Picker",
+      "manager": "Fernando Dela Cruz",
+      "createdAt": "2025-12-09T07:04:22.000Z",
+      "updatedAt": "2026-02-03T19:13:06.000Z"
+    },
+    {
+      "id": 2,
+      "name": "Zone B",
+      "description": "Helper",
+      "manager": "Kenny Siatita",
+      "createdAt": "2025-12-10T15:41:17.000Z",
+      "updatedAt": "2026-02-03T18:08:48.000Z"
+    },
+    {
+      "id": 3,
+      "name": "Zone C",
+      "description": "Example",
+      "manager": "Jerico Llaneta",
+      "createdAt": "2025-12-11T03:36:43.000Z",
+      "updatedAt": "2026-02-03T18:08:34.000Z"
+    },
+    {
+      "id": 7,
+      "name": "Zone D",
+      "description": "",
+      "manager": "Novaleen Bonque",
+      "createdAt": "2026-01-12T04:03:30.000Z",
+      "updatedAt": "2026-02-03T18:08:30.000Z"
+    },
+    {
+      "id": 8,
+      "name": "Zone E",
+      "description": "Desc",
+      "manager": "",
+      "createdAt": "2026-02-03T19:13:30.000Z",
+      "updatedAt": "2026-02-03T19:13:30.000Z"
+    }
+  ],
+  "attendances": [
+    {
+      "id": 19,
+      "employee_id": "TSI00002",
+      "clock_in": "2026-02-08T15:08:29.000Z",
+      "clock_out": "2026-02-08T23:08:33.000Z",
+      "status": "Present",
+      "overtime_hours": null,
+      "createdAt": "2026-02-08T15:08:29.000Z",
+      "updatedAt": "2026-02-08T15:12:24.000Z"
+    },
+    {
+      "id": 18,
+      "employee_id": "TSI00001",
+      "clock_in": "2026-02-08T15:07:54.000Z",
+      "clock_out": null,
+      "status": "Missed Clock-out",
+      "overtime_hours": null,
+      "createdAt": "2026-02-08T15:07:54.000Z",
+      "updatedAt": "2026-02-08T15:11:39.000Z"
+    },
+    {
+      "id": 1,
+      "employee_id": "TSI00003",
+      "clock_in": "2026-02-07T20:54:07.000Z",
+      "clock_out": null,
+      "status": "Missed Clock-out",
+      "overtime_hours": null,
+      "createdAt": "2026-02-07T13:10:54.000Z",
+      "updatedAt": "2026-02-08T10:49:53.000Z"
+    },
+    {
+      "id": 2,
+      "employee_id": "TSI00006",
+      "clock_in": "2026-02-07T20:53:57.000Z",
+      "clock_out": null,
+      "status": "Missed Clock-out",
+      "overtime_hours": null,
+      "createdAt": "2026-02-07T13:10:54.000Z",
+      "updatedAt": "2026-02-08T10:49:53.000Z"
+    },
+    {
+      "id": 3,
+      "employee_id": "TSI00005",
+      "clock_in": "2026-02-07T20:53:54.000Z",
+      "clock_out": null,
+      "status": "Missed Clock-out",
+      "overtime_hours": null,
+      "createdAt": "2026-02-07T13:10:54.000Z",
+      "updatedAt": "2026-02-08T10:49:53.000Z"
+    },
+    {
+      "id": 4,
+      "employee_id": "TSI00004",
+      "clock_in": "2026-02-07T20:53:26.000Z",
+      "clock_out": null,
+      "status": "Missed Clock-out",
+      "overtime_hours": null,
+      "createdAt": "2026-02-07T13:10:54.000Z",
+      "updatedAt": "2026-02-08T10:49:53.000Z"
+    }
+  ],
+  "schedules": [],
+  "templates": []
+}

@@ -82,12 +82,13 @@ const importData = async () => {
 
       // 3. Import Employees (depends on Positions, Departments)
       console.log("👥 Importing employees...");
+      const employeeIdMap = {}; // Map old employee.id to new employee.id
+      
       for (const emp of data.employees) {
-        await sequelize.query(
-          `INSERT INTO "Employees" (id, employee_id, firstname, lastname, department, position, contact_number, email, photo, date_hired, status, "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-           ON CONFLICT (id) DO UPDATE SET
-           employee_id = EXCLUDED.employee_id,
+        const [result] = await sequelize.query(
+          `INSERT INTO "Employees" (employee_id, firstname, lastname, department, position, contact_number, email, photo, status, "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           ON CONFLICT (employee_id) DO UPDATE SET
            firstname = EXCLUDED.firstname,
            lastname = EXCLUDED.lastname,
            department = EXCLUDED.department,
@@ -95,24 +96,30 @@ const importData = async () => {
            contact_number = EXCLUDED.contact_number,
            email = EXCLUDED.email,
            photo = EXCLUDED.photo,
-           date_hired = EXCLUDED.date_hired,
            status = EXCLUDED.status,
-           "updatedAt" = EXCLUDED."updatedAt"`,
+           "updatedAt" = EXCLUDED."updatedAt"
+           RETURNING id`,
           {
             bind: [
-              emp.id, emp.employee_id, emp.firstname, emp.lastname, emp.department,
-              emp.position, emp.contact_number, emp.email, emp.photo, emp.date_hired,
+              emp.employee_id, emp.firstname, emp.lastname, emp.department,
+              emp.position, emp.contact_number, emp.email, emp.photo,
               emp.status, emp.createdAt, emp.updatedAt
             ],
             transaction
           }
         );
+        
+        // Store mapping of old ID to new ID
+        employeeIdMap[emp.id] = result[0].id;
       }
       console.log(`✅ Imported ${data.employees.length} employees`);
 
       // 4. Import Users (depends on Employees)
       console.log("👤 Importing users...");
       for (const user of data.users) {
+        // Map old employeeId to new employeeId
+        const newEmployeeId = user.employeeId ? employeeIdMap[user.employeeId] : null;
+        
         await sequelize.query(
           `INSERT INTO "Users" (id, username, password, role, "employeeId", firstname, lastname, "createdAt", "updatedAt")
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -126,7 +133,7 @@ const importData = async () => {
            "updatedAt" = EXCLUDED."updatedAt"`,
           {
             bind: [
-              user.id, user.username, user.password, user.role, user.employeeId,
+              user.id, user.username, user.password, user.role, newEmployeeId,
               user.firstname, user.lastname, user.createdAt, user.updatedAt
             ],
             transaction
@@ -195,11 +202,20 @@ const importData = async () => {
       // 7. Import Attendances
       console.log("📊 Importing attendances...");
       for (const att of data.attendances) {
+        // Extract date from clock_in timestamp
+        const date = att.clock_in ? new Date(att.clock_in).toISOString().split('T')[0] : null;
+        
+        if (!date) {
+          console.log(`⚠️  Skipping attendance ${att.id} - no clock_in date`);
+          continue;
+        }
+        
         await sequelize.query(
-          `INSERT INTO "Attendances" (id, employee_id, clock_in, clock_out, status, overtime_hours, "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO "Attendances" (id, employee_id, date, clock_in, clock_out, status, overtime_hours, "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT (id) DO UPDATE SET
            employee_id = EXCLUDED.employee_id,
+           date = EXCLUDED.date,
            clock_in = EXCLUDED.clock_in,
            clock_out = EXCLUDED.clock_out,
            status = EXCLUDED.status,
@@ -207,7 +223,7 @@ const importData = async () => {
            "updatedAt" = EXCLUDED."updatedAt"`,
           {
             bind: [
-              att.id, att.employee_id, att.clock_in, att.clock_out,
+              att.id, att.employee_id, date, att.clock_in, att.clock_out,
               att.status, att.overtime_hours, att.createdAt, att.updatedAt
             ],
             transaction
