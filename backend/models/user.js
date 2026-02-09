@@ -31,11 +31,8 @@ const User = sequelize.define("User", {
   employeeId: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    references: {
-      model: "employees",
-      key: "id",
-    },
-    onDelete: "CASCADE",
+    // Foreign key reference removed - will be added via associations
+    // This prevents circular dependency during initial table creation
   },
 });
 
