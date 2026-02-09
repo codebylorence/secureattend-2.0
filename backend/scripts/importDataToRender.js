@@ -68,8 +68,7 @@ const importData = async () => {
         await sequelize.query(
           `INSERT INTO "Departments" (id, name, description, manager, "createdAt", "updatedAt")
            VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (id) DO UPDATE SET
-           name = EXCLUDED.name,
+           ON CONFLICT (name) DO UPDATE SET
            description = EXCLUDED.description,
            manager = EXCLUDED.manager,
            "updatedAt" = EXCLUDED."updatedAt"`,
