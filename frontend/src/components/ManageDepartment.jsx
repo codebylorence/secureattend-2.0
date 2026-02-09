@@ -3,8 +3,8 @@ import { FaEdit, FaEye } from "react-icons/fa";
 import { MdManageAccounts, MdDelete, MdClose } from "react-icons/md";
 import { fetchDepartments, deleteDepartment, updateDepartment } from "../api/DepartmentApi";
 import { fetchTeamLeaders } from "../api/UserApi";
+import { fetchEmployees } from "../api/EmployeeApi";
 import ConfirmationModal from "./ConfirmationModal";
-import axios from "axios";
 import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
 export default function ManageDepartment({ supervisorView = false, refreshTrigger, searchTerm = "" }) {
@@ -163,8 +163,7 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
     setViewModalOpen(true);
     
     try {
-      const response = await axios.get(`http://localhost:5000/employees`);
-      const allEmployees = response.data;
+      const allEmployees = await fetchEmployees();
       
       // Filter employees by department
       let members = allEmployees.filter(emp => emp.department === dept.name);
