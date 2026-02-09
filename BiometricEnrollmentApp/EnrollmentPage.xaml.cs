@@ -1261,7 +1261,7 @@ namespace BiometricEnrollmentApp
         }
 
         // Delete enrollment button click handler
-        private void DeleteEnrollmentBtn_Click(object sender, RoutedEventArgs e)
+        private async void DeleteEnrollmentBtn_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -1278,6 +1278,18 @@ namespace BiometricEnrollmentApp
                     {
                         _dataService.DeleteEnrollment(employeeId);
                         LogHelper.Write($"🗑️ Deleted enrollment for {employeeId}");
+                        
+                        // Update backend to mark employee as NOT having fingerprint
+                        try
+                        {
+                            await UpdateEmployeeFingerprintStatusAsync(employeeId, false);
+                            LogHelper.Write($"✅ Updated backend: {employeeId} has_fingerprint = false");
+                        }
+                        catch (Exception ex)
+                        {
+                            LogHelper.Write($"⚠️ Failed to update backend fingerprint status: {ex.Message}");
+                            // Don't fail the deletion if backend update fails
+                        }
                         
                         // Reload templates into attendance scanner SDK after deletion
                         try

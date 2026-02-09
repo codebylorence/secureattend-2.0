@@ -188,42 +188,82 @@ export const createTemplate = async (templateData) => {
   // Create the template first
   const template = await ScheduleTemplate.create(processedData);
   
-  // Auto-assign team leader for this department immediately after creation
-  try {
-    const { default: User } = await import("../models/user.js");
-    const { default: Employee } = await import("../models/employee.js");
+  // Check if this is a management role template (has management_roles field)
+  if (processedData.management_roles && Array.isArray(processedData.management_roles) && processedData.management_roles.length > 0) {
+    console.log(`👔 Management role template created with roles:`, processedData.management_roles);
     
-    const teamLeaderUser = await User.findOne({
-      where: { role: "teamleader" },
-      include: [{
-        model: Employee,
-        as: "employee",
-        where: { department: template.department }
-      }]
-    });
-    
-    if (teamLeaderUser && teamLeaderUser.employee) {
-      const teamLeaderId = teamLeaderUser.employee.employee_id;
-      console.log(`👑 Auto-assigning team leader ${teamLeaderId} to newly created template ${template.id} (${template.department})`);
+    try {
+      const { default: Employee } = await import("../models/employee.js");
       
-      const now = new Date().toISOString();
-      const teamLeaderAssignment = [{
-        employee_id: teamLeaderId,
-        assigned_date: now,
-        assigned_by: processedData.created_by || "system"
-      }];
-      
-      await template.update({
-        assigned_employees: JSON.stringify(teamLeaderAssignment)
+      // Find all employees with the specified positions
+      const employees = await Employee.findAll({
+        where: {
+          position: { [Op.in]: processedData.management_roles },
+          status: "Active"
+        }
       });
       
-      console.log(`✅ Team leader ${teamLeaderId} auto-assigned to template ${template.id}`);
-    } else {
-      console.log(`⚠️ No team leader found for department: ${template.department}`);
+      console.log(`📋 Found ${employees.length} employees with management roles:`, employees.map(e => `${e.employee_id} (${e.position})`));
+      
+      if (employees.length > 0) {
+        const now = new Date().toISOString();
+        const assignments = employees.map(emp => ({
+          employee_id: emp.employee_id,
+          assigned_date: now,
+          assigned_by: processedData.created_by || "system"
+        }));
+        
+        await template.update({
+          assigned_employees: JSON.stringify(assignments)
+        });
+        
+        console.log(`✅ Auto-assigned ${employees.length} management role employees to template ${template.id}`);
+      } else {
+        console.log(`⚠️ No employees found with management roles: ${processedData.management_roles.join(', ')}`);
+      }
+    } catch (error) {
+      console.error("⚠️ Error auto-assigning management role employees:", error);
+      // Don't fail the template creation if assignment fails
     }
-  } catch (error) {
-    console.error("⚠️ Error auto-assigning team leader during template creation:", error);
-    // Don't fail the template creation if team leader assignment fails
+  }
+  // Auto-assign team leader for zone-based templates (those with a department)
+  else if (template.department) {
+    try {
+      const { default: User } = await import("../models/user.js");
+      const { default: Employee } = await import("../models/employee.js");
+      
+      const teamLeaderUser = await User.findOne({
+        where: { role: "teamleader" },
+        include: [{
+          model: Employee,
+          as: "employee",
+          where: { department: template.department }
+        }]
+      });
+      
+      if (teamLeaderUser && teamLeaderUser.employee) {
+        const teamLeaderId = teamLeaderUser.employee.employee_id;
+        console.log(`👑 Auto-assigning team leader ${teamLeaderId} to newly created template ${template.id} (${template.department})`);
+        
+        const now = new Date().toISOString();
+        const teamLeaderAssignment = [{
+          employee_id: teamLeaderId,
+          assigned_date: now,
+          assigned_by: processedData.created_by || "system"
+        }];
+        
+        await template.update({
+          assigned_employees: JSON.stringify(teamLeaderAssignment)
+        });
+        
+        console.log(`✅ Team leader ${teamLeaderId} auto-assigned to template ${template.id}`);
+      } else {
+        console.log(`⚠️ No team leader found for department: ${template.department}`);
+      }
+    } catch (error) {
+      console.error("⚠️ Error auto-assigning team leader during template creation:", error);
+      // Don't fail the template creation if team leader assignment fails
+    }
   }
   
   return template;
