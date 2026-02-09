@@ -11,6 +11,7 @@ import {
   assignEmployees,
   removeEmployees,
   getBiometricSchedules,
+  getEmployeeSchedules,
 } from "../controllers/scheduleTemplateController.js";
 import { authenticateToken, requireAdminOrTeamLeader, requireAdmin } from "../middleware/auth.js";
 
@@ -19,6 +20,7 @@ const router = express.Router();
 router.get("/", getTemplates); // Get all templates
 router.get("/stats", authenticateToken, requireAdmin, getTemplateStats); // Get template statistics
 router.get("/published", getPublishedTemplates); // Get all templates (backward compatibility)
+router.get("/employee/:employeeId", authenticateToken, getEmployeeSchedules); // Get schedules for specific employee
 router.get("/department/:department", getDepartmentTemplates);
 router.get("/:id", getTemplate);
 router.post("/", authenticateToken, requireAdminOrTeamLeader, addTemplate);

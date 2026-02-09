@@ -94,7 +94,8 @@ export const getEmployeeSchedules = async () => {
 };
 
 export const getEmployeeScheduleById = async (employeeId) => {
-  const response = await api.get(`${EMPLOYEE_SCHEDULE_API_URL}/employee/${employeeId}`);
+  // Use the template-based schedule endpoint
+  const response = await api.get(`${TEMPLATE_API_URL}/employee/${employeeId}`);
   return response.data;
 };
 
