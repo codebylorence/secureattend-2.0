@@ -6,7 +6,6 @@ import { Op } from "sequelize";
 export const getPositions = async (req, res) => {
   try {
     const positions = await Position.findAll({
-      where: { status: "Active" },
       order: [['name', 'ASC']]
     });
 
@@ -80,7 +79,7 @@ export const addPosition = async (req, res) => {
 export const updatePosition = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, status } = req.body;
+    const { name, description } = req.body;
 
     const position = await Position.findByPk(id);
     if (!position) {
@@ -91,8 +90,7 @@ export const updatePosition = async (req, res) => {
 
     await position.update({
       name: name || position.name,
-      description: description !== undefined ? description : position.description,
-      status: status || position.status
+      description: description !== undefined ? description : position.description
     });
 
     // If position name changed, update all employees and registration requests with that position

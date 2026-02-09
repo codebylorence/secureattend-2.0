@@ -16,10 +16,6 @@ const Position = sequelize.define("Position", {
     type: DataTypes.TEXT,
     allowNull: true,
   },
-  status: {
-    type: DataTypes.ENUM("Active", "Inactive"),
-    defaultValue: "Active",
-  },
 });
 
 export default Position;
