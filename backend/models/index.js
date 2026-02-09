@@ -22,19 +22,19 @@ const syncDatabase = async () => {
     }
 
     if (!tablesExist) {
-      // First run: Create tables without foreign key constraints
+      // First run: Create tables
       console.log("🔄 Creating all database tables...");
       
-      // Sync with force:true but without foreign key constraints initially
       await sequelize.sync({ 
-        force: true,
-        hooks: false // Disable hooks during sync
+        force: false,
+        alter: true, // Alter tables to match models
+        hooks: false
       });
       
       console.log("✅ Tables created successfully (first run)");
     } else {
-      // Subsequent runs: Just sync without altering
-      await sequelize.sync({ alter: false });
+      // Subsequent runs: Alter tables to match models
+      await sequelize.sync({ alter: true });
       console.log("✅ Tables synchronized successfully");
     }
 
