@@ -24,7 +24,7 @@ const importData = async () => {
     console.log("✅ Connected to Render PostgreSQL database\n");
 
     // Read export file
-    const exportPath = path.join(process.cwd(), 'backend', 'scripts', 'render_import_data.json');
+    const exportPath = path.join(process.cwd(), 'scripts', 'render_import_data.json');
     if (!fs.existsSync(exportPath)) {
       console.error("❌ Export file not found!");
       console.error("   Please run: node backend/scripts/exportAllDataForRender.js first");
