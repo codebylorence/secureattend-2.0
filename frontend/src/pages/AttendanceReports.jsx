@@ -4,6 +4,7 @@ import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { useSystemConfig } from "../contexts/SystemConfigContext";
 import { useSocket } from "../context/SocketContext";
+import api from "../api/axiosConfig";
 
 export default function AttendanceReports() {
   const [reportType, setReportType] = useState("employee");
@@ -113,26 +114,14 @@ export default function AttendanceReports() {
     
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
       console.log("🔍 Fetching employees...");
-      const response = await fetch("/api/employees", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await api.get("/employees");
       
-      console.log("📡 Employee response status:", response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("📊 Employee data received:", data);
-        // The backend returns employees directly as an array, not wrapped in an object
-        setEmployees(Array.isArray(data) ? data : []);
-        console.log("✅ Employees set:", Array.isArray(data) ? data.length : 0, "employees");
-      } else {
-        console.error("❌ Failed to fetch employees:", response.status, response.statusText);
-      }
+      console.log("📡 Employee response received");
+      console.log("📊 Employee data received:", response.data);
+      // The backend returns employees directly as an array
+      setEmployees(Array.isArray(response.data) ? response.data : []);
+      console.log("✅ Employees set:", Array.isArray(response.data) ? response.data.length : 0, "employees");
     } catch (error) {
       console.error("❌ Error fetching employees:", error);
     } finally {
@@ -142,25 +131,13 @@ export default function AttendanceReports() {
 
   const fetchDepartments = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
       console.log("🔍 Fetching departments...");
-      const response = await fetch("/api/departments", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await api.get("/departments");
       
-      console.log("📡 Department response status:", response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("📊 Department data received:", data);
-        setDepartments(data || []);
-        console.log("✅ Departments set:", data?.length || 0, "departments");
-      } else {
-        console.error("❌ Failed to fetch departments:", response.status, response.statusText);
-      }
+      console.log("📡 Department response received");
+      console.log("📊 Department data received:", response.data);
+      setDepartments(response.data || []);
+      console.log("✅ Departments set:", response.data?.length || 0, "departments");
     } catch (error) {
       console.error("❌ Error fetching departments:", error);
     }
@@ -171,7 +148,6 @@ export default function AttendanceReports() {
     
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
       const params = new URLSearchParams();
       
       if (dateFilter.startDate) params.append("start_date", dateFilter.startDate);
@@ -180,24 +156,13 @@ export default function AttendanceReports() {
       
       console.log("🔍 Fetching attendance data with params:", params.toString());
       
-      const response = await fetch(`/api/attendances?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await api.get(`/attendances?${params.toString()}`);
       
-      console.log("📡 Attendance response status:", response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("📊 Attendance data received:", data);
-        // The backend returns attendance data directly as an array
-        setAttendanceData(Array.isArray(data) ? data : []);
-        console.log("✅ Attendance data set:", Array.isArray(data) ? data.length : 0, "records");
-      } else {
-        console.error("❌ Failed to fetch attendance data:", response.status, response.statusText);
-      }
+      console.log("📡 Attendance response received");
+      console.log("📊 Attendance data received:", response.data);
+      // The backend returns attendance data directly as an array
+      setAttendanceData(Array.isArray(response.data) ? response.data : []);
+      console.log("✅ Attendance data set:", Array.isArray(response.data) ? response.data.length : 0, "records");
     } catch (error) {
       console.error("❌ Error fetching attendance data:", error);
     } finally {

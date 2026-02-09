@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { updateEmployee } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
+import api from "../api/axiosConfig";
 import { toast } from 'react-toastify';
 import teamLeaderEventManager from "../utils/teamLeaderEvents";
 
@@ -62,21 +63,9 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
       const deptResponse = await fetchDepartments();
       setDepartments(deptResponse);
 
-      // Load positions
-      const posResponse = await fetch('http://localhost:5000/api/positions');
-      if (posResponse.ok) {
-        const posData = await posResponse.json();
-        setPositions(posData);
-      } else {
-        // Fallback positions
-        setPositions([
-          { id: 1, name: 'Picker' },
-          { id: 2, name: 'Packer' },
-          { id: 3, name: 'Inventory Clerk' },
-          { id: 4, name: 'Supervisor' },
-          { id: 5, name: 'Team Leader' }
-        ]);
-      }
+      // Load positions using axios instance (uses correct backend URL)
+      const posResponse = await api.get('/positions');
+      setPositions(posResponse.data);
     } catch (error) {
       console.error('Error loading data:', error);
       // Set empty arrays as fallback - let user know there was an error
@@ -88,7 +77,7 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
         { id: 4, name: 'Supervisor' },
         { id: 5, name: 'Team Leader' }
       ]);
-      toast.error("Failed to load departments. Please refresh the page.");
+      toast.error("Failed to load departments and positions. Using fallback data.");
     } finally {
       setLoading(false);
     }
