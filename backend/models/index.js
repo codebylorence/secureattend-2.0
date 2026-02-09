@@ -27,15 +27,13 @@ const syncDatabase = async () => {
       
       await sequelize.sync({ 
         force: false,
-        alter: true, // Alter tables to match models
         hooks: false
       });
       
       console.log("✅ Tables created successfully (first run)");
     } else {
-      // Subsequent runs: Alter tables to match models
-      await sequelize.sync({ alter: true });
-      console.log("✅ Tables synchronized successfully");
+      // Subsequent runs: Don't alter, just use existing tables
+      console.log("✅ Tables already synchronized");
     }
 
     //  Create default admin account if not existing
