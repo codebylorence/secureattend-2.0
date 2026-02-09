@@ -117,21 +117,13 @@ import { getBiometricSchedules } from "./controllers/scheduleTemplateController.
 app.get("/api/schedules/biometric", getBiometricSchedules);
 
 // --- DATABASE SYNC ---
-// Note: Database sync is handled by syncDatabase() function called below
-// For production PostgreSQL, use force: true on first deploy to create tables
-// After first deploy, change back to alter: false
-const syncOptions = process.env.DATABASE_URL 
-  ? { force: false, alter: true } // PostgreSQL: alter tables if needed
-  : { alter: false }; // MySQL: don't alter to prevent "Too many keys" error
-
-sequelize
-  .sync(syncOptions)
-  .then(() => console.log("✅ Database synced successfully"))
-  .catch((err) => console.error("❌ Database connection failed:", err));
+// Sync database before starting server
+// syncDatabase() handles both authentication and table creation
 
 // --- START SERVER ---
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, async () => {
+  // Sync database first
   await syncDatabase();
   
   console.log(`✅ Node.js Server running on port ${PORT}`);
