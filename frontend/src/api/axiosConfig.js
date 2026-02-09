@@ -1,7 +1,9 @@
 import axios from "axios";
 
-// Use environment variable for API URL, fallback to proxy in development
-const baseURL = import.meta.env.VITE_API_URL || "/api";
+// Use environment variable for API URL, fallback to Render backend
+const baseURL = import.meta.env.VITE_API_URL || "https://secureattend-2-0.onrender.com/api";
+
+console.log("🔧 API Base URL:", baseURL); // Debug log
 
 const api = axios.create({
   baseURL: baseURL,
