@@ -264,3 +264,5 @@ namespace BiometricEnrollmentApp.Services
                 return false;
             }
         }
+    }
+}
