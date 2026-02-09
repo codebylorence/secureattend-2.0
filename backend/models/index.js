@@ -84,15 +84,15 @@ const createDefaultAdmin = async () => {
 // Helper function to seed initial data
 const seedInitialData = async () => {
   try {
-    // Positions from your local database
+    // Warehouse positions
     const defaultPositions = [
-      { name: "Helper", description: "Assists with general warehouse tasks and supports daily operations" },
-      { name: "Picker", description: "Selects and prepares items for orders based on warehouse requests" },
-      { name: "Reach Truck Operator", description: "Operates reach truck equipment for pallet movement and storage" },
-      { name: "Receiving", description: "Manages incoming goods and verifies deliveries" },
-      { name: "Supervisor", description: "Manages departments and oversees overall warehouse operations" },
+      { name: "Helper", description: "Assists with general warehouse tasks and supports daily operations." },
+      { name: "Picker", description: "Picks items for order fulfillment" },
+      { name: "Reach Truck Operator", description: "Operates reach truck equipment for pallet movement and storage." },
+      { name: "Receiving", description: "Manages incoming goods and verifies deliveries." },
+      { name: "Supervisor", description: "Supervises and oversees team operations" },
       { name: "Team Leader", description: "Leads and manages team operations" },
-      { name: "Warehouse Admin", description: "Handles warehouse records, reports, and administrative support" }
+      { name: "Warehouse Admin", description: "Manages warehouse operations and logistics" }
     ];
 
     // Departments from your local database
