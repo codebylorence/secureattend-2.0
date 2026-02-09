@@ -5,6 +5,7 @@ import {
   updateEmployee,
   getEmployeeByEmployeeId
 } from "../services/employeeService.js";
+import Employee from "../models/employee.js";
 
 // GET /employees (for biometric app compatibility)
 export const getEmployeesForBiometric = async (req, res) => {
