@@ -10,12 +10,27 @@ namespace BiometricEnrollmentApp.Services
     public class ApiService
     {
         private readonly HttpClient _httpClient;
-        private readonly string _baseUrl;
+        private string _baseUrl;
+        private readonly SettingsService _settingsService;
 
-        public ApiService(string baseUrl = "http://localhost:5000")
+        public ApiService(string? baseUrl = null)
         {
             _httpClient = new HttpClient();
-            _baseUrl = baseUrl;
+            _settingsService = new SettingsService();
+            
+            // Use provided URL, or get from settings, or default to localhost
+            _baseUrl = baseUrl ?? _settingsService.GetApiBaseUrl();
+            
+            LogHelper.Write($"🌐 ApiService initialized with base URL: {_baseUrl}");
+        }
+
+        /// <summary>
+        /// Update the base URL for API calls (useful when changing settings)
+        /// </summary>
+        public void UpdateBaseUrl(string newUrl)
+        {
+            _baseUrl = newUrl.TrimEnd('/');
+            LogHelper.Write($"🔄 API base URL updated to: {_baseUrl}");
         }
 
         public async Task<EmployeeDetails?> GetEmployeeDetailsAsync(string employeeId)

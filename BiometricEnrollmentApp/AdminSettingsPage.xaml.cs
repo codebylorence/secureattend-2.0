@@ -41,6 +41,9 @@ namespace BiometricEnrollmentApp
                 ClockInGraceInput.Text = _settingsService.GetClockInGracePeriodMinutes().ToString();
                 ClockOutGraceInput.Text = _settingsService.GetClockOutGracePeriodMinutes().ToString();
                 
+                // Load API URL
+                ServerUrlTextBox.Text = _settingsService.GetApiBaseUrl();
+                
                 // Load clock-out confirmation setting
                 ClockOutConfirmationCheckBox.IsChecked = LoadClockOutConfirmationSetting();
             }
@@ -221,19 +224,50 @@ namespace BiometricEnrollmentApp
                 TestConnectionBtn.IsEnabled = false;
                 TestConnectionBtn.Content = "⏳ Testing...";
                 ConnectionStatusText.Text = "Testing connection...";
+                ConnectionStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gray);
 
-                // TODO: Test connection to server
-                await Task.Delay(1000); // Simulate connection test
+                // Get the URL from the textbox
+                string apiUrl = ServerUrlTextBox.Text.Trim().TrimEnd('/');
+                
+                if (string.IsNullOrWhiteSpace(apiUrl))
+                {
+                    ConnectionStatusText.Text = "❌ Please enter a valid URL";
+                    ConnectionStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+                    return;
+                }
 
-                ConnectionStatusText.Text = "✅ Connection successful";
-                ConnectionStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
-                MessageBox.Show("Server connection test successful.", "Connection Test", MessageBoxButton.OK, MessageBoxImage.Information);
+                // Test connection by trying to fetch employees
+                var testApiService = new ApiService(apiUrl);
+                var employees = await testApiService.GetAllEmployeesAsync();
+
+                if (employees != null && employees.Count >= 0)
+                {
+                    // Save the URL if connection is successful
+                    _settingsService.SetApiBaseUrl(apiUrl);
+                    _apiService.UpdateBaseUrl(apiUrl);
+                    
+                    ConnectionStatusText.Text = $"✅ Connected successfully ({employees.Count} employees found)";
+                    ConnectionStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Green);
+                    MessageBox.Show($"Server connection successful!\n\nFound {employees.Count} employees in the system.\n\nAPI URL has been saved.", 
+                                  "Connection Test", MessageBoxButton.OK, MessageBoxImage.Information);
+                    
+                    LogHelper.Write($"✅ API connection test successful: {apiUrl} ({employees.Count} employees)");
+                }
+                else
+                {
+                    ConnectionStatusText.Text = "❌ Connection failed - No response from server";
+                    ConnectionStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
+                    MessageBox.Show($"Could not connect to server at:\n{apiUrl}\n\nPlease check:\n• The URL is correct\n• The server is running\n• Your internet connection", 
+                                  "Connection Test", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
             }
             catch (Exception ex)
             {
                 ConnectionStatusText.Text = "❌ Connection failed";
                 ConnectionStatusText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Red);
-                MessageBox.Show($"Connection test error: {ex.Message}", "Connection Test", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Connection test error:\n{ex.Message}\n\nPlease verify the server URL and try again.", 
+                              "Connection Test", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogHelper.Write($"💥 API connection test failed: {ex.Message}");
             }
             finally
             {
