@@ -18,18 +18,14 @@ const syncDatabase = async () => {
       console.log("📊 Database tables don't exist yet, will create them");
     }
 
-    // Use alter: true for PostgreSQL to create/update tables
-    // Use force: true ONLY if tables don't exist (first run)
-    // Use alter: false for MySQL to prevent key conflicts
-    const syncOptions = process.env.DATABASE_URL 
-      ? { force: !tablesExist, alter: !tablesExist } // PostgreSQL: force create on first run, then alter
-      : { alter: false }; // MySQL: don't alter
-
-    await sequelize.sync(syncOptions);
-    
     if (!tablesExist) {
+      // First run: Force create all tables
+      console.log("🔄 Creating all database tables...");
+      await sequelize.sync({ force: true });
       console.log("✅ Tables created successfully (first run)");
     } else {
+      // Subsequent runs: Just sync without altering
+      await sequelize.sync({ alter: false });
       console.log("✅ Tables synchronized successfully");
     }
 
@@ -37,7 +33,8 @@ const syncDatabase = async () => {
     await createDefaultAdmin();
 
   } catch (error) {
-    console.error("❌ Database connection error:", error);
+    console.error("❌ Database sync error:", error.message);
+    throw error; // Re-throw to prevent server from starting
   }
 };
 
