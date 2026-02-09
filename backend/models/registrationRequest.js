@@ -68,10 +68,7 @@ const RegistrationRequest = sequelize.define("RegistrationRequest", {
   approved_by: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    references: {
-      model: "users",
-      key: "id",
-    },
+    // Foreign key reference removed - will be added via associations
   },
   approved_at: {
     type: DataTypes.DATE,
