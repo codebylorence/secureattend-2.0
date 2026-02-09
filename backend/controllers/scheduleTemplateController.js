@@ -63,7 +63,21 @@ export const getTemplate = async (req, res) => {
 // POST /api/templates
 export const addTemplate = async (req, res) => {
   try {
+    console.log("📝 Creating template with data:", {
+      department: req.body.department,
+      shift_name: req.body.shift_name,
+      specific_date: req.body.specific_date,
+      created_by: req.body.created_by
+    });
+    
     const template = await createTemplate(req.body);
+    
+    console.log("✅ Template created successfully:", {
+      id: template.id,
+      department: template.department,
+      shift_name: template.shift_name,
+      assigned_employees: template.assigned_employees ? 'Has assignments' : 'No assignments yet'
+    });
     
     // Emit real-time update
     const io = req.app.get('io');
@@ -73,7 +87,7 @@ export const addTemplate = async (req, res) => {
     
     res.status(201).json(template);
   } catch (error) {
-    console.error("Error creating template:", error);
+    console.error("❌ Error creating template:", error);
     res.status(500).json({ message: "Error creating template" });
   }
 };
