@@ -306,6 +306,49 @@ export const getFingerprintStatus = async (req, res) => {
   }
 };
 
+// PUT /api/employees/:employeeId/fingerprint - Update fingerprint enrollment status
+export const updateFingerprintStatus = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { has_fingerprint } = req.body;
+
+    console.log(`📝 Updating fingerprint status for ${employeeId}: ${has_fingerprint}`);
+
+    // Find employee
+    const employee = await Employee.findOne({ where: { employee_id: employeeId } });
+    
+    if (!employee) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `Employee ${employeeId} not found` 
+      });
+    }
+
+    // Update has_fingerprint field
+    await employee.update({ has_fingerprint });
+
+    console.log(`✅ Updated ${employeeId} has_fingerprint to ${has_fingerprint}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Fingerprint status updated for ${employeeId}`,
+      employee: {
+        employee_id: employee.employee_id,
+        firstname: employee.firstname,
+        lastname: employee.lastname,
+        has_fingerprint: employee.has_fingerprint
+      }
+    });
+  } catch (error) {
+    console.error("❌ Error updating fingerprint status:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to update fingerprint status",
+      error: error.message 
+    });
+  }
+};
+
 // Test endpoint to verify user creation
 export const testUserCreation = async (req, res) => {
   try {

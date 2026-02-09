@@ -543,11 +543,15 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                using var client = new HttpClient();
-                client.Timeout = TimeSpan.FromSeconds(10);
-                string url = "http://localhost:5000/employees/biometric"; // Use specific biometric endpoint
+                // Get API URL from settings
+                var settingsService = new SettingsService();
+                string baseUrl = settingsService.GetApiBaseUrl();
+                string url = $"{baseUrl}/employees/biometric";
                 
                 LogHelper.Write($"🔍 Attempting to load employees from: {url}");
+                
+                using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(10);
                 
                 var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
                 if (employees != null && employees.Count > 0)
@@ -581,7 +585,7 @@ namespace BiometricEnrollmentApp
                 // Show user-friendly message
                 Dispatcher.Invoke(() => 
                 {
-                    StatusText.Text = "⚠️ Cannot connect to server. Check network connection.";
+                    StatusText.Text = "⚠️ Cannot connect to server. Check API URL in Admin Settings.";
                 });
             }
             catch (Exception ex)
@@ -731,9 +735,13 @@ namespace BiometricEnrollmentApp
 
                 try
                 {
+                    // Get API URL from settings
+                    var settingsService = new SettingsService();
+                    string baseUrl = settingsService.GetApiBaseUrl();
+                    
                     using var client = new HttpClient();
                     client.Timeout = TimeSpan.FromSeconds(10);
-                    string url = $"http://localhost:5000/employees/{empId}";
+                    string url = $"{baseUrl}/employees/{empId}";
                     LogHelper.Write($"🔥 Fetching from URL: {url}");
                     
                     var response = await client.GetAsync(url);
@@ -902,6 +910,18 @@ namespace BiometricEnrollmentApp
                             Dispatcher.Invoke(() => StatusText.Text = $"✅ {action} successfully for {empId} (row {rowId})");
                             LogHelper.Write($"{action} for {empId} ({name}, {department}) -> row {rowId}");
                             
+                            // Update backend to mark employee as having fingerprint
+                            try
+                            {
+                                await UpdateEmployeeFingerprintStatusAsync(empId, true);
+                                LogHelper.Write($"✅ Updated backend: {empId} has_fingerprint = true");
+                            }
+                            catch (Exception ex)
+                            {
+                                LogHelper.Write($"⚠️ Failed to update backend fingerprint status: {ex.Message}");
+                                // Don't fail the enrollment if backend update fails
+                            }
+                            
                             // Refresh the enrollment records grid on UI thread
                             Dispatcher.Invoke(() => RefreshEnrollmentRecords());
                         }
@@ -962,13 +982,17 @@ namespace BiometricEnrollmentApp
         {
             try
             {
+                // Get API URL from settings
+                var settingsService = new SettingsService();
+                string baseUrl = settingsService.GetApiBaseUrl();
+                
                 using var client = new HttpClient();
-                string url = "http://localhost:5000/employees";
+                string url = $"{baseUrl}/employees";
                 var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
                 if (employees == null || employees.Count == 0) return;
 
                 var apiIds = employees.Select(e => e.employeeId).ToHashSet();
-                var local = _data_service_get().GetAllEnrollments();
+                var local = _dataService.GetAllEnrollments();
                 var missing = local.Where(l => !apiIds.Contains(l.EmployeeId)).Select(l => l.EmployeeId).ToList();
                 if (missing.Count > 0)
                 {
@@ -990,9 +1014,13 @@ namespace BiometricEnrollmentApp
         {
             try
             {
+                // Get API URL from settings
+                var settingsService = new SettingsService();
+                string baseUrl = settingsService.GetApiBaseUrl();
+                
                 using var client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(10); // 10 second timeout
-                string url = "http://localhost:5000/employees";
+                string url = $"{baseUrl}/employees";
                 
                 // Try to fetch employees from server
                 var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
@@ -1111,6 +1139,38 @@ namespace BiometricEnrollmentApp
             {
                 LogHelper.Write($"💥 _data_service_save_enrollment error: {ex.Message}");
                 return -1;
+            }
+        }
+
+        /// <summary>
+        /// Updates the backend to mark an employee as having (or not having) a fingerprint enrolled
+        /// </summary>
+        private async Task UpdateEmployeeFingerprintStatusAsync(string employeeId, bool hasFingerprint)
+        {
+            try
+            {
+                // Get API URL from settings
+                var settingsService = new SettingsService();
+                string baseUrl = settingsService.GetApiBaseUrl();
+                
+                using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(10);
+                
+                var payload = new { has_fingerprint = hasFingerprint };
+                string url = $"{baseUrl}/employees/{employeeId}/fingerprint";
+                
+                var response = await client.PutAsJsonAsync(url, payload);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    LogHelper.Write($"⚠️ Backend update failed ({response.StatusCode}): {errorContent}");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Error updating backend fingerprint status: {ex.Message}");
+                throw; // Re-throw so caller can handle
             }
         }
 

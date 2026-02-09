@@ -2057,9 +2057,13 @@ namespace BiometricEnrollmentApp
         {
             try
             {
+                // Get API URL from settings
+                var settingsService = new SettingsService();
+                string baseUrl = settingsService.GetApiBaseUrl();
+                
                 using var client = new System.Net.Http.HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(10);
-                string url = "http://localhost:5000/employees";
+                string url = $"{baseUrl}/employees";
                 
                 var employees = await client.GetFromJsonAsync<List<EmployeeDto>>(url);
 

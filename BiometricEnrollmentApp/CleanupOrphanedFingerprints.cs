@@ -19,6 +19,7 @@ namespace BiometricEnrollmentApp
             Console.WriteLine("=== Fingerprint Cleanup Utility ===\n");
             
             var dataService = new DataService();
+            var settingsService = new SettingsService();
             
             try
             {
@@ -26,12 +27,15 @@ namespace BiometricEnrollmentApp
                 var localEnrollments = dataService.GetAllEnrollments();
                 Console.WriteLine($"📋 Found {localEnrollments.Count} fingerprint records in local database\n");
                 
+                // Get API URL from settings
+                string baseUrl = settingsService.GetApiBaseUrl();
+                Console.WriteLine($"🌐 Connecting to server: {baseUrl}...");
+                
                 // Fetch employees from server
-                Console.WriteLine("🌐 Connecting to server...");
                 using var client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(10);
                 
-                var employees = await client.GetFromJsonAsync<List<EmployeeDto>>("http://localhost:5000/employees");
+                var employees = await client.GetFromJsonAsync<List<EmployeeDto>>($"{baseUrl}/employees");
                 
                 if (employees == null || employees.Count == 0)
                 {
@@ -86,10 +90,11 @@ namespace BiometricEnrollmentApp
                 Console.WriteLine($"\n✅ Cleanup complete! Deleted {deleted} of {orphaned.Count} record(s).");
                 Console.WriteLine("\n💡 Tip: Restart the biometric app to reload templates.");
             }
-            catch (HttpRequestException)
+            catch (HttpRequestException ex)
             {
-                Console.WriteLine("❌ Cannot connect to server at http://localhost:5000");
-                Console.WriteLine("   Make sure the backend server is running (node server.js)");
+                Console.WriteLine($"❌ Cannot connect to server: {ex.Message}");
+                Console.WriteLine($"   Current API URL: {settingsService.GetApiBaseUrl()}");
+                Console.WriteLine("   Configure the API URL in Admin Settings of the biometric app.");
             }
             catch (Exception ex)
             {
