@@ -19,9 +19,13 @@ const syncDatabase = async () => {
     }
 
     if (!tablesExist) {
-      // First run: Force create all tables
+      // First run: Drop all tables if any exist, then create fresh
+      console.log("🔄 Dropping any existing tables...");
+      await sequelize.drop({ cascade: true });
+      console.log("✅ Existing tables dropped");
+      
       console.log("🔄 Creating all database tables...");
-      await sequelize.sync({ force: true });
+      await sequelize.sync({ force: false, alter: false });
       console.log("✅ Tables created successfully (first run)");
     } else {
       // Subsequent runs: Just sync without altering
@@ -34,6 +38,7 @@ const syncDatabase = async () => {
 
   } catch (error) {
     console.error("❌ Database sync error:", error.message);
+    console.error("Full error:", error);
     throw error; // Re-throw to prevent server from starting
   }
 };
