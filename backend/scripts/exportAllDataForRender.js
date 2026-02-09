@@ -141,7 +141,7 @@ const exportAllData = async () => {
     };
 
     // Save to file
-    const exportPath = path.join(process.cwd(), 'backend', 'scripts', 'render_import_data.json');
+    const exportPath = path.join(process.cwd(), 'scripts', 'render_import_data.json');
     fs.writeFileSync(exportPath, JSON.stringify(exportData, null, 2));
     
     console.log("\n✅ Data exported successfully!");
