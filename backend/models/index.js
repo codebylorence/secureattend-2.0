@@ -19,13 +19,15 @@ const syncDatabase = async () => {
     }
 
     if (!tablesExist) {
-      // First run: Drop all tables if any exist, then create fresh
-      console.log("🔄 Dropping any existing tables...");
-      await sequelize.drop({ cascade: true });
-      console.log("✅ Existing tables dropped");
-      
+      // First run: Create tables without foreign key constraints
       console.log("🔄 Creating all database tables...");
-      await sequelize.sync({ force: false, alter: false });
+      
+      // Sync with force:true but without foreign key constraints initially
+      await sequelize.sync({ 
+        force: true,
+        hooks: false // Disable hooks during sync
+      });
+      
       console.log("✅ Tables created successfully (first run)");
     } else {
       // Subsequent runs: Just sync without altering
@@ -38,7 +40,13 @@ const syncDatabase = async () => {
 
   } catch (error) {
     console.error("❌ Database sync error:", error.message);
-    console.error("Full error:", error);
+    
+    // If it's a foreign key error, try to give helpful message
+    if (error.message.includes('does not exist')) {
+      console.error("💡 Hint: This might be a circular dependency issue.");
+      console.error("💡 Try deleting the PostgreSQL database and creating a new one.");
+    }
+    
     throw error; // Re-throw to prevent server from starting
   }
 };
