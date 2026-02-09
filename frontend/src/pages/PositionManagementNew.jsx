@@ -10,6 +10,7 @@ import {
   FaUsers
 } from 'react-icons/fa';
 import ConfirmationModal from '../components/ConfirmationModal';
+import api from '../api/axiosConfig';
 
 export default function PositionManagementNew() {
   const [positions, setPositions] = useState([]);
@@ -35,39 +36,25 @@ export default function PositionManagementNew() {
       const token = localStorage.getItem('token');
       console.log('🔍 Fetching positions with token:', token ? 'Token exists' : 'No token');
       
-      // Try admin endpoint first
-      let response = await fetch('http://localhost:5000/api/positions/all', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      console.log('📊 Admin endpoint response status:', response.status);
-
-      // If admin endpoint fails due to auth, try public endpoint
-      if (!response.ok && (response.status === 401 || response.status === 403)) {
-        console.log('⚠️ Admin access denied, trying public endpoint...');
-        response = await fetch('http://localhost:5000/api/positions', {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        console.log('📊 Public endpoint response status:', response.status);
-      }
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Positions fetched:', data.length, 'positions');
-        setPositions(data);
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('❌ Failed to fetch positions:', response.status, errorData);
-        toast.error(errorData.message || errorData.error || 'Failed to fetch positions');
+      // Try admin endpoint first (axios will add auth header automatically)
+      try {
+        const response = await api.get('/positions/all');
+        console.log('✅ Positions fetched from admin endpoint:', response.data.length, 'positions');
+        setPositions(response.data);
+      } catch (adminError) {
+        // If admin endpoint fails due to auth, try public endpoint
+        if (adminError.response?.status === 401 || adminError.response?.status === 403) {
+          console.log('⚠️ Admin access denied, trying public endpoint...');
+          const response = await api.get('/positions');
+          console.log('✅ Positions fetched from public endpoint:', response.data.length, 'positions');
+          setPositions(response.data);
+        } else {
+          throw adminError;
+        }
       }
     } catch (error) {
       console.error('💥 Error fetching positions:', error);
-      toast.error('Error loading positions: ' + error.message);
+      toast.error('Error loading positions: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
@@ -90,33 +77,18 @@ export default function PositionManagementNew() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/positions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
-        const newPosition = await response.json();
-        setPositions(prev => [...prev, { ...newPosition, employeeCount: 0 }]);
-        setShowAddModal(false);
-        setFormData({ name: '', description: '' });
-        toast.success('Position added successfully!');
-      } else {
-        const data = await response.json();
-        if (response.status === 401 || response.status === 403) {
-          toast.error('You need admin access to add positions');
-        } else {
-          toast.error(data.message || data.error || 'Failed to add position');
-        }
-      }
+      const response = await api.post('/positions', formData);
+      setPositions(prev => [...prev, { ...response.data, employeeCount: 0 }]);
+      setShowAddModal(false);
+      setFormData({ name: '', description: '' });
+      toast.success('Position added successfully!');
     } catch (error) {
       console.error('Error adding position:', error);
-      toast.error('Network error. Please try again.');
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        toast.error('You need admin access to add positions');
+      } else {
+        toast.error(error.response?.data?.message || error.response?.data?.error || 'Failed to add position');
+      }
     }
   };
 
@@ -129,33 +101,18 @@ export default function PositionManagementNew() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/positions/${editingPosition.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
-        const updatedPosition = await response.json();
-        setPositions(prev => prev.map(pos => 
-          pos.id === editingPosition.id 
-            ? { ...updatedPosition, employeeCount: pos.employeeCount }
-            : pos
-        ));
-        setEditingPosition(null);
-        setFormData({ name: '', description: '' });
-        toast.success('Position updated successfully!');
-      } else {
-        const data = await response.json();
-        toast.error(data.error || 'Failed to update position');
-      }
+      const response = await api.put(`/positions/${editingPosition.id}`, formData);
+      setPositions(prev => prev.map(pos => 
+        pos.id === editingPosition.id 
+          ? { ...response.data, employeeCount: pos.employeeCount }
+          : pos
+      ));
+      setEditingPosition(null);
+      setFormData({ name: '', description: '' });
+      toast.success('Position updated successfully!');
     } catch (error) {
       console.error('Error updating position:', error);
-      toast.error('Network error. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to update position');
     }
   };
 
@@ -174,27 +131,14 @@ export default function PositionManagementNew() {
 
     setDeleteLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/positions/${positionToDelete.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        setPositions(prev => prev.filter(pos => pos.id !== positionToDelete.id));
-        toast.success('Position deleted successfully!');
-        setShowDeleteModal(false);
-        setPositionToDelete(null);
-      } else {
-        const data = await response.json();
-        toast.error(data.error || 'Failed to delete position');
-      }
+      await api.delete(`/positions/${positionToDelete.id}`);
+      setPositions(prev => prev.filter(pos => pos.id !== positionToDelete.id));
+      toast.success('Position deleted successfully!');
+      setShowDeleteModal(false);
+      setPositionToDelete(null);
     } catch (error) {
       console.error('Error deleting position:', error);
-      toast.error('Network error. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to delete position');
     } finally {
       setDeleteLoading(false);
     }

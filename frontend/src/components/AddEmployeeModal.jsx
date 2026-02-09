@@ -4,6 +4,7 @@ import { addEmployee, fetchEmployees } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
 import { toast } from 'react-toastify';
 import teamLeaderEventManager from "../utils/teamLeaderEvents";
+import api from "../api/axiosConfig";
 
 export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   const [formData, setFormData] = useState({
@@ -69,21 +70,8 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
   const loadPositions = async () => {
     try {
       setPositionsLoading(true);
-      const response = await fetch('http://localhost:5000/api/positions');
-      if (response.ok) {
-        const data = await response.json();
-        setPositions(data);
-      } else {
-        console.error('Failed to fetch positions');
-        // Fallback to default positions if API fails
-        setPositions([
-          { id: 1, name: 'Picker' },
-          { id: 2, name: 'Packer' },
-          { id: 3, name: 'Inventory Clerk' },
-          { id: 4, name: 'Supervisor' },
-          { id: 5, name: 'Team Leader' }
-        ]);
-      }
+      const response = await api.get('/positions');
+      setPositions(response.data);
     } catch (error) {
       console.error('Error fetching positions:', error);
       // Fallback to default positions if network fails

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useSystemConfig } from '../contexts/SystemConfigContext';
+import api from '../api/axiosConfig';
 import { 
   FaUser, 
   FaCamera,
@@ -41,25 +42,8 @@ export default function EmployeeRegistration() {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/departments');
-      if (response.ok) {
-        const data = await response.json();
-        setDepartments(data);
-      } else {
-        console.error('Failed to fetch departments');
-        toast.error('Failed to load departments');
-        // Fallback to default departments if API fails
-        setDepartments([
-          { id: 1, name: 'Human Resources' },
-          { id: 2, name: 'Information Technology' },
-          { id: 3, name: 'Finance' },
-          { id: 4, name: 'Marketing' },
-          { id: 5, name: 'Operations' },
-          { id: 6, name: 'Sales' },
-          { id: 7, name: 'Customer Service' },
-          { id: 8, name: 'Administration' }
-        ]);
-      }
+      const response = await api.get('/departments');
+      setDepartments(response.data);
     } catch (error) {
       console.error('Error fetching departments:', error);
       toast.error('Error loading departments');
@@ -81,29 +65,8 @@ export default function EmployeeRegistration() {
 
   const fetchPositions = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/positions');
-      if (response.ok) {
-        const data = await response.json();
-        setPositions(data);
-      } else {
-        console.error('Failed to fetch positions');
-        toast.error('Failed to load positions');
-        // Fallback to default positions if API fails
-        setPositions([
-          { id: 1, name: 'Software Developer' },
-          { id: 2, name: 'Project Manager' },
-          { id: 3, name: 'Business Analyst' },
-          { id: 4, name: 'Quality Assurance' },
-          { id: 5, name: 'System Administrator' },
-          { id: 6, name: 'HR Specialist' },
-          { id: 7, name: 'Accountant' },
-          { id: 8, name: 'Marketing Specialist' },
-          { id: 9, name: 'Team Leader' },
-          { id: 10, name: 'Supervisor' },
-          { id: 11, name: 'Admin' },
-          { id: 12, name: 'Manager' }
-        ]);
-      }
+      const response = await api.get('/positions');
+      setPositions(response.data);
     } catch (error) {
       console.error('Error fetching positions:', error);
       toast.error('Error loading positions');
@@ -286,61 +249,48 @@ export default function EmployeeRegistration() {
     setMessage({ type: '', text: '' });
 
     try {
-      const response = await fetch('http://localhost:5000/api/registration/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          employee_id: formData.employee_id,
-          firstname: formData.firstname,
-          lastname: formData.lastname,
-          department: formData.department || null, // Allow null for supervisors/admins
-          position: formData.position,
-          contact_number: formData.contact_number,
-          email: formData.email,
-          username: formData.username,
-          password: formData.password,
-          photo: formData.photo,
-          role: getRoleFromPosition(formData.position) // Derive role from position
-        }),
+      const response = await api.post('/registration/register', {
+        employee_id: formData.employee_id,
+        firstname: formData.firstname,
+        lastname: formData.lastname,
+        department: formData.department || null, // Allow null for supervisors/admins
+        position: formData.position,
+        contact_number: formData.contact_number,
+        email: formData.email,
+        username: formData.username,
+        password: formData.password,
+        photo: formData.photo,
+        role: getRoleFromPosition(formData.position) // Derive role from position
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        toast.success('🎉 Registration request submitted successfully! Please wait for admin approval.');
-        
-        const currentEmployeeId = formData.employee_id; // Store before reset
-        
-        // Reset form
-        setFormData({
-          employee_id: 'TSI',
-          firstname: '',
-          lastname: '',
-          department: '',
-          position: '',
-          contact_number: '',
-          email: '',
-          username: '',
-          password: '',
-          confirmPassword: '',
-          photo: null
-        });
-        setPhotoPreview(null);
-        
-        // Redirect to status check page after 2 seconds
-        setTimeout(() => {
-          navigate(`/registration-status/${currentEmployeeId}`);
-        }, 2000);
-      } else {
-        console.error('Registration failed:', data);
-        toast.error(`❌ ${data.message || 'Registration failed'}`);
-      }
+      toast.success('🎉 Registration request submitted successfully! Please wait for admin approval.');
+      
+      const currentEmployeeId = formData.employee_id; // Store before reset
+      
+      // Reset form
+      setFormData({
+        employee_id: 'TSI',
+        firstname: '',
+        lastname: '',
+        department: '',
+        position: '',
+        contact_number: '',
+        email: '',
+        username: '',
+        password: '',
+        confirmPassword: '',
+        photo: null
+      });
+      setPhotoPreview(null);
+      
+      // Redirect to status check page after 2 seconds
+      setTimeout(() => {
+        navigate(`/registration-status/${currentEmployeeId}`);
+      }, 2000);
     } catch (error) {
       console.error('Registration error:', error);
       console.error('Error details:', error.response?.data || error.message);
-      toast.error(`🌐 Network error: ${error.response?.data?.message || error.message || 'Please try again.'}`);
+      toast.error(`❌ ${error.response?.data?.message || 'Registration failed'}`);
     } finally {
       setLoading(false);
     }

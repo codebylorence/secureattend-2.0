@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
+import api from '../api/axiosConfig';
 import { 
   FaUser, 
   FaCheck,
@@ -22,20 +23,8 @@ export default function RegistrationRequests() {
 
   const fetchPendingRequests = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/registration/pending', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setRequests(data);
-      } else {
-        console.error('Failed to fetch pending requests');
-      }
+      const response = await api.get('/registration/pending');
+      setRequests(response.data);
     } catch (error) {
       console.error('Error fetching requests:', error);
     } finally {
@@ -48,28 +37,15 @@ export default function RegistrationRequests() {
     
     setActionLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/registration/approve/${selectedRequest.id}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        // Remove approved request from list
-        setRequests(prev => prev.filter(req => req.id !== selectedRequest.id));
-        setShowApprovalModal(false);
-        setSelectedRequest(null);
-        toast.success('Registration request approved successfully!');
-      } else {
-        const data = await response.json();
-        toast.error(`Failed to approve request: ${data.message}`);
-      }
+      await api.post(`/registration/approve/${selectedRequest.id}`);
+      // Remove approved request from list
+      setRequests(prev => prev.filter(req => req.id !== selectedRequest.id));
+      setShowApprovalModal(false);
+      setSelectedRequest(null);
+      toast.success('Registration request approved successfully!');
     } catch (error) {
       console.error('Error approving request:', error);
-      toast.error('Network error. Please try again.');
+      toast.error(`Failed to approve request: ${error.response?.data?.message || error.message}`);
     } finally {
       setActionLoading(false);
     }
@@ -83,32 +59,18 @@ export default function RegistrationRequests() {
 
     setActionLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/registration/reject/${selectedRequest.id}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          rejection_reason: rejectionReason
-        }),
+      await api.post(`/registration/reject/${selectedRequest.id}`, {
+        rejection_reason: rejectionReason
       });
-
-      if (response.ok) {
-        // Remove rejected request from list
-        setRequests(prev => prev.filter(req => req.id !== selectedRequest.id));
-        setShowModal(false);
-        setSelectedRequest(null);
-        setRejectionReason('');
-        toast.success('Registration request rejected successfully!');
-      } else {
-        const data = await response.json();
-        toast.error(`Failed to reject request: ${data.message}`);
-      }
+      // Remove rejected request from list
+      setRequests(prev => prev.filter(req => req.id !== selectedRequest.id));
+      setShowModal(false);
+      setSelectedRequest(null);
+      setRejectionReason('');
+      toast.success('Registration request rejected successfully!');
     } catch (error) {
       console.error('Error rejecting request:', error);
-      toast.error('Network error. Please try again.');
+      toast.error(`Failed to reject request: ${error.response?.data?.message || error.message}`);
     } finally {
       setActionLoading(false);
     }
