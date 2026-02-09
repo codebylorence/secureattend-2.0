@@ -268,6 +268,9 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
   console.log(`🎯 Starting assignment process for template ${templateId} (${template.department} - ${template.shift_name})`);
   console.log(`📋 Original employee IDs to assign:`, employeeIds);
   
+  // TEMPORARILY DISABLED: Fingerprint validation
+  // This was blocking all assignments. Re-enable later with proper logic for management roles.
+  /*
   // Validate that all employees have fingerprints enrolled before proceeding
   console.log("🔍 Checking fingerprint status for all employees...");
   const fingerprintValidation = await Promise.all(
@@ -287,6 +290,9 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
   }
   
   console.log(`✅ All employees have fingerprints enrolled, proceeding with assignment...`);
+  */
+  
+  console.log(`✅ Proceeding with assignment (fingerprint validation temporarily disabled)...`);
   
   // Get existing assignments
   let existingAssignments = [];

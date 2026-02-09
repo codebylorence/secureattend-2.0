@@ -165,6 +165,15 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
         emp.position.toLowerCase().includes(searchLower)
       );
     });
+  
+  // Debug logging
+  console.log('👥 Total employees loaded:', employees.length);
+  console.log('🔍 Management employees (before search filter):', 
+    employees.filter(emp => emp.position === 'Supervisor' || emp.position === 'Warehouse Admin' || emp.position === 'Warehouse Manager')
+      .map(emp => `${emp.firstname} ${emp.lastname} (${emp.employee_id}) - ${emp.position}`)
+  );
+  console.log('📋 Filtered management employees:', filteredManagementEmployees.length);
+  console.log('👆 Fingerprint status:', fingerprintStatus);
 
   const dateStr = selectedDate ? formatDateForAPI(selectedDate) : "";
   const dayName = selectedDate ? getDayName(selectedDate) : "";
