@@ -39,12 +39,24 @@ const exportAllData = async () => {
     console.log(`📊 Found ${attendances.length} attendance records (last 30 days)`);
 
     // Export Employee Schedules
-    const [schedules] = await sequelize.query("SELECT * FROM EmployeeSchedules ORDER BY id");
-    console.log(`📅 Found ${schedules.length} employee schedules`);
+    let schedules = [];
+    try {
+      const [schedulesData] = await sequelize.query("SELECT * FROM EmployeeSchedules ORDER BY id");
+      schedules = schedulesData;
+      console.log(`📅 Found ${schedules.length} employee schedules`);
+    } catch (error) {
+      console.log(`⚠️  EmployeeSchedules table not found - skipping`);
+    }
 
     // Export Schedule Templates
-    const [templates] = await sequelize.query("SELECT * FROM ScheduleTemplates ORDER BY id");
-    console.log(`📝 Found ${templates.length} schedule templates`);
+    let templates = [];
+    try {
+      const [templatesData] = await sequelize.query("SELECT * FROM ScheduleTemplates ORDER BY id");
+      templates = templatesData;
+      console.log(`📝 Found ${templates.length} schedule templates`);
+    } catch (error) {
+      console.log(`⚠️  ScheduleTemplates table not found - skipping`);
+    }
 
     // Prepare export data
     const exportData = {
