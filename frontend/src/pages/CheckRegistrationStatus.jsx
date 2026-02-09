@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useSystemConfig } from '../contexts/SystemConfigContext';
 import { FaSearch, FaArrowLeft, FaFingerprint } from 'react-icons/fa';
+import api from '../api/axiosConfig';
 
 export default function CheckRegistrationStatus() {
   const navigate = useNavigate();
@@ -21,19 +22,16 @@ export default function CheckRegistrationStatus() {
     setLoading(true);
 
     try {
-      const response = await fetch(`http://localhost:5000/api/registration/status/${employeeId}`);
-      
-      if (response.ok) {
-        // Redirect to status page
-        navigate(`/registration-status/${employeeId}`);
-      } else if (response.status === 404) {
+      const response = await api.get(`/registration/status/${employeeId}`);
+      // Redirect to status page
+      navigate(`/registration-status/${employeeId}`);
+    } catch (error) {
+      console.error('Error checking status:', error);
+      if (error.response?.status === 404) {
         toast.error('No registration request found for this Employee ID');
       } else {
         toast.error('Failed to check registration status');
       }
-    } catch (error) {
-      console.error('Error checking status:', error);
-      toast.error('Network error. Please try again.');
     } finally {
       setLoading(false);
     }

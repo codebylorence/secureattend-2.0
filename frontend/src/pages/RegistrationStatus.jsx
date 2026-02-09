@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSystemConfig } from '../contexts/SystemConfigContext';
+import api from '../api/axiosConfig';
 import { 
   FaCheckCircle, 
   FaTimesCircle, 
@@ -25,19 +26,15 @@ export default function RegistrationStatus() {
 
   const fetchRegistrationStatus = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/registration/status/${employee_id}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setStatus(data);
-      } else if (response.status === 404) {
+      const response = await api.get(`/registration/status/${employee_id}`);
+      setStatus(response.data);
+    } catch (error) {
+      console.error('Error fetching status:', error);
+      if (error.response?.status === 404) {
         setError('Registration request not found');
       } else {
         setError('Failed to fetch registration status');
       }
-    } catch (error) {
-      console.error('Error fetching status:', error);
-      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
