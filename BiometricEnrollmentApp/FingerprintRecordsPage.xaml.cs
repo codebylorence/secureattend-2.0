@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Net.Http.Json;
 using System.Windows;
 using System.Windows.Controls;
 using BiometricEnrollmentApp.Services;
@@ -89,7 +90,7 @@ namespace BiometricEnrollmentApp
             StartEnrollmentBtn.Content = "Start Enrollment";
         }
 
-        private void DeleteSelectedBtn_Click(object sender, RoutedEventArgs e)
+        private async void DeleteSelectedBtn_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -108,6 +109,35 @@ namespace BiometricEnrollmentApp
                     string employeeId = selectedRecord.EmployeeId;
                     
                     _dataService.DeleteEnrollment(employeeId);
+                    
+                    // Update backend to mark employee as NOT having fingerprint
+                    try
+                    {
+                        var settingsService = new SettingsService();
+                        string baseUrl = settingsService.GetApiBaseUrl();
+                        
+                        using var client = new System.Net.Http.HttpClient();
+                        client.Timeout = TimeSpan.FromSeconds(10);
+                        
+                        var payload = new { has_fingerprint = false };
+                        string url = $"{baseUrl}/employees/{employeeId}/fingerprint";
+                        
+                        var response = await client.PutAsJsonAsync(url, payload);
+                        
+                        if (response.IsSuccessStatusCode)
+                        {
+                            LogHelper.Write($"✅ Updated backend: {employeeId} has_fingerprint = false");
+                        }
+                        else
+                        {
+                            LogHelper.Write($"⚠️ Backend update failed ({response.StatusCode})");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"⚠️ Failed to update backend fingerprint status: {ex.Message}");
+                        // Don't fail the deletion if backend update fails
+                    }
                     
                     MessageBox.Show($"Fingerprint record for {employeeId} has been deleted.", 
                                   "Delete Successful", MessageBoxButton.OK, MessageBoxImage.Information);
