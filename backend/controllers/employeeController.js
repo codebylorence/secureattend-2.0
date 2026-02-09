@@ -256,52 +256,34 @@ export const uploadPhoto = async (req, res) => {
 };
 
 // GET /api/employees/fingerprint-status
+// Returns fingerprint enrollment status from PostgreSQL database (not local SQLite)
 export const getFingerprintStatus = async (req, res) => {
   try {
-    const sqlite3 = await import('sqlite3');
-    const { open } = await import('sqlite');
+    console.log('📊 Getting fingerprint status from PostgreSQL...');
     
-    // Path to biometric app's local database (go up one level from backend folder)
-    const dbPath = process.env.BIOMETRIC_DB_PATH || '../BiometricEnrollmentApp/bin/Debug/net9.0-windows/biometric_local.db';
-    
-    console.log('📂 Attempting to open biometric database at:', dbPath);
-    
-    // Open connection to biometric database
-    const db = await open({
-      filename: dbPath,
-      driver: sqlite3.default.Database
+    // Get all employees with their has_fingerprint status
+    const employees = await Employee.findAll({
+      attributes: ['employee_id', 'has_fingerprint'],
+      where: {
+        status: 'Active'
+      }
     });
-    
-    console.log('✅ Database opened successfully');
-    
-    // First, check what tables exist
-    const tables = await db.all(
-      "SELECT name FROM sqlite_master WHERE type='table'"
-    );
-    console.log('📋 Tables in database:', tables);
-    
-    // Query to get all employee IDs that have fingerprints enrolled
-    const enrolledEmployees = await db.all(
-      'SELECT DISTINCT employee_id FROM Enrollments WHERE fingerprint_template IS NOT NULL AND fingerprint_template != ""'
-    );
-    
-    console.log('👆 Enrolled employees found:', enrolledEmployees);
-    
-    await db.close();
     
     // Create a map of employee_id -> has_fingerprint
     const fingerprintStatus = {};
-    enrolledEmployees.forEach(row => {
-      fingerprintStatus[row.employee_id] = true;
+    employees.forEach(emp => {
+      if (emp.has_fingerprint) {
+        fingerprintStatus[emp.employee_id] = true;
+      }
     });
     
-    console.log('📊 Fingerprint status map:', fingerprintStatus);
+    console.log(`✅ Found ${Object.keys(fingerprintStatus).length} employees with fingerprints enrolled`);
     
     res.status(200).json(fingerprintStatus);
   } catch (error) {
     console.error("❌ Error checking fingerprint status:", error);
     console.error("Error details:", error.message);
-    // Return empty object if database is not accessible
+    // Return empty object if there's an error
     res.status(200).json({});
   }
 };
