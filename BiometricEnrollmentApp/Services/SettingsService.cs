@@ -49,6 +49,13 @@ namespace BiometricEnrollmentApp.Services
                     VALUES ('clock_out_grace_period_minutes', '10');
                 ";
                 cmd.ExecuteNonQuery();
+
+                // Set default API URL if not exists
+                cmd.CommandText = @"
+                    INSERT OR IGNORE INTO Settings (key, value)
+                    VALUES ('api_base_url', 'http://localhost:5000');
+                ";
+                cmd.ExecuteNonQuery();
             }
             catch (Exception ex)
             {
@@ -199,5 +206,61 @@ namespace BiometricEnrollmentApp.Services
                 return false;
             }
         }
-    }
-}
+
+        public string GetApiBaseUrl()
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT value FROM Settings WHERE key = 'api_base_url'";
+                
+                var result = cmd.ExecuteScalar();
+                if (result != null)
+                {
+                    return result.ToString() ?? "http://localhost:5000";
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting API base URL: {ex.Message}");
+            }
+
+            return "http://localhost:5000"; // Default to localhost
+        }
+
+        public bool SetApiBaseUrl(string url)
+        {
+            try
+            {
+                // Validate URL format
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    return false;
+                }
+
+                // Remove trailing slash if present
+                url = url.TrimEnd('/');
+
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT OR REPLACE INTO Settings (key, value)
+                    VALUES ('api_base_url', $value);
+                ";
+                cmd.Parameters.AddWithValue("$value", url);
+                
+                cmd.ExecuteNonQuery();
+                LogHelper.Write($"✅ API base URL updated to: {url}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error setting API base URL: {ex.Message}");
+                return false;
+            }
+        }
