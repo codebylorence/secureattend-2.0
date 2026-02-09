@@ -194,6 +194,28 @@ export const createTemplate = async (templateData) => {
       const { default: User } = await import("../models/user.js");
       const { default: Employee } = await import("../models/employee.js");
       
+      console.log(`🔍 Looking for team leader for department: ${template.department}`);
+      
+      // First, check all team leaders
+      const allTeamLeaders = await User.findAll({
+        where: { role: "teamleader" },
+        include: [{
+          model: Employee,
+          as: "employee",
+          required: false
+        }]
+      });
+      
+      console.log(`📋 Found ${allTeamLeaders.length} team leader(s) in system:`);
+      allTeamLeaders.forEach(tl => {
+        console.log(`   - User: ${tl.username}, employeeId FK: ${tl.employeeId}`);
+        if (tl.employee) {
+          console.log(`     Employee: ${tl.employee.employee_id}, Dept: ${tl.employee.department}, Position: ${tl.employee.position}`);
+        } else {
+          console.log(`     ⚠️ No employee record linked!`);
+        }
+      });
+      
       const teamLeaderUser = await User.findOne({
         where: { role: "teamleader" },
         include: [{
@@ -221,9 +243,14 @@ export const createTemplate = async (templateData) => {
         console.log(`✅ Team leader ${teamLeaderId} auto-assigned to template ${template.id}`);
       } else {
         console.log(`⚠️ No team leader found for department: ${template.department}`);
+        console.log(`   This means either:`);
+        console.log(`   1. No user with role='teamleader' exists`);
+        console.log(`   2. Team leader user has no linked employee record`);
+        console.log(`   3. Team leader's employee record has different department`);
       }
     } catch (error) {
       console.error("⚠️ Error auto-assigning team leader during template creation:", error);
+      console.error("   Error details:", error.message);
       // Don't fail the template creation if team leader assignment fails
     }
   }
