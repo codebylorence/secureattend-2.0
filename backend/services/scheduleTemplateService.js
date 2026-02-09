@@ -188,46 +188,8 @@ export const createTemplate = async (templateData) => {
   // Create the template first
   const template = await ScheduleTemplate.create(processedData);
   
-  // Check if this is a management role template (has management_roles field)
-  if (processedData.management_roles && Array.isArray(processedData.management_roles) && processedData.management_roles.length > 0) {
-    console.log(`👔 Management role template created with roles:`, processedData.management_roles);
-    
-    try {
-      const { default: Employee } = await import("../models/employee.js");
-      
-      // Find all employees with the specified positions
-      const employees = await Employee.findAll({
-        where: {
-          position: { [Op.in]: processedData.management_roles },
-          status: "Active"
-        }
-      });
-      
-      console.log(`📋 Found ${employees.length} employees with management roles:`, employees.map(e => `${e.employee_id} (${e.position})`));
-      
-      if (employees.length > 0) {
-        const now = new Date().toISOString();
-        const assignments = employees.map(emp => ({
-          employee_id: emp.employee_id,
-          assigned_date: now,
-          assigned_by: processedData.created_by || "system"
-        }));
-        
-        await template.update({
-          assigned_employees: JSON.stringify(assignments)
-        });
-        
-        console.log(`✅ Auto-assigned ${employees.length} management role employees to template ${template.id}`);
-      } else {
-        console.log(`⚠️ No employees found with management roles: ${processedData.management_roles.join(', ')}`);
-      }
-    } catch (error) {
-      console.error("⚠️ Error auto-assigning management role employees:", error);
-      // Don't fail the template creation if assignment fails
-    }
-  }
-  // Auto-assign team leader for zone-based templates (those with a department)
-  else if (template.department) {
+  // Auto-assign team leader for zone-based templates (those with a department that's not Role-Based)
+  if (template.department && template.department !== 'Role-Based') {
     try {
       const { default: User } = await import("../models/user.js");
       const { default: Employee } = await import("../models/employee.js");
