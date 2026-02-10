@@ -988,8 +988,11 @@ namespace BiometricEnrollmentApp.Services
             var result = new List<(string, string, string, string, string)>();
             try
             {
-                var today = TimezoneHelper.Now.DayOfWeek.ToString();
-                LogHelper.Write($"📅 Getting schedules for {today}");
+                var now = TimezoneHelper.Now;
+                var today = now.DayOfWeek.ToString();
+                var todayDate = now.ToString("yyyy-MM-dd");
+                
+                LogHelper.Write($"📅 Getting schedules for {today} ({todayDate})");
                 
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
                 conn.Open();
@@ -1003,12 +1006,15 @@ namespace BiometricEnrollmentApp.Services
                 }
 
                 using var cmd = conn.CreateCommand();
+                // Check BOTH recurring schedules (days column) AND specific date schedules (schedule_dates column)
                 cmd.CommandText = @"
-                    SELECT employee_id, shift_name, start_time, end_time, days
+                    SELECT employee_id, shift_name, start_time, end_time, days, schedule_dates
                     FROM EmployeeSchedules
                     WHERE days LIKE '%' || $today || '%'
+                       OR schedule_dates LIKE '%' || $date || '%'
                 ";
                 cmd.Parameters.AddWithValue("$today", today);
+                cmd.Parameters.AddWithValue("$date", todayDate);
 
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
@@ -1018,14 +1024,24 @@ namespace BiometricEnrollmentApp.Services
                     var start = reader.GetString(2);
                     var end = reader.GetString(3);
                     var days = reader.GetString(4);
+                    var scheduleDates = reader.IsDBNull(5) ? "" : reader.GetString(5);
                     
-                    LogHelper.Write($"  ✓ Found schedule: {empId} - {shift} ({start} - {end}) on {days}");
+                    // Determine if this is a recurring schedule or specific date schedule
+                    bool isRecurring = days.Contains(today);
+                    bool isSpecificDate = scheduleDates.Contains(todayDate);
+                    
+                    string scheduleType = isSpecificDate ? $"specific date ({todayDate})" : $"recurring ({days})";
+                    LogHelper.Write($"  ✓ Found schedule: {empId} - {shift} ({start} - {end}) [{scheduleType}]");
+                    
                     result.Add((empId, shift, start, end, days));
                 }
+                
+                LogHelper.Write($"📊 Total schedules found for today: {result.Count}");
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Error getting today's schedules: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
             }
             return result;
         }
@@ -1540,10 +1556,20 @@ namespace BiometricEnrollmentApp.Services
                 LogHelper.Write($"🔍 ========== ABSENT & MISSED CLOCK-OUT CHECK ==========");
                 LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} ({dayOfWeek}) - Philippines time");
                 
-                // Get all schedules for today
+                // Get all schedules for today - THIS MUST BE CALLED EVERY TIME
                 var schedulesToday = GetTodaysSchedules();
                 
                 LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for {dayOfWeek}");
+                
+                // Log detailed schedule information for debugging
+                if (schedulesToday.Count > 0)
+                {
+                    LogHelper.Write($"📋 Schedule details:");
+                    foreach (var sched in schedulesToday)
+                    {
+                        LogHelper.Write($"   - {sched.EmployeeId}: {sched.ShiftName} ({sched.StartTime} - {sched.EndTime}) on {sched.Days}");
+                    }
+                }
                 
                 if (schedulesToday.Count == 0)
                 {
@@ -1552,12 +1578,45 @@ namespace BiometricEnrollmentApp.Services
                     LogHelper.Write("   1. No schedules synced from server");
                     LogHelper.Write("   2. No employees assigned to work on " + dayOfWeek);
                     LogHelper.Write("   3. Schedules not published in admin panel");
+                    LogHelper.Write("   4. Day name mismatch in database (check Days column format)");
+                    
+                    // Check total schedules in database
+                    try
+                    {
+                        using var conn = new SqliteConnection(_connString);
+                        conn.Open();
+                        using var cmd = conn.CreateCommand();
+                        cmd.CommandText = "SELECT COUNT(*) FROM EmployeeSchedules";
+                        var totalSchedules = Convert.ToInt32(cmd.ExecuteScalar());
+                        LogHelper.Write($"   📊 Total schedules in database: {totalSchedules}");
+                        
+                        if (totalSchedules > 0)
+                        {
+                            // Show sample schedule days to debug day name mismatch
+                            cmd.CommandText = "SELECT DISTINCT days FROM EmployeeSchedules LIMIT 5";
+                            using var reader = cmd.ExecuteReader();
+                            LogHelper.Write($"   📅 Sample 'days' values in database:");
+                            while (reader.Read())
+                            {
+                                LogHelper.Write($"      - \"{reader.GetString(0)}\"");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"   ❌ Error checking database: {ex.Message}");
+                    }
+                    
                     return (0, 0);
                 }
                 
                 // Get all enrolled employees (those with fingerprints)
                 var enrolledEmployees = GetAllEnrollments().Select(e => e.EmployeeId).ToHashSet();
                 LogHelper.Write($"👆 Found {enrolledEmployees.Count} employees with enrolled fingerprints");
+                
+                // Get all today's sessions ONCE (not in the loop)
+                var allSessions = GetTodaySessions();
+                LogHelper.Write($"📊 Found {allSessions.Count} attendance sessions for today");
                 
                 int markedAbsent = 0;
                 int markedMissedClockout = 0;
@@ -1596,9 +1655,8 @@ namespace BiometricEnrollmentApp.Services
                         continue;
                     }
                     
-                    // Check if employee has attendance session today
-                    var sessions = GetTodaySessions();
-                    var employeeSession = sessions.FirstOrDefault(s => s.EmployeeId == schedule.EmployeeId);
+                    // Check if employee has attendance session today (use pre-fetched sessions)
+                    var employeeSession = allSessions.FirstOrDefault(s => s.EmployeeId == schedule.EmployeeId);
                     
                     if (employeeSession.EmployeeId == null)
                     {
