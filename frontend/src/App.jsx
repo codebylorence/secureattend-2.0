@@ -7,8 +7,8 @@ import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
   return (
-    <SystemConfigProvider>
-      <SocketProvider>
+    <SocketProvider>
+      <SystemConfigProvider>
         <AppRouter />
         <ToastContainer
           position="top-center"
@@ -22,8 +22,8 @@ function App() {
           pauseOnHover
           theme="light"
         />
-      </SocketProvider>
-    </SystemConfigProvider>
+      </SystemConfigProvider>
+    </SocketProvider>
   );
 }
 
