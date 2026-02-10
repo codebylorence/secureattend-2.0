@@ -74,8 +74,20 @@ namespace BiometricEnrollmentApp
             // Subscribe to schedule update notifications if needed
             // _syncService.OnSchedulesUpdated += OnSchedulesUpdated;
             
-            // Run absent marking immediately on startup
-            Task.Run(async () => await MarkAndSyncAbsentEmployeesAsync());
+            // Run schedule sync FIRST, then absent marking on startup
+            Task.Run(async () => 
+            {
+                // Wait a moment for everything to initialize
+                await Task.Delay(2000);
+                
+                // Sync schedules from server first
+                LogHelper.Write("🔄 Initial schedule sync on AttendancePage startup...");
+                await SyncSchedulesFromServerAsync();
+                
+                // Then run absent marking
+                await Task.Delay(1000); // Give sync time to complete
+                await MarkAndSyncAbsentEmployeesAsync();
+            });
         }
 
         private void UpdateClock()
@@ -305,6 +317,31 @@ namespace BiometricEnrollmentApp
             try
             {
                 LogHelper.Write("⏰ Running absent & missed clock-out check...");
+                
+                // FIRST: Check if we have schedules in local database
+                var schedulesCount = _dataService.GetTodaysSchedules().Count;
+                LogHelper.Write($"📊 Local database has {schedulesCount} schedules for today");
+                
+                // If no schedules, try to sync from server first
+                if (schedulesCount == 0)
+                {
+                    LogHelper.Write("⚠️ No schedules in local database - syncing from server first...");
+                    await SyncSchedulesFromServerAsync();
+                    
+                    // Check again after sync
+                    schedulesCount = _dataService.GetTodaysSchedules().Count;
+                    LogHelper.Write($"📊 After sync: {schedulesCount} schedules in local database");
+                    
+                    if (schedulesCount == 0)
+                    {
+                        LogHelper.Write("❌ Still no schedules after sync - cannot mark absent employees");
+                        LogHelper.Write("💡 Possible reasons:");
+                        LogHelper.Write("   1. No schedules published on server for today");
+                        LogHelper.Write("   2. Network connection issue");
+                        LogHelper.Write("   3. API authentication failed");
+                        return;
+                    }
+                }
                 
                 // Mark absent employees and missed clock-outs locally
                 var result = _dataService.MarkAbsentEmployees();
