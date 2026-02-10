@@ -1636,14 +1636,8 @@ namespace BiometricEnrollmentApp.Services
                     bool isOvernightShift = IsOvernightShift(schedule.StartTime, schedule.EndTime);
                     LogHelper.Write($"  🌙 {schedule.EmployeeId} - Overnight shift: {isOvernightShift}");
                     
-                    // FIRST: Check if shift has started (must start before we can mark absent)
-                    if (!HasShiftStarted(schedule.StartTime))
-                    {
-                        LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift hasn't started yet ({schedule.StartTime})");
-                        continue;
-                    }
-                    
-                    // SECOND: Check if shift has ended with grace period
+                    // Check if shift has ended with grace period
+                    // This is the ONLY time check needed - if shift ended + grace period passed, mark absent/missed clock-out
                     var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
                     int clockOutGracePeriod = settingsService.GetClockOutGracePeriodMinutes();
                     
@@ -1654,6 +1648,8 @@ namespace BiometricEnrollmentApp.Services
                         LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet or within grace period ({schedule.EndTime} + {clockOutGracePeriod} min)");
                         continue;
                     }
+                    
+                    LogHelper.Write($"  ✅ {schedule.EmployeeId} - Shift ended + grace period passed, checking attendance...");
                     
                     // Check if employee has attendance session today (use pre-fetched sessions)
                     var employeeSession = allSessions.FirstOrDefault(s => s.EmployeeId == schedule.EmployeeId);
