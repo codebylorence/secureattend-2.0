@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { getSystemConfig } from '../api/SystemConfigApi';
 import { isAuthenticated } from '../utils/auth';
+import { useSocket } from '../context/SocketContext';
 
 // Utility functions for color manipulation
 const hexToRgb = (hex) => {
@@ -49,6 +50,9 @@ export const SystemConfigProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Get WebSocket connection
+  const { socket, connected } = useSocket();
 
   const loadSystemConfig = async () => {
     try {
@@ -163,6 +167,59 @@ export const SystemConfigProvider = ({ children }) => {
   useEffect(() => {
     loadSystemConfig();
   }, []);
+
+  // Listen for real-time config updates via WebSocket
+  useEffect(() => {
+    if (!socket || !connected) return;
+
+    console.log('🔌 SystemConfig: Setting up WebSocket listener for config updates');
+
+    const handleConfigUpdate = (newConfig) => {
+      console.log('📡 SystemConfig: Received config update via WebSocket:', newConfig);
+      
+      // Update state with new config
+      setSystemConfig(newConfig);
+      
+      // Apply theme colors immediately
+      if (newConfig.primaryColor) {
+        document.documentElement.style.setProperty('--primary-color', newConfig.primaryColor);
+        const hoverColor = adjustColorBrightness(newConfig.primaryColor, -20);
+        document.documentElement.style.setProperty('--primary-hover', hoverColor);
+        
+        const rgb = hexToRgb(newConfig.primaryColor);
+        if (rgb) {
+          document.documentElement.style.setProperty('--primary-50', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.05)`);
+          document.documentElement.style.setProperty('--primary-100', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`);
+          document.documentElement.style.setProperty('--primary-200', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`);
+          document.documentElement.style.setProperty('--primary-300', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`);
+          document.documentElement.style.setProperty('--primary-400', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`);
+          document.documentElement.style.setProperty('--primary-500', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`);
+          document.documentElement.style.setProperty('--primary-600', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`);
+          document.documentElement.style.setProperty('--primary-700', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.7)`);
+          document.documentElement.style.setProperty('--primary-800', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`);
+          document.documentElement.style.setProperty('--primary-900', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.9)`);
+        }
+        document.documentElement.style.setProperty('--text-primary', newConfig.primaryColor);
+      }
+      
+      if (newConfig.secondaryColor) {
+        document.documentElement.style.setProperty('--secondary-color', newConfig.secondaryColor);
+      }
+      
+      // Update document title
+      if (newConfig.systemName) {
+        document.title = newConfig.systemName;
+      }
+      
+      console.log('✅ SystemConfig: Applied real-time config update');
+    };
+
+    socket.on('system:config:updated', handleConfigUpdate);
+
+    return () => {
+      socket.off('system:config:updated', handleConfigUpdate);
+    };
+  }, [socket, connected]);
 
   const value = {
     systemConfig,

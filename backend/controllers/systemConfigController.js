@@ -201,6 +201,13 @@ export const updateSystemConfig = async (req, res) => {
     
     console.log('✅ System configuration updated fields:', updatedFields);
 
+    // Broadcast config update to all connected clients via WebSocket
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('system:config:updated', savedConfig);
+      console.log('📡 WebSocket: Broadcasted system config update to all clients');
+    }
+
     res.status(200).json({
       message: `System configuration updated successfully (${updatedFields.join(', ')})`,
       config: savedConfig,
@@ -224,6 +231,13 @@ export const resetSystemConfig = async (req, res) => {
     const savedConfig = saveConfig(DEFAULT_CONFIG);
     
     console.log('🔄 System configuration reset to defaults');
+
+    // Broadcast config reset to all connected clients via WebSocket
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('system:config:updated', savedConfig);
+      console.log('📡 WebSocket: Broadcasted system config reset to all clients');
+    }
 
     res.status(200).json({
       message: 'System configuration reset to defaults',
