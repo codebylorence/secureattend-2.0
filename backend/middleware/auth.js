@@ -111,9 +111,15 @@ export const requireAdminOrSupervisor = (req, res, next) => {
 };
 
 export const requireAttendanceAccess = (req, res, next) => {
-  if (req.user.role !== "admin" && req.user.role !== "warehouseadmin" && req.user.role !== "supervisor" && req.user.role !== "teamleader") {
-    return res.status(403).json({ message: "Admin, Warehouse Admin, Supervisor, or Team Leader access required for attendance" });
+  const allowedRoles = ["admin", "warehouseadmin", "supervisor", "teamleader", "employee"];
+  
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({ message: "Access denied for attendance data" });
   }
+  
+  // Employees can only access their own attendance data
+  // This will be enforced in the controller by filtering with employeeId
+  console.log(`✅ Attendance access granted for role: ${req.user.role}, employeeId: ${req.user.employeeId}`);
   next();
 };
 

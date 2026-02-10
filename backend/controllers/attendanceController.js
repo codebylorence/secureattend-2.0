@@ -374,12 +374,29 @@ export const getAttendances = async (req, res) => {
     
     let whereClause = {};
     
-    if (date) {
-      whereClause.date = date;
+    // If user is an employee, they can only see their own attendance
+    if (req.user.role === 'employee') {
+      // Get the employee_id from the user's token
+      const userEmployee = await Employee.findOne({ 
+        where: { id: req.user.employeeId } 
+      });
+      
+      if (!userEmployee) {
+        console.log(`❌ Employee not found for user ID: ${req.user.id}`);
+        return res.status(404).json({ error: "Employee record not found" });
+      }
+      
+      whereClause.employee_id = userEmployee.employee_id;
+      console.log(`🔒 Employee role: filtering attendance for ${userEmployee.employee_id}`);
+    } else {
+      // Management roles can filter by employee_id if provided
+      if (employee_id) {
+        whereClause.employee_id = employee_id;
+      }
     }
     
-    if (employee_id) {
-      whereClause.employee_id = employee_id;
+    if (date) {
+      whereClause.date = date;
     }
 
     // Handle date range filtering for reports
@@ -519,8 +536,26 @@ export const getTodayAttendances = async (req, res) => {
     
     console.log(`📅 Fetching today's attendances for date: ${today}`);
     
+    let whereClause = { date: today };
+    
+    // If user is an employee, they can only see their own attendance
+    if (req.user.role === 'employee') {
+      // Get the employee_id from the user's token
+      const userEmployee = await Employee.findOne({ 
+        where: { id: req.user.employeeId } 
+      });
+      
+      if (!userEmployee) {
+        console.log(`❌ Employee not found for user ID: ${req.user.id}`);
+        return res.status(404).json({ error: "Employee record not found" });
+      }
+      
+      whereClause.employee_id = userEmployee.employee_id;
+      console.log(`🔒 Employee role: filtering today's attendance for ${userEmployee.employee_id}`);
+    }
+    
     const attendances = await Attendance.findAll({
-      where: { date: today },
+      where: whereClause,
       include: [
         {
           model: Employee,
