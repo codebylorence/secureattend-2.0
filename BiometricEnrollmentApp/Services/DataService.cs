@@ -1711,32 +1711,43 @@ namespace BiometricEnrollmentApp.Services
                         
                         LogHelper.Write($"  📊 {schedule.EmployeeId} - Found session: ClockIn={employeeSession.ClockIn ?? "NULL"}, ClockOut={employeeSession.ClockOut ?? "NULL"}, Status={employeeSession.Status}");
                         
-                        if (!string.IsNullOrEmpty(employeeSession.ClockIn) && string.IsNullOrEmpty(employeeSession.ClockOut))
+                        // CRITICAL FIX: If employee has clocked in, they are NOT absent!
+                        // Only mark as absent if there's NO clock-in at all
+                        if (!string.IsNullOrEmpty(employeeSession.ClockIn))
                         {
-                            // Clocked in but didn't clock out, and shift has ended
-                            // Only mark if not already marked as missed clock-out or absent
-                            if (employeeSession.Status != "Missed Clock-out" && employeeSession.Status != "Absent")
+                            // Employee has clocked in - check if needs missed clock-out marking
+                            if (string.IsNullOrEmpty(employeeSession.ClockOut))
                             {
-                                MarkSessionAsMissedClockout(employeeSession.Id, schedule.EndTime);
-                                markedMissedClockout++;
-                                LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime}, previous status: {employeeSession.Status})");
+                                // Clocked in but didn't clock out, and shift has ended
+                                // Only mark if not already marked as missed clock-out or absent
+                                if (employeeSession.Status != "Missed Clock-out" && employeeSession.Status != "Absent")
+                                {
+                                    MarkSessionAsMissedClockout(employeeSession.Id, schedule.EndTime);
+                                    markedMissedClockout++;
+                                    LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime}, previous status: {employeeSession.Status})");
+                                }
+                                else
+                                {
+                                    LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked as {employeeSession.Status}");
+                                }
                             }
                             else
                             {
-                                LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked as {employeeSession.Status}");
+                                LogHelper.Write($"  ✅ {schedule.EmployeeId} - Has complete attendance ({employeeSession.Status})");
                             }
-                        }
-                        else if (employeeSession.Status == "Absent")
-                        {
-                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent");
-                        }
-                        else if (!string.IsNullOrEmpty(employeeSession.ClockOut))
-                        {
-                            LogHelper.Write($"  ✅ {schedule.EmployeeId} - Has complete attendance ({employeeSession.Status})");
                         }
                         else
                         {
-                            LogHelper.Write($"  ✓ {schedule.EmployeeId} - Has attendance, not marking");
+                            // No clock-in but has a session record
+                            // This might be a pre-created absent record or an error
+                            if (employeeSession.Status == "Absent")
+                            {
+                                LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent (no clock-in)");
+                            }
+                            else
+                            {
+                                LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - Has session with status '{employeeSession.Status}' but no clock-in - this is unusual");
+                            }
                         }
                     }
                 }

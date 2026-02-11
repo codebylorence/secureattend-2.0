@@ -247,9 +247,18 @@ export default function AttendanceSummary() {
                   label={({ name, value }) => `${name}: ${value}`}
                   labelLine={false}
                 >
-                  {attendanceData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index]} />
-                  ))}
+                  {attendanceData.filter(item => item.value > 0).map((entry) => {
+                    // Map each entry to its correct color based on name
+                    const colorMap = {
+                      "Present": "#10B981",        // Green
+                      "Late": "#F59E0B",           // Amber/Orange
+                      "Absent": "#EF4444",         // Red
+                      "Missed Clock-out": "#FCD34D" // Yellow
+                    };
+                    return (
+                      <Cell key={`cell-${entry.name}`} fill={colorMap[entry.name]} />
+                    );
+                  })}
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
