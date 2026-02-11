@@ -89,6 +89,25 @@ namespace BiometricEnrollmentApp
                 await MarkAndSyncAbsentEmployeesAsync();
             });
         }
+        
+        /// <summary>
+        /// Run diagnostics to debug absent marking issues
+        /// This will log detailed information about schedules and attendance
+        /// </summary>
+        private void RunDiagnostics()
+        {
+            try
+            {
+                var diagnostic = new DiagnosticHelper();
+                diagnostic.RunDiagnostics();
+                UpdateStatus("✅ Diagnostic report generated - check log file");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error running diagnostics: {ex.Message}");
+                UpdateStatus($"❌ Diagnostic error: {ex.Message}");
+            }
+        }
 
         private void UpdateClock()
         {
