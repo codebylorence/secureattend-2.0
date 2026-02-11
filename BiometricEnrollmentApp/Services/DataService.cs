@@ -1555,11 +1555,13 @@ namespace BiometricEnrollmentApp.Services
                 
                 LogHelper.Write($"🔍 ========== ABSENT & MISSED CLOCK-OUT CHECK ==========");
                 LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} ({dayOfWeek}) - Philippines time");
+                LogHelper.Write($"🔍 Today's date: {today}");
                 
+                // CRITICAL: Only process schedules for TODAY, not future dates
                 // Get all schedules for today - THIS MUST BE CALLED EVERY TIME
                 var schedulesToday = GetTodaysSchedules();
                 
-                LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for {dayOfWeek}");
+                LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for {dayOfWeek} ({today})");
                 
                 // Log detailed schedule information for debugging
                 if (schedulesToday.Count > 0)
@@ -1641,7 +1643,9 @@ namespace BiometricEnrollmentApp.Services
                     var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
                     int clockOutGracePeriod = settingsService.GetClockOutGracePeriodMinutes();
                     
+                    LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Checking if shift ended (end time: {schedule.EndTime}, grace: {clockOutGracePeriod} min)");
                     bool shiftEnded = HasShiftEndedWithGracePeriod(schedule.EndTime, clockOutGracePeriod);
+                    LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift ended result: {shiftEnded}");
                     
                     if (!shiftEnded)
                     {
@@ -1656,6 +1660,7 @@ namespace BiometricEnrollmentApp.Services
                     
                     if (employeeSession.EmployeeId == null)
                     {
+                        LogHelper.Write($"  ❌ {schedule.EmployeeId} - No attendance session found, will mark as absent");
                         // No attendance session - mark as absent
                         using var conn = new SqliteConnection(_connString);
                         conn.Open();
@@ -1673,6 +1678,13 @@ namespace BiometricEnrollmentApp.Services
                         
                         if (!exists)
                         {
+                            // SAFETY CHECK: Only create absent records for TODAY, not future dates
+                            if (today != now.ToString("yyyy-MM-dd"))
+                            {
+                                LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - Skipping: date mismatch (today={today}, now={now:yyyy-MM-dd})");
+                                continue;
+                            }
+                            
                             // Create absent record with NULL values for clock_in and clock_out
                             using var insertCmd = conn.CreateCommand();
                             insertCmd.CommandText = @"
@@ -1694,20 +1706,29 @@ namespace BiometricEnrollmentApp.Services
                     else
                     {
                         // Has attendance session - check if needs to be marked as missed clock-out
-                        if (employeeSession.Status == "Absent")
+                        // IMPORTANT: Check clock in/out status FIRST, then check status field
+                        // This ensures we catch employees who clocked in but didn't clock out
+                        
+                        LogHelper.Write($"  📊 {schedule.EmployeeId} - Found session: ClockIn={employeeSession.ClockIn ?? "NULL"}, ClockOut={employeeSession.ClockOut ?? "NULL"}, Status={employeeSession.Status}");
+                        
+                        if (!string.IsNullOrEmpty(employeeSession.ClockIn) && string.IsNullOrEmpty(employeeSession.ClockOut))
+                        {
+                            // Clocked in but didn't clock out, and shift has ended
+                            // Only mark if not already marked as missed clock-out or absent
+                            if (employeeSession.Status != "Missed Clock-out" && employeeSession.Status != "Absent")
+                            {
+                                MarkSessionAsMissedClockout(employeeSession.Id, schedule.EndTime);
+                                markedMissedClockout++;
+                                LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime}, previous status: {employeeSession.Status})");
+                            }
+                            else
+                            {
+                                LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked as {employeeSession.Status}");
+                            }
+                        }
+                        else if (employeeSession.Status == "Absent")
                         {
                             LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent");
-                        }
-                        else if (employeeSession.Status == "Missed Clock-out")
-                        {
-                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked as missed clock-out");
-                        }
-                        else if (!string.IsNullOrEmpty(employeeSession.ClockIn) && string.IsNullOrEmpty(employeeSession.ClockOut))
-                        {
-                            // Clocked in but didn't clock out, and shift has ended - mark as missed clock-out
-                            MarkSessionAsMissedClockout(employeeSession.Id, schedule.EndTime);
-                            markedMissedClockout++;
-                            LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime})");
                         }
                         else if (!string.IsNullOrEmpty(employeeSession.ClockOut))
                         {
