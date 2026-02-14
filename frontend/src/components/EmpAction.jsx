@@ -1,8 +1,7 @@
 // EmpAction.jsx
 import React, { useState } from "react";
-import { FaEdit } from "react-icons/fa";
+import { FaEdit, FaFingerprint } from "react-icons/fa";
 import { MdDelete } from "react-icons/md";
-import { FaFingerprint } from "react-icons/fa";
 import { deleteEmployee } from "../api/EmployeeApi";
 import EditEmployeeModal from "./EditEmployeeModal";
 import ConfirmationModal from "./ConfirmationModal";
@@ -19,16 +18,12 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
     try {
       console.log(`Attempting to delete employee with ID: ${id}`);
       
-      // Check if the employee being deleted is a Team Leader
       const isTeamLeader = employee.position === "Team Leader";
-      
       const result = await deleteEmployee(id);
-      console.log("Delete result:", result);
+      
       toast.success("Employee deleted successfully!");
       
-      // If a team leader was deleted, notify team leader update
       if (isTeamLeader) {
-        console.log('🔄 Team Leader deleted, notifying team leader update');
         teamLeaderEventManager.notifyTeamLeaderUpdate();
       }
       
@@ -36,7 +31,6 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
       onDeleted();
     } catch (error) {
       console.error("Error deleting employee:", error);
-      console.error("Error details:", error.response?.data || error.message);
       toast.error(`Failed to delete employee: ${error.response?.data?.message || error.message}`);
     } finally {
       setDeleteLoading(false);
@@ -46,9 +40,12 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
   return (
     <>
       <div className="flex gap-2">
+        {/* Fingerprint Status Indicator */}
         <button 
-          className={`w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors ${
-            employee.has_fingerprint ? 'opacity-100' : 'opacity-30'
+          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-sm ${
+            employee.has_fingerprint 
+              ? 'bg-emerald-500 text-white shadow-emerald-100 hover:bg-emerald-600' 
+              : 'bg-gray-100 text-gray-400 opacity-50'
           }`}
           title={employee.has_fingerprint ? 'Fingerprint enrolled' : 'No fingerprint enrolled'}
         >
@@ -58,18 +55,19 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
         {/* Edit button */}
         <button
           onClick={() => setIsEditOpen(true)}
-          className="w-7 h-7 rounded-md bg-blue-600 hover:bg-blue-600 text-white flex items-center justify-center transition-colors"
+          className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-all shadow-sm shadow-blue-100"
           title="Edit employee"
         >
           <FaEdit size={12} />
         </button>
 
+        {/* Delete button */}
         <button
           onClick={() => setShowDeleteModal(true)}
-          className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+          className="w-7 h-7 rounded-lg bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center transition-all shadow-sm shadow-rose-100"
           title="Delete employee"
         >
-          <MdDelete size={14} />
+          <MdDelete size={16} />
         </button>
       </div>
 
@@ -83,22 +81,22 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
         />
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* ENHANCED Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={handleDelete}
         title="Delete Employee"
-        message="Are you sure you want to delete this employee? This action cannot be undone and will remove all associated data."
-        confirmText="Delete Employee"
+        message="Are you sure you want to permanently remove this employee from the system? This action will delete all their attendance records and cannot be reversed."
+        confirmText="Confirm Delete"
         cancelText="Cancel"
         type="danger"
         loading={deleteLoading}
         itemDetails={{
-          name: `${employee.firstname || ''} ${employee.lastname || ''}`.trim() || employee.fullname || 'Unknown',
-          'employee id': employee.employee_id,
-          position: employee.position,
-          department: employee.department
+          "Full Name": `${employee.firstname || ''} ${employee.lastname || ''}`.trim() || employee.fullname || 'Unknown',
+          "ID Number": employee.employee_id || 'N/A',
+          "Position": employee.position || 'N/A',
+          "Department": employee.department || 'N/A'
         }}
       />
     </>

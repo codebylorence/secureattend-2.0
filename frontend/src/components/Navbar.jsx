@@ -122,12 +122,20 @@ export default function Navbar({ role }) {
     return notifDate.toLocaleDateString();
   };
 
+  // ==========================================
+  // ONLY UI CHANGES BELOW THIS LINE
+  // ==========================================
+
   return (
     <>
-      <div className="bg-primary h-16 px-6 flex justify-end items-center fixed top-0 left-0 right-0 z-40">
+      {/* Restored the bg-primary class while keeping the layout fixes */}
+      <div className="fixed top-0 left-0 right-0 z-40 bg-primary h-16 px-4 sm:px-6 lg:px-8 flex justify-between items-center shadow-md font-sans">
+        
+        {/* Left side - Reserved for mobile menu toggle or branding if needed */}
+        <div></div>
+
         {/* Right side - Notifications */}
         <div className="flex items-center gap-4">
-          {/* Notifications */}
           {(role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee") && (
             <div className="relative">
               <button
@@ -137,11 +145,11 @@ export default function Navbar({ role }) {
                     fetchNotifications();
                   }
                 }}
-                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
               >
-                <IoNotifications size={20} className="text-white" />
+                <IoNotifications size={22} className="text-white" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] rounded-full min-w-[20px] h-[20px] flex items-center justify-center font-bold px-1.5 shadow-sm border-2 border-primary animate-pulse">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
@@ -151,7 +159,7 @@ export default function Navbar({ role }) {
         </div>
       </div>
 
-      {/* Dropdown Overlay */}
+      {/* Dropdown Overlay (Mobile mostly) */}
       {showNotifications && (
         <div 
           className="fixed inset-0 bg-transparent z-[55]"
@@ -159,37 +167,37 @@ export default function Navbar({ role }) {
         />
       )}
 
-      {/* Notifications Dropdown */}
+      {/* Notifications Dropdown Panel */}
       {showNotifications && (role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee") && (
         <div 
           ref={notificationRef}
-          className="fixed right-4 top-20 bg-white shadow-xl rounded-lg w-96 max-w-[calc(100vw-2rem)] max-h-[500px] overflow-hidden z-[60]"
+          className="fixed right-4 top-[72px] sm:right-6 lg:right-8 bg-white shadow-2xl rounded-2xl w-[90vw] sm:w-96 max-w-[400px] overflow-hidden z-[60] border border-gray-100 font-sans transform origin-top-right transition-all"
         >
           {/* Header */}
-          <div className="bg-primary text-white p-4 flex justify-between items-center">
-            <h3 className="font-semibold text-lg">Notifications</h3>
+          <div className="bg-slate-50 border-b border-gray-100 p-4 flex justify-between items-center">
+            <h3 className="font-bold text-gray-800 text-base">Notifications</h3>
             <button
               onClick={() => setShowNotifications(false)}
-              className="hover:bg-white/20 rounded p-1"
+              className="text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 rounded-full p-1.5 transition-colors focus:outline-none"
             >
-              <FaTimes />
+              <FaTimes size={14} />
             </button>
           </div>
 
           {/* Action buttons */}
           {notifications.length > 0 && (
-            <div className="p-2 border-b border-gray-200 flex justify-between items-center gap-2">
-              {unreadCount > 0 && (
+            <div className="px-4 py-2.5 bg-white border-b border-gray-100 flex justify-between items-center">
+              {unreadCount > 0 ? (
                 <button
                   onClick={handleMarkAllAsRead}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  className="text-[11px] uppercase tracking-wider text-blue-600 hover:text-blue-800 font-bold transition-colors"
                 >
                   Mark all as read
                 </button>
-              )}
+              ) : <div></div> /* Empty div to push clear button to right */}
               <button
                 onClick={handleClearAll}
-                className="text-sm text-red-600 hover:text-red-800 font-medium ml-auto"
+                className="text-[11px] uppercase tracking-wider text-rose-500 hover:text-rose-700 font-bold transition-colors"
               >
                 Clear All
               </button>
@@ -197,11 +205,14 @@ export default function Navbar({ role }) {
           )}
 
           {/* Notifications List */}
-          <div className="overflow-y-auto max-h-[400px]">
+          <div className="overflow-y-auto max-h-[400px] custom-scrollbar bg-white">
             {notifications.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                <IoNotifications size={48} className="mx-auto mb-2 opacity-30" />
-                <p>No notifications yet</p>
+              <div className="py-12 px-6 text-center">
+                <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <IoNotifications size={28} className="text-gray-300" />
+                </div>
+                <p className="text-gray-500 text-sm font-medium">You're all caught up!</p>
+                <p className="text-gray-400 text-xs mt-1">No new notifications right now.</p>
               </div>
             ) : (
               notifications.map((notif) => {
@@ -212,18 +223,21 @@ export default function Navbar({ role }) {
                   // For "Schedule Modified" notifications, show edit icon
                   if (title === "Schedule Modified") {
                     return (
-                      <div className="mt-1">
-                        <div className="flex items-center gap-1 font-medium text-blue-700 mb-1">
-                          <MdEdit size={16} />
-                          <span>Changes:</span>
+                      <div className="mt-1.5 bg-slate-50 p-2.5 rounded-lg border border-gray-100">
+                        <div className="flex items-center gap-1.5 font-bold text-[11px] uppercase tracking-wider text-blue-600 mb-1.5">
+                          <MdEdit size={14} />
+                          <span>Changes Made:</span>
                         </div>
-                        {lines.map((line, idx) => (
-                          line.trim() && (
-                            <div key={idx} className="text-sm text-gray-700 ml-5">
-                              • {line}
-                            </div>
-                          )
-                        ))}
+                        <div className="space-y-1">
+                          {lines.map((line, idx) => (
+                            line.trim() && (
+                              <div key={idx} className="text-xs text-gray-600 flex items-start gap-1.5">
+                                <span className="text-blue-400 mt-0.5">•</span>
+                                <span>{line}</span>
+                              </div>
+                            )
+                          ))}
+                        </div>
                       </div>
                     );
                   }
@@ -232,21 +246,21 @@ export default function Navbar({ role }) {
                   return lines.map((line, idx) => {
                     if (line.startsWith('ADDED:')) {
                       return (
-                        <div key={idx} className="flex items-center gap-1 font-medium text-green-700 mt-2">
-                          <MdCheckCircle size={16} />
+                        <div key={idx} className="flex items-center gap-1.5 font-bold text-[11px] uppercase tracking-wider text-emerald-600 mt-2">
+                          <MdCheckCircle size={14} />
                           <span>Added</span>
                         </div>
                       );
                     } else if (line.startsWith('REMOVED:')) {
                       return (
-                        <div key={idx} className="flex items-center gap-1 font-medium text-red-700 mt-2">
-                          <MdDelete size={16} />
+                        <div key={idx} className="flex items-center gap-1.5 font-bold text-[11px] uppercase tracking-wider text-rose-600 mt-2">
+                          <MdDelete size={14} />
                           <span>Removed</span>
                         </div>
                       );
                     } else if (line.trim()) {
                       return (
-                        <div key={idx} className="text-sm text-gray-700 ml-5">
+                        <div key={idx} className="text-xs text-gray-600 ml-5 mt-0.5">
                           {line}
                         </div>
                       );
@@ -259,25 +273,31 @@ export default function Navbar({ role }) {
                   <div
                     key={notif.id}
                     onClick={() => handleNotificationClick(notif)}
-                    className={`p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors ${
-                      !notif.is_read ? "bg-blue-50" : ""
+                    className={`p-4 border-b border-gray-100 cursor-pointer transition-colors ${
+                      !notif.is_read ? "bg-blue-50/40 hover:bg-blue-50/80" : "hover:bg-slate-50"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className={`text-sm font-semibold ${!notif.is_read ? "text-blue-900" : "text-gray-800"}`}>
-                          {notif.title}
-                        </p>
+                    <div className="flex items-start gap-3">
+                      
+                      {/* Notification Dot indicator */}
+                      <div className="pt-1.5">
+                        <div className={`w-2 h-2 rounded-full ${!notif.is_read ? 'bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.6)]' : 'bg-transparent'}`}></div>
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start gap-2 mb-1">
+                          <p className={`text-sm font-bold truncate ${!notif.is_read ? "text-blue-900" : "text-gray-800"}`}>
+                            {notif.title}
+                          </p>
+                          <p className="text-[10px] text-gray-400 whitespace-nowrap font-medium mt-0.5">
+                            {formatTimeAgo(notif.createdAt)}
+                          </p>
+                        </div>
+                        
                         <div className="mt-1">
                           {renderMessage(notif.message, notif.title)}
                         </div>
-                        <p className="text-xs text-gray-400 mt-2">
-                          {formatTimeAgo(notif.createdAt)}
-                        </p>
                       </div>
-                      {!notif.is_read && (
-                        <div className="w-2 h-2 bg-blue-600 rounded-full mt-1 flex-shrink-0"></div>
-                      )}
                     </div>
                   </div>
                 );

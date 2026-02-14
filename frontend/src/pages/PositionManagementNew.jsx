@@ -178,7 +178,7 @@ export default function PositionManagementNew() {
   }
 
   return (
-    <div className="pr-10 bg-gray-50">
+    <div className="w-full font-sans pt-15 sm:pt-10">
       {/* Header Section */}
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
         <div className="flex justify-between items-center">
@@ -186,7 +186,6 @@ export default function PositionManagementNew() {
             <h1 className="text-heading text-[21px] font-semibold flex items-center gap-2">
               Positions
             </h1>
-            <p className="text-gray-600 text-sm mt-1">Manage company positions</p>
           </div>
           <button
             onClick={() => {

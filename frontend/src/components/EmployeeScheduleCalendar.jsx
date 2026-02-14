@@ -242,7 +242,7 @@ const EmployeeScheduleCalendar = () => {
           {/* Controls Header */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-800 tracking-tight self-start sm:self-center">
-              My Schedule
+              Calendar Schedule
             </h2>
             
             {/* View Toggle Button */}

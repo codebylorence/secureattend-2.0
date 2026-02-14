@@ -30,7 +30,7 @@ export default function ManageSchedule() {
   }, [socket]);
 
   return (
-    <div className="pr-10 bg-gray-50 min-h-screen pb-10">
+    <div className="w-full font-sans pt-15 sm:pt-10">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3">
         <div className="flex items-center gap-3 ">

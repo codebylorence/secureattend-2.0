@@ -28,7 +28,6 @@ import AttendanceReports from "../pages/AttendanceReports";
 import EmployeeProfile from "../pages/EmployeeProfile";
 import AdminProfile from "../pages/AdminProfile";
 import WarehouseAdminDashboard from "../pages/WarehouseAdminDashboard";
-import WarehouseAdminProfile from "../pages/WarehouseAdminProfile";
 
 // Component to redirect logged-in users away from login page
 function LoginRedirect() {
@@ -99,7 +98,7 @@ export default function AppRouter() {
             <Route path="/admin/departments" element={<Departments />} />
             
             {/* Supervisor personal routes within AdminLayout */}
-            <Route path="/supervisor/mydashboard" element={<SupervisorDashboard />} />
+            <Route path="/supervisor/mydashboard" element={<EmployeeDashboard />} />
             <Route path="/supervisor/myattendance" element={<MyAttendance />} />
             <Route path="/supervisor/myschedule" element={<MySchedule />} />
             <Route path="/supervisor/profile" element={<Profile />} />
@@ -131,7 +130,7 @@ export default function AppRouter() {
             <Route path="/warehouseadmin/myschedule" element={<MySchedule />} />
             <Route path="/warehouseadmin/attendance" element={<EmployeeAttendance />} />
             <Route path="/warehouseadmin/attendance-reports" element={<AttendanceReports />} />
-            <Route path="/warehouseadmin/profile" element={<WarehouseAdminProfile />} />
+            <Route path="/warehouseadmin/profile" element={<Profile />} />
           </Route>
         </Route>
 
