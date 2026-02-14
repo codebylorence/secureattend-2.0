@@ -192,7 +192,7 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                           {attendance.status === 'Overtime' && attendance.clock_out ? (
                             <button
                               onClick={() => handleEditOvertimeHours(attendance)}
-                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-purple-600 bg-purple-100 rounded hover:bg-purple-200"
+                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-[#1E3A8A] rounded hover:bg-[#2546b3]"
                               title="Edit overtime hours"
                             >
                               <FaEdit className="w-3 h-3 mr-1" />

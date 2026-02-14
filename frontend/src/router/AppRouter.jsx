@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "../components/PrivateRoute";
 import AdminLayout from "../layouts/AdminLayout";
 import AdminDashboard from "../pages/AdminDashboard";
-import SupervisorDashboard from "../pages/SupervisorDashboard";
 import Login from "../pages/Login";
 import Employees from "../pages/Employees";
 import EmployeeLayout from "../layouts/EmployeeLayout";
@@ -27,7 +26,6 @@ import PositionManagement from "../pages/PositionManagementNew";
 import AttendanceReports from "../pages/AttendanceReports";
 import EmployeeProfile from "../pages/EmployeeProfile";
 import AdminProfile from "../pages/AdminProfile";
-import WarehouseAdminDashboard from "../pages/WarehouseAdminDashboard";
 
 // Component to redirect logged-in users away from login page
 function LoginRedirect() {
@@ -122,8 +120,8 @@ export default function AppRouter() {
         {/* Warehouse Admin Routes - Limited access like supervisors */}
         <Route element={<PrivateRoute allowedRole="warehouseadmin" />}>
           <Route element={<AdminLayout />}>
-            {/* Main warehouse admin dashboard */}
-            <Route path="/warehouseadmin/dashboard" element={<WarehouseAdminDashboard />} />
+            {/* Main warehouse admin dashboard - uses same as admin */}
+            <Route path="/warehouseadmin/dashboard" element={<AdminDashboard />} />
             {/* Personal dashboard and routes */}
             <Route path="/warehouseadmin/mydashboard" element={<EmployeeDashboard />} />
             <Route path="/warehouseadmin/myattendance" element={<MyAttendance />} />

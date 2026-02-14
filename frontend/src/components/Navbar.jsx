@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSystemConfig } from "../contexts/SystemConfigContext";
 import { IoNotifications } from "react-icons/io5";
 import { FaTimes } from "react-icons/fa";
@@ -8,6 +9,7 @@ import ConfirmationModal from "./ConfirmationModal";
 
 export default function Navbar({ role }) {
   const { systemConfig } = useSystemConfig();
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -21,7 +23,7 @@ export default function Navbar({ role }) {
 
   useEffect(() => {
     // Fetch notifications for all roles that should receive notifications
-    if ((role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee") && userId) {
+    if ((role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee" || role === "warehouseadmin") && userId) {
       fetchUnreadCount();
       
       // Poll for new notifications every 30 seconds
@@ -67,6 +69,7 @@ export default function Navbar({ role }) {
   };
 
   const handleNotificationClick = async (notification) => {
+    // Mark as read if unread
     if (!notification.is_read) {
       try {
         await markAsRead(notification.id);
@@ -75,6 +78,14 @@ export default function Navbar({ role }) {
       } catch (error) {
         console.error("Error marking notification as read:", error);
       }
+    }
+    
+    // Handle navigation based on notification title
+    if (notification.title === "New Registration Request") {
+      // Close notification panel
+      setShowNotifications(false);
+      // Navigate to registration management page
+      navigate("/admin/registrations");
     }
   };
 
@@ -136,7 +147,7 @@ export default function Navbar({ role }) {
 
         {/* Right side - Notifications */}
         <div className="flex items-center gap-4">
-          {(role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee") && (
+          {(role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee" || role === "warehouseadmin") && (
             <div className="relative">
               <button
                 onClick={() => {
@@ -168,7 +179,7 @@ export default function Navbar({ role }) {
       )}
 
       {/* Notifications Dropdown Panel */}
-      {showNotifications && (role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee") && (
+      {showNotifications && (role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee" || role === "warehouseadmin") && (
         <div 
           ref={notificationRef}
           className="fixed right-4 top-[72px] sm:right-6 lg:right-8 bg-white shadow-2xl rounded-2xl w-[90vw] sm:w-96 max-w-[400px] overflow-hidden z-[60] border border-gray-100 font-sans transform origin-top-right transition-all"
