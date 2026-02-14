@@ -30,10 +30,27 @@ namespace BiometricEnrollmentApp.Services
             _syncTimer.Elapsed += OnSyncTimerElapsed;
             _syncTimer.AutoReset = true;
 
-            // Set up timer for bulk attendance sync every 5 seconds
-            _bulkSyncTimer = new System.Timers.Timer(5 * 1000); // 5 seconds
+            // Set up timer for bulk attendance sync every 2 seconds (faster for real-time sync)
+            _bulkSyncTimer = new System.Timers.Timer(2 * 1000); // 2 seconds
             _bulkSyncTimer.Elapsed += OnBulkSyncTimerElapsed;
             _bulkSyncTimer.AutoReset = true;
+        }
+        
+        /// <summary>
+        /// Trigger immediate sync of pending attendance records
+        /// Call this after creating new absent or missed clock-out records
+        /// </summary>
+        public async Task TriggerImmediateSync()
+        {
+            try
+            {
+                LogHelper.Write("⚡ Immediate sync triggered");
+                await SyncTodayAttendanceRecords();
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in immediate sync: {ex.Message}");
+            }
         }
 
         public void StartSyncService()
