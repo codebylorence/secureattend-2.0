@@ -802,6 +802,7 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     console.log(`📅 Fetching overtime eligible employees for ${today} (${todayWeekday}) in timezone ${timezone}`);
     
     // Step 1: Get all employees who have clocked in today (Present or Late)
+    // Note: We don't require clock_out because overtime can be assigned before they finish
     const todayAttendances = await Attendance.findAll({
       where: {
         date: today,
@@ -815,7 +816,7 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     });
 
     console.log(`📊 Found ${todayAttendances.length} employees who clocked in today:`, 
-      todayAttendances.map(a => `${a.employee_id} (${a.status})`));
+      todayAttendances.map(a => `${a.employee_id} (${a.status}, in: ${a.clock_in}, out: ${a.clock_out || 'not yet'})`));
 
     if (todayAttendances.length === 0) {
       console.log(`📊 No employees clocked in today, returning empty list`);
@@ -826,34 +827,33 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     const clockedInEmployeeIds = todayAttendances.map(att => att.employee_id);
     console.log(`📋 Clocked in employee IDs:`, clockedInEmployeeIds);
 
-    // Step 3: Get all employee schedules for today's weekday
-    // Use JSON_CONTAINS for MySQL or JSON array operations for PostgreSQL
+    // Step 3: Get all employee schedules for today
+    // Check if today's date exists in schedule_dates JSON field
     const employeeSchedules = await EmployeeSchedule.findAll({
       where: {
-        // Filter by employee schedules that match today
-        days: {
-          [Op.like]: `%${todayWeekday}%`
-        }
+        status: 'Active',
+        [Op.or]: [
+          // Check if today's date is in schedule_dates for any weekday
+          sequelize.literal(`schedule_dates::text LIKE '%${today}%'`),
+          // Fallback: Check if today's weekday is in days array (for recurring schedules)
+          sequelize.literal(`days::text LIKE '%${todayWeekday}%'`)
+        ]
       }
-      // DISABLED: ScheduleTemplate include - table dropped
-      // include: [{
-      //   model: ScheduleTemplate,
-      //   as: 'template',
-      //   required: true,
-      //   where: sequelize.literal(`JSON_CONTAINS(template.days, '"${todayWeekday}"')`)
-      // }]
     });
 
-    console.log(`📊 Found ${employeeSchedules.length} employee schedules for ${todayWeekday}`);
+    console.log(`📊 Found ${employeeSchedules.length} employee schedules for ${today} (${todayWeekday})`);
     console.log(`📋 Schedule details:`, employeeSchedules.map(s => ({
       employee_id: s.employee_id,
       days: s.days,
-      shift_name: s.shift_name
+      schedule_dates: s.schedule_dates,
+      shift_name: s.shift_name,
+      start_date: s.start_date,
+      end_date: s.end_date
     })));
     
     // Step 4: Get employee IDs who are scheduled today
-    const scheduledEmployeeIds = employeeSchedules.map(schedule => schedule.employee_id);
-    console.log(`📋 Scheduled employee IDs:`, scheduledEmployeeIds);
+    const scheduledEmployeeIds = [...new Set(employeeSchedules.map(schedule => schedule.employee_id))];
+    console.log(`📋 Scheduled employee IDs (${scheduledEmployeeIds.length}):`, scheduledEmployeeIds);
 
     // Step 5: Find intersection - employees who are both scheduled AND clocked in
     const eligibleEmployeeIds = clockedInEmployeeIds.filter(empId => 
