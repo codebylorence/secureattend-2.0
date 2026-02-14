@@ -40,38 +40,42 @@ export default function RegistrationStatus() {
     }
   };
 
+  // ==========================================
+  // ONLY UI CHANGES BELOW THIS LINE
+  // ==========================================
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending':
-        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+        return 'text-amber-700 bg-amber-50 border-amber-200 shadow-amber-100/50';
       case 'approved':
-        return 'text-green-600 bg-green-50 border-green-200';
+        return 'text-emerald-700 bg-emerald-50 border-emerald-200 shadow-emerald-100/50';
       case 'rejected':
-        return 'text-red-600 bg-red-50 border-red-200';
+        return 'text-rose-700 bg-rose-50 border-rose-200 shadow-rose-100/50';
       default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
+        return 'text-gray-700 bg-gray-50 border-gray-200 shadow-gray-100/50';
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
       case 'pending':
-        return <FaHourglassHalf className="text-2xl" />;
+        return <FaHourglassHalf className="text-lg sm:text-xl" />;
       case 'approved':
-        return <FaCheckCircle className="text-2xl" />;
+        return <FaCheckCircle className="text-lg sm:text-xl" />;
       case 'rejected':
-        return <FaTimesCircle className="text-2xl" />;
+        return <FaTimesCircle className="text-lg sm:text-xl" />;
       default:
-        return <FaHourglassHalf className="text-2xl" />;
+        return <FaHourglassHalf className="text-lg sm:text-xl" />;
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading registration status...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-100 flex items-center justify-center font-sans">
+        <div className="bg-white/90 backdrop-blur-sm shadow-xl rounded-2xl p-8 border border-gray-100 text-center flex flex-col items-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-sm font-medium text-gray-600 tracking-wide">Loading status...</p>
         </div>
       </div>
     );
@@ -79,16 +83,16 @@ export default function RegistrationStatus() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="max-w-md mx-auto bg-white shadow-lg rounded-lg p-8 text-center">
-          <div className="text-red-500 text-6xl mb-4">
-            <FaTimesCircle className="mx-auto" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-100 flex items-center justify-center font-sans px-4">
+        <div className="w-full max-w-md bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl p-6 sm:p-8 border border-gray-100 text-center">
+          <div className="text-rose-500 text-5xl mb-4 flex justify-center drop-shadow-sm">
+            <FaTimesCircle />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Error</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <h2 className="text-xl font-extrabold text-gray-900 mb-2">Error Occurred</h2>
+          <p className="text-sm text-gray-500 mb-6">{error}</p>
           <button
             onClick={() => navigate('/register')}
-            className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 flex items-center gap-2 mx-auto"
+            className="w-full sm:w-auto bg-blue-600 text-white py-2.5 px-5 rounded-lg text-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2 font-semibold shadow-sm transition-all duration-200 hover:shadow mx-auto"
           >
             <FaUserPlus />
             Back to Registration
@@ -99,80 +103,90 @@ export default function RegistrationStatus() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white shadow-lg rounded-lg p-8">
-          {/* Logo Section */}
+    <div className="min-h-screen py-6 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-slate-50 to-blue-100 flex items-center justify-center font-sans">
+      <div className="w-full max-w-lg mx-auto">
+        <div className="bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl p-5 sm:p-8 border border-gray-100">
+          
+          {/* Header Section */}
           <div className="text-center mb-6">
-            {systemConfig.logo ? (
-              <img 
-                src={systemConfig.logo} 
-                alt={systemConfig.companyName || 'Company Logo'} 
-                className="h-16 mx-auto mb-4 object-contain"
-              />
-            ) : (
-              <div className="text-blue-600 text-6xl mb-4">
-                <FaFingerprint className="mx-auto" />
-              </div>
-            )}
-          </div>
-
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900">Registration Status</h2>
-            <p className="mt-2 text-gray-600">
+            <div className="flex justify-center mb-4">
+              {systemConfig.logo ? (
+                <img 
+                  src={systemConfig.logo} 
+                  alt={systemConfig.companyName || 'Company Logo'} 
+                  className="max-h-12 max-w-36 object-contain"
+                />
+              ) : (
+                <div className="bg-blue-600 p-3 rounded-xl shadow-lg transform transition hover:scale-105">
+                  <FaFingerprint size={24} className="text-white" />
+                </div>
+              )}
+            </div>
+            <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">Registration Status</h2>
+            <p className="text-[10px] sm:text-xs text-blue-600 mt-1.5 font-medium bg-blue-50 inline-block px-2.5 py-0.5 rounded-full mb-1">
               Employee ID: {employee_id}
             </p>
           </div>
 
-          <div className="text-center mb-8">
-            <div className={`inline-flex items-center px-6 py-3 rounded-full border-2 ${getStatusColor(status.status)}`}>
-              <span className="mr-3">{getStatusIcon(status.status)}</span>
-              <span className="text-lg font-semibold capitalize">{status.status}</span>
+          {/* Status Badge */}
+          <div className="text-center mb-6">
+            <div className={`inline-flex items-center px-4 py-2 rounded-xl border-2 shadow-sm ${getStatusColor(status.status)}`}>
+              <span className="mr-2.5">{getStatusIcon(status.status)}</span>
+              <span className="text-sm font-bold uppercase tracking-wider">{status.status}</span>
             </div>
           </div>
 
           <div className="space-y-4">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-gray-700 mb-2">Request Details</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+            {/* Request Details Card */}
+            <div className="bg-slate-50/70 border border-gray-100 p-4 rounded-xl shadow-sm">
+              <h3 className="font-bold text-xs text-gray-700 uppercase tracking-wider mb-3">Request Details</h3>
+              <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
-                  <span className="text-gray-500">Submitted:</span>
-                  <p className="font-medium">{new Date(status.createdAt).toLocaleDateString()}</p>
+                  <span className="text-gray-500 block mb-0.5 font-medium">Submitted on:</span>
+                  <p className="font-semibold text-gray-800">{new Date(status.createdAt).toLocaleDateString()}</p>
                 </div>
                 {status.approved_at && (
                   <div>
-                    <span className="text-gray-500">Processed:</span>
-                    <p className="font-medium">{new Date(status.approved_at).toLocaleDateString()}</p>
+                    <span className="text-gray-500 block mb-0.5 font-medium">Processed on:</span>
+                    <p className="font-semibold text-gray-800">{new Date(status.approved_at).toLocaleDateString()}</p>
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Dynamic Status Cards */}
             {status.status === 'pending' && (
-              <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
-                <h3 className="font-semibold text-yellow-800 mb-2 flex items-center gap-2">
-                  <FaHourglassHalf />
+              <div className="bg-amber-50/50 border border-amber-200 p-4 sm:p-5 rounded-xl shadow-sm">
+                <h3 className="font-bold text-sm text-amber-800 mb-2 flex items-center gap-2">
+                  <FaHourglassHalf className="text-amber-600" />
                   Pending Approval
                 </h3>
-                <p className="text-yellow-700">
+                <p className="text-xs sm:text-sm text-amber-700 mb-4 leading-relaxed">
                   Your registration request is currently being reviewed by an administrator. 
                   You will be notified once a decision has been made.
                 </p>
+                <button
+                  onClick={() => navigate('/login')}
+                  className="w-full bg-white text-gray-700 py-2.5 px-4 rounded-lg text-sm border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-200 flex items-center justify-center gap-2 font-semibold shadow-sm transition-all duration-200 hover:shadow"
+                >
+                  <FaSignInAlt className="text-gray-500" />
+                  Go to Login
+                </button>
               </div>
             )}
 
             {status.status === 'approved' && (
-              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-                <h3 className="font-semibold text-green-800 mb-2 flex items-center gap-2">
-                  <FaCheckCircle />
+              <div className="bg-emerald-50/50 border border-emerald-200 p-4 sm:p-5 rounded-xl shadow-sm">
+                <h3 className="font-bold text-sm text-emerald-800 mb-2 flex items-center gap-2">
+                  <FaCheckCircle className="text-emerald-600" />
                   Registration Approved
                 </h3>
-                <p className="text-green-700 mb-4">
+                <p className="text-xs sm:text-sm text-emerald-700 mb-4 leading-relaxed">
                   Congratulations! Your registration has been approved. You can now log in to the system.
                 </p>
                 <button
                   onClick={() => navigate('/login')}
-                  className="bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 flex items-center gap-2"
+                  className="w-full bg-emerald-600 text-white py-2.5 px-4 rounded-lg text-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 flex items-center justify-center gap-2 font-semibold shadow-sm transition-all duration-200 hover:shadow"
                 >
                   <FaSignInAlt />
                   Go to Login
@@ -181,24 +195,24 @@ export default function RegistrationStatus() {
             )}
 
             {status.status === 'rejected' && (
-              <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
-                <h3 className="font-semibold text-red-800 mb-2 flex items-center gap-2">
-                  <FaTimesCircle />
+              <div className="bg-rose-50/50 border border-rose-200 p-4 sm:p-5 rounded-xl shadow-sm">
+                <h3 className="font-bold text-sm text-rose-800 mb-2 flex items-center gap-2">
+                  <FaTimesCircle className="text-rose-600" />
                   Registration Rejected
                 </h3>
-                <p className="text-red-700 mb-2">
+                <p className="text-xs sm:text-sm text-rose-700 mb-3 leading-relaxed">
                   Unfortunately, your registration request has been rejected.
                 </p>
                 {status.rejection_reason && (
-                  <div className="mt-3">
-                    <span className="text-red-600 font-medium">Reason:</span>
-                    <p className="text-red-700 mt-1 bg-red-100 p-2 rounded">{status.rejection_reason}</p>
+                  <div className="mt-3 bg-white border border-rose-100 rounded-lg p-3">
+                    <span className="text-xs text-rose-600 font-bold uppercase tracking-wider block mb-1">Reason:</span>
+                    <p className="text-xs sm:text-sm text-gray-700 font-medium">{status.rejection_reason}</p>
                   </div>
                 )}
-                <div className="mt-4 flex gap-3">
+                <div className="mt-4">
                   <button
                     onClick={() => navigate('/register')}
-                    className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 flex items-center gap-2"
+                    className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-lg text-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2 font-semibold shadow-sm transition-all duration-200 hover:shadow"
                   >
                     <FaUserPlus />
                     Submit New Request
@@ -208,15 +222,17 @@ export default function RegistrationStatus() {
             )}
           </div>
 
-          <div className="mt-8 text-center">
+          {/* Refresh Action */}
+          <div className="mt-6 border-t border-gray-100 pt-5 text-center">
             <button
               onClick={() => fetchRegistrationStatus()}
-              className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-2 mx-auto"
+              className="text-xs sm:text-sm text-gray-500 hover:text-blue-600 font-medium flex items-center justify-center gap-2 mx-auto transition-colors duration-200 hover:bg-blue-50 py-2 px-4 rounded-lg"
             >
-              <FaSync />
+              <FaSync className="text-xs" />
               Refresh Status
             </button>
           </div>
+          
         </div>
       </div>
     </div>
