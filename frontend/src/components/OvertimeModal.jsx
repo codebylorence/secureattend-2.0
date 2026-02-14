@@ -46,11 +46,15 @@ const OvertimeModal = ({ isOpen, onClose }) => {
         console.error('❌ Failed to fetch eligible employees:', response.status, response.statusText);
         const errorText = await response.text();
         console.error('❌ Error response:', errorText);
-        toast.error('Failed to load eligible employees');
+        toast.error('No available employees. Employees must be scheduled today and have clocked in.', {
+          autoClose: 5000
+        });
       }
     } catch (error) {
       console.error('❌ Error fetching eligible employees:', error);
-      toast.error('Failed to load eligible employees');
+      toast.error('No available employees. Please check if employees are scheduled and have clocked in today.', {
+        autoClose: 5000
+      });
     }
   };
 
