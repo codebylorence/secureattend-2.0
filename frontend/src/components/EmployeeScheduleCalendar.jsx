@@ -39,41 +39,29 @@ const EmployeeScheduleCalendar = () => {
     const calendarEvents = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    // Format today's date as YYYY-MM-DD
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
 
     scheduleData.forEach((schedule) => {
       // Handle template-based schedules with specific dates
       if (schedule.specific_date) {
-        const scheduleDate = new Date(schedule.specific_date);
-        scheduleDate.setHours(0, 0, 0, 0);
+        const startTime = convertTo24Hour(schedule.start_time);
+        const endTime = convertTo24Hour(schedule.end_time);
         
-        // Only show if it's today or in the future
-        if (scheduleDate >= today) {
-          const startTime = convertTo24Hour(schedule.start_time);
-          const endTime = convertTo24Hour(schedule.end_time);
-          
-          calendarEvents.push({
-            title: schedule.shift_name,
-            start: `${schedule.specific_date}T${startTime}`,
-            end: `${schedule.specific_date}T${endTime}`,
-            backgroundColor: getShiftColor(schedule.shift_name),
-            borderColor: getShiftColor(schedule.shift_name),
-            textColor: "white",
-            extendedProps: {
-              shiftName: schedule.shift_name,
-              startTime: schedule.start_time,
-              endTime: schedule.end_time,
-              department: schedule.department,
-              specificDate: schedule.specific_date,
-              isSpecificDate: true
-            }
-          });
-        }
+        calendarEvents.push({
+          title: schedule.shift_name,
+          start: `${schedule.specific_date}T${startTime}`,
+          end: `${schedule.specific_date}T${endTime}`,
+          backgroundColor: getShiftColor(schedule.shift_name),
+          borderColor: getShiftColor(schedule.shift_name),
+          textColor: "white",
+          extendedProps: {
+            shiftName: schedule.shift_name,
+            startTime: schedule.start_time,
+            endTime: schedule.end_time,
+            department: schedule.department,
+            specificDate: schedule.specific_date,
+            isSpecificDate: true
+          }
+        });
         return;
       }
       
@@ -83,34 +71,29 @@ const EmployeeScheduleCalendar = () => {
         
         // Check if this is a specific date schedule from template
         if (template.specific_date) {
-          const scheduleDate = new Date(template.specific_date);
-          scheduleDate.setHours(0, 0, 0, 0);
+          const startTime = convertTo24Hour(template.start_time);
+          const endTime = convertTo24Hour(template.end_time);
           
-          if (scheduleDate >= today) {
-            const startTime = convertTo24Hour(template.start_time);
-            const endTime = convertTo24Hour(template.end_time);
-            
-            calendarEvents.push({
-              title: template.shift_name,
-              start: `${template.specific_date}T${startTime}`,
-              end: `${template.specific_date}T${endTime}`,
-              backgroundColor: getShiftColor(template.shift_name),
-              borderColor: getShiftColor(template.shift_name),
-              textColor: "white",
-              extendedProps: {
-                shiftName: template.shift_name,
-                startTime: template.start_time,
-                endTime: template.end_time,
-                department: template.department,
-                specificDate: template.specific_date,
-                isSpecificDate: true
-              }
-            });
-          }
+          calendarEvents.push({
+            title: template.shift_name,
+            start: `${template.specific_date}T${startTime}`,
+            end: `${template.specific_date}T${endTime}`,
+            backgroundColor: getShiftColor(template.shift_name),
+            borderColor: getShiftColor(template.shift_name),
+            textColor: "white",
+            extendedProps: {
+              shiftName: template.shift_name,
+              startTime: template.start_time,
+              endTime: template.end_time,
+              department: template.department,
+              specificDate: template.specific_date,
+              isSpecificDate: true
+            }
+          });
           return;
         }
         
-        // Fallback for legacy day-based schedules
+        // Fallback for legacy day-based schedules (show next 7 days only for recurring schedules)
         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         
         for (let dayOffset = 0; dayOffset <= 6; dayOffset++) {
@@ -194,32 +177,43 @@ const EmployeeScheduleCalendar = () => {
     return '#6b7280'; // Default gray
   };
 
-  // Generate table data from events
+  // Generate table data from all events (excluding past schedules)
   const getTableData = () => {
     const today = new Date();
-    const tableData = [];
+    today.setHours(0, 0, 0, 0);
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
+    // Group events by date, excluding past dates
+    const eventsByDate = {};
+    
+    events.forEach(event => {
+      const dateStr = event.start.split('T')[0]; // Extract YYYY-MM-DD
+      const eventDate = new Date(dateStr);
+      eventDate.setHours(0, 0, 0, 0);
       
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
+      // Skip past dates
+      if (eventDate < today) {
+        return;
+      }
       
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const dayName = dayNames[date.getDay()];
+      if (!eventsByDate[dateStr]) {
+        const date = new Date(dateStr);
+        eventsByDate[dateStr] = {
+          date: dateStr,
+          dateObj: date,
+          dayName: dayNames[date.getDay()],
+          displayDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          events: []
+        };
+      }
       
-      const dayEvents = events.filter(event => event.start.startsWith(dateStr));
-      
-      tableData.push({
-        date: dateStr,
-        dayName: dayName,
-        displayDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        events: dayEvents
-      });
-    }
+      eventsByDate[dateStr].events.push(event);
+    });
+    
+    // Convert to array and sort by date (oldest to newest)
+    const tableData = Object.values(eventsByDate).sort((a, b) => 
+      a.dateObj.getTime() - b.dateObj.getTime()
+    );
     
     return tableData;
   };
@@ -275,6 +269,17 @@ const EmployeeScheduleCalendar = () => {
           {/* Calendar View */}
           {viewMode === "calendar" && (
             <div className="w-full overflow-x-auto custom-scrollbar pb-2">
+              <style>
+                {`
+                  .fc-day-past {
+                    background-color: #f3f4f6 !important;
+                    opacity: 0.6;
+                  }
+                  .fc-day-past .fc-daygrid-day-number {
+                    color: #9ca3af !important;
+                  }
+                `}
+              </style>
               <div className="min-w-[700px]">
                 <FullCalendar
                   plugins={[dayGridPlugin, timeGridPlugin]}
@@ -297,6 +302,14 @@ const EmployeeScheduleCalendar = () => {
                   allDaySlot={false}
                   height="auto"
                   contentHeight="auto"
+                  dayCellClassNames={(arg) => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const cellDate = new Date(arg.date);
+                    cellDate.setHours(0, 0, 0, 0);
+                    
+                    return cellDate < today ? 'fc-day-past' : '';
+                  }}
                 />
               </div>
             </div>

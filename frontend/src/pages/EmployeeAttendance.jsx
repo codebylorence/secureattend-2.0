@@ -70,7 +70,7 @@ export default function EmployeeAttendance() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => setIsOvertimeModalOpen(true)}
-            className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center gap-2"
+            className="bg-primary text-white px-4 py-2 rounded-md hover:bg-[#2546b3] focus:outline-none focus:ring-2 flex items-center gap-2"
           >
             Add Overtime
           </button>

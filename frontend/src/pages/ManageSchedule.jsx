@@ -37,23 +37,6 @@ export default function ManageSchedule() {
             <h1 className="text-heading text-[21px] font-semibold">
               Schedule Management
             </h1>
-                      {/* <div className="relative group">
-            <button className="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition-colors">
-              <MdInfo size={24} />
-            </button>
-            
-            Tooltip
-            <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-              <div className="space-y-1">
-                <div>• Click any date to create schedules</div>
-                <div>• Click shift events to view details</div>
-                <div>• Select zones or management roles</div>
-                <div>• Purple cards = Role-based schedules</div>
-                <div>• White cards = Zone-based schedules</div>
-              </div>
-              <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-gray-800"></div>
-            </div>
-          </div> */}
         </div>
       </div>
 

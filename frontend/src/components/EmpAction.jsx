@@ -81,22 +81,22 @@ export default function EmpAction({ id, onDeleted, employee, onUpdated }) {
         />
       )}
 
-      {/* ENHANCED Delete Confirmation Modal */}
+      {/* Simplified Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={handleDelete}
         title="Delete Employee"
-        message="Are you sure you want to permanently remove this employee from the system? This action will delete all their attendance records and cannot be reversed."
-        confirmText="Confirm Delete"
+        message="Are you sure you want to delete this employee? This cannot be undone."
+        confirmText="Delete"
         cancelText="Cancel"
         type="danger"
         loading={deleteLoading}
         itemDetails={{
-          "Full Name": `${employee.firstname || ''} ${employee.lastname || ''}`.trim() || employee.fullname || 'Unknown',
-          "ID Number": employee.employee_id || 'N/A',
-          "Position": employee.position || 'N/A',
-          "Department": employee.department || 'N/A'
+          "Name": `${employee.firstname || ''} ${employee.lastname || ''}`.trim() || employee.fullname || 'Unknown',
+          "ID": employee.employee_id || 'N/A',
+          "Role": employee.position || 'N/A',
+          "Dept": employee.department || 'N/A'
         }}
       />
     </>
