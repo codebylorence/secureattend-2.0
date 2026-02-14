@@ -1536,6 +1536,194 @@ namespace BiometricEnrollmentApp.Services
         }
 
         /// <summary>
+        /// Mark employees as absent for ALL past dates where they were scheduled but have no attendance record
+        /// This runs on app startup to catch up on any missed absent markings
+        /// </summary>
+        public (int markedAbsent, int markedMissedClockout) MarkHistoricalAbsences(int daysBack = 30)
+        {
+            try
+            {
+                var now = TimezoneHelper.Now;
+                var today = now.Date;
+                
+                LogHelper.Write($"🔍 ========== HISTORICAL ABSENT MARKING ==========");
+                LogHelper.Write($"🔍 Checking last {daysBack} days for missing absent records");
+                LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} - Philippines time");
+                
+                int totalMarkedAbsent = 0;
+                int totalMarkedMissedClockout = 0;
+                
+                // Get all schedules from database
+                List<(string EmployeeId, string ShiftName, string StartTime, string EndTime, string Days, string ScheduleDates)> allSchedules;
+                using (var conn = new SqliteConnection($"Data Source={_dbPath}"))
+                {
+                    conn.Open();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = @"
+                        SELECT employee_id, shift_name, start_time, end_time, days, IFNULL(schedule_dates, '')
+                        FROM EmployeeSchedules
+                    ";
+                    
+                    allSchedules = new List<(string, string, string, string, string, string)>();
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        allSchedules.Add((
+                            reader.GetString(0),
+                            reader.GetString(1),
+                            reader.GetString(2),
+                            reader.GetString(3),
+                            reader.GetString(4),
+                            reader.GetString(5)
+                        ));
+                    }
+                }
+                
+                LogHelper.Write($"📊 Found {allSchedules.Count} total schedules in database");
+                
+                // Get all enrolled employees
+                var enrolledEmployees = GetAllEnrollments().Select(e => e.EmployeeId).ToHashSet();
+                LogHelper.Write($"👆 Found {enrolledEmployees.Count} employees with enrolled fingerprints");
+                
+                // Check each day going backwards
+                for (int i = 1; i <= daysBack; i++)
+                {
+                    var checkDate = today.AddDays(-i);
+                    var checkDateStr = checkDate.ToString("yyyy-MM-dd");
+                    var checkDayOfWeek = checkDate.DayOfWeek.ToString();
+                    
+                    // Find schedules for this date
+                    var schedulesForDate = allSchedules.Where(s => 
+                        s.Days.Contains(checkDayOfWeek) || 
+                        s.ScheduleDates.Contains(checkDateStr)
+                    ).ToList();
+                    
+                    if (schedulesForDate.Count == 0)
+                        continue;
+                    
+                    LogHelper.Write($"\n📅 Checking {checkDateStr} ({checkDayOfWeek}) - {schedulesForDate.Count} scheduled");
+                    
+                    // Get all attendance sessions for this date
+                    var sessionsForDate = new List<(long Id, string EmployeeId, string ClockIn, string ClockOut, string Status)>();
+                    using (var conn = new SqliteConnection($"Data Source={_dbPath}"))
+                    {
+                        conn.Open();
+                        using var cmd = conn.CreateCommand();
+                        cmd.CommandText = @"
+                            SELECT id, employee_id, IFNULL(clock_in, ''), IFNULL(clock_out, ''), status
+                            FROM AttendanceSessions
+                            WHERE date = $date
+                        ";
+                        cmd.Parameters.AddWithValue("$date", checkDateStr);
+                        
+                        using var reader = cmd.ExecuteReader();
+                        while (reader.Read())
+                        {
+                            sessionsForDate.Add((
+                                reader.GetInt64(0),
+                                reader.GetString(1),
+                                reader.GetString(2),
+                                reader.GetString(3),
+                                reader.GetString(4)
+                            ));
+                        }
+                    }
+                    
+                    // Check each scheduled employee
+                    foreach (var schedule in schedulesForDate)
+                    {
+                        // Skip if employee has no fingerprints
+                        if (!enrolledEmployees.Contains(schedule.EmployeeId))
+                            continue;
+                        
+                        // Check if shift has ended (with grace period)
+                        var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
+                        int clockOutGracePeriod = settingsService.GetClockOutGracePeriodMinutes();
+                        
+                        // Parse shift end time
+                        var endTimeParts = schedule.EndTime.Split(':');
+                        if (endTimeParts.Length < 2)
+                            continue;
+                        
+                        int endHour = int.Parse(endTimeParts[0]);
+                        int endMinute = int.Parse(endTimeParts[1]);
+                        var shiftEndTime = checkDate.AddHours(endHour).AddMinutes(endMinute).AddMinutes(clockOutGracePeriod);
+                        
+                        // Only process if shift has ended
+                        if (now < shiftEndTime)
+                            continue;
+                        
+                        // Find attendance session for this employee on this date
+                        var session = sessionsForDate.FirstOrDefault(s => s.EmployeeId == schedule.EmployeeId);
+                        
+                        if (session.EmployeeId == null)
+                        {
+                            // No attendance record - mark as absent
+                            using var conn = new SqliteConnection(_connString);
+                            conn.Open();
+                            
+                            // Check if absent record already exists
+                            using var checkCmd = conn.CreateCommand();
+                            checkCmd.CommandText = @"
+                                SELECT COUNT(1) FROM AttendanceSessions 
+                                WHERE employee_id = $id AND date = $date
+                            ";
+                            checkCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
+                            checkCmd.Parameters.AddWithValue("$date", checkDateStr);
+                            
+                            var exists = Convert.ToInt32(checkCmd.ExecuteScalar()) > 0;
+                            
+                            if (!exists)
+                            {
+                                // Create absent record
+                                using var insertCmd = conn.CreateCommand();
+                                insertCmd.CommandText = @"
+                                    INSERT INTO AttendanceSessions (employee_id, date, clock_in, clock_out, total_hours, status)
+                                    VALUES ($id, $date, NULL, NULL, 0, 'Absent');
+                                    SELECT last_insert_rowid();
+                                ";
+                                insertCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
+                                insertCmd.Parameters.AddWithValue("$date", checkDateStr);
+                                
+                                // Execute and get the ID
+                                var sessionId = Convert.ToInt64(insertCmd.ExecuteScalar());
+                                
+                                // Add to sync queue for immediate synchronization
+                                AddToSyncQueue(schedule.EmployeeId, sessionId, "absent", $"{{\"date\":\"{checkDateStr}\",\"status\":\"Absent\"}}");
+                                
+                                totalMarkedAbsent++;
+                                LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent for {checkDateStr} - Queued for sync");
+                            }
+                        }
+                        else if (!string.IsNullOrEmpty(session.ClockIn) && string.IsNullOrEmpty(session.ClockOut))
+                        {
+                            // Has clock-in but no clock-out - mark as missed clock-out
+                            if (session.Status != "Missed Clock-out" && session.Status != "Absent")
+                            {
+                                MarkSessionAsMissedClockout(session.Id, schedule.EndTime);
+                                totalMarkedMissedClockout++;
+                                LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out for {checkDateStr}");
+                            }
+                        }
+                    }
+                }
+                
+                LogHelper.Write($"\n✅ Historical check complete:");
+                LogHelper.Write($"   {totalMarkedAbsent} marked absent");
+                LogHelper.Write($"   {totalMarkedMissedClockout} marked missed clock-out");
+                LogHelper.Write($"🔍 ========== END HISTORICAL ABSENT MARKING ==========\n");
+                
+                return (totalMarkedAbsent, totalMarkedMissedClockout);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error in MarkHistoricalAbsences: {ex.Message}");
+                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                return (0, 0);
+            }
+        }
+
+        /// <summary>
         /// Mark employees as absent if ALL conditions are met:
         /// 1. Employee has enrolled fingerprints
         /// 2. Employee's shift has started
@@ -1689,14 +1877,20 @@ namespace BiometricEnrollmentApp.Services
                             using var insertCmd = conn.CreateCommand();
                             insertCmd.CommandText = @"
                                 INSERT INTO AttendanceSessions (employee_id, date, clock_in, clock_out, total_hours, status)
-                                VALUES ($id, $date, NULL, NULL, 0, 'Absent')
+                                VALUES ($id, $date, NULL, NULL, 0, 'Absent');
+                                SELECT last_insert_rowid();
                             ";
                             insertCmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
                             insertCmd.Parameters.AddWithValue("$date", today);
-                            insertCmd.ExecuteNonQuery();
+                            
+                            // Execute and get the ID
+                            var sessionId = Convert.ToInt64(insertCmd.ExecuteScalar());
+                            
+                            // Add to sync queue for immediate synchronization
+                            AddToSyncQueue(schedule.EmployeeId, sessionId, "absent", $"{{\"date\":\"{today}\",\"status\":\"Absent\"}}");
                             
                             markedAbsent++;
-                            LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent (shift: {schedule.StartTime}-{schedule.EndTime})");
+                            LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent (shift: {schedule.StartTime}-{schedule.EndTime}) - Queued for sync");
                         }
                         else
                         {

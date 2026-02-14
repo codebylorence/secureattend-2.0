@@ -74,7 +74,7 @@ namespace BiometricEnrollmentApp
             // Subscribe to schedule update notifications if needed
             // _syncService.OnSchedulesUpdated += OnSchedulesUpdated;
             
-            // Run schedule sync FIRST, then absent marking on startup
+            // Run schedule sync FIRST, then historical absent marking, then current absent marking on startup
             Task.Run(async () => 
             {
                 // Wait a moment for everything to initialize
@@ -84,8 +84,24 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write("🔄 Initial schedule sync on AttendancePage startup...");
                 await SyncSchedulesFromServerAsync();
                 
-                // Then run absent marking
-                await Task.Delay(1000); // Give sync time to complete
+                // Wait for sync to complete
+                await Task.Delay(1000);
+                
+                // Run historical absent marking (for past dates)
+                LogHelper.Write("📅 Running historical absent marking for past dates...");
+                var historicalResult = _dataService.MarkHistoricalAbsences(30); // Check last 30 days
+                LogHelper.Write($"✅ Historical marking complete: {historicalResult.markedAbsent} absent, {historicalResult.markedMissedClockout} missed clock-outs");
+                
+                // Trigger immediate sync for historical records
+                if (historicalResult.markedAbsent > 0 || historicalResult.markedMissedClockout > 0)
+                {
+                    LogHelper.Write($"⚡ Triggering immediate sync for historical records...");
+                    await _syncService.TriggerImmediateSync();
+                    await Task.Delay(2000); // Wait for sync to complete
+                }
+                
+                // Then run current day absent marking
+                await Task.Delay(1000);
                 await MarkAndSyncAbsentEmployeesAsync();
             });
         }
@@ -367,17 +383,30 @@ namespace BiometricEnrollmentApp
                 
                 LogHelper.Write($"📊 Result: {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs");
                 
-                // Only sync if new records were created
+                // Trigger immediate sync if new records were created
                 if (result.markedAbsent > 0 || result.markedMissedClockout > 0)
                 {
-                    LogHelper.Write($"📤 Syncing {result.markedAbsent + result.markedMissedClockout} new record(s) to server...");
-                    
-                    // Get the newly created records
-                    var sessions = _dataService.GetTodaySessions();
-                    var recordsToSync = sessions.Where(s => s.Status == "Absent" || s.Status == "Missed Clock-out").ToList();
-                    
+                    LogHelper.Write($"⚡ Triggering immediate sync for {result.markedAbsent + result.markedMissedClockout} new records...");
+                    await _syncService.TriggerImmediateSync();
+                }
+                
+                // Sync ALL absent and missed clock-out records (not just newly created ones)
+                // This ensures any records that failed to sync before are retried
+                LogHelper.Write($"📤 Syncing all absent and missed clock-out records to server...");
+                
+                // Get all sessions with Absent or Missed Clock-out status
+                var allSessions = _dataService.GetTodaySessions();
+                var recordsToSync = allSessions.Where(s => 
+                    s.Status == "Absent" || s.Status == "Missed Clock-out"
+                ).ToList();
+                
+                LogHelper.Write($"📊 Found {recordsToSync.Count} total absent/missed clock-out records to sync");
+                
+                if (recordsToSync.Count > 0)
+                {
                     int synced = 0;
                     int failed = 0;
+                    
                     foreach (var session in recordsToSync)
                     {
                         try
@@ -422,7 +451,7 @@ namespace BiometricEnrollmentApp
                         catch (Exception ex)
                         {
                             failed++;
-                            LogHelper.Write($"  ❌ Failed to sync absent record for {session.EmployeeId}: {ex.Message}");
+                            LogHelper.Write($"  ❌ Failed to sync record for {session.EmployeeId}: {ex.Message}");
                         }
                     }
                     
@@ -432,19 +461,22 @@ namespace BiometricEnrollmentApp
                     Dispatcher.Invoke(() => 
                     {
                         RefreshAttendances();
-                        if (failed == 0)
+                        if (result.markedAbsent > 0 || result.markedMissedClockout > 0)
                         {
-                            UpdateStatus($"✅ {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs, all synced");
-                        }
-                        else
-                        {
-                            UpdateStatus($"📝 {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs, {synced} synced, {failed} queued");
+                            if (failed == 0)
+                            {
+                                UpdateStatus($"✅ {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs, all synced");
+                            }
+                            else
+                            {
+                                UpdateStatus($"📝 {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs, {synced} synced, {failed} queued");
+                            }
                         }
                     });
                 }
                 else
                 {
-                    LogHelper.Write("ℹ️ No new records to sync");
+                    LogHelper.Write("ℹ️ No records to sync");
                 }
             }
             catch (Exception ex)
