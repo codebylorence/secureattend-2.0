@@ -4,6 +4,7 @@ import { fetchDepartments } from "../api/DepartmentApi";
 import api from "../api/axiosConfig";
 import { toast } from 'react-toastify';
 import teamLeaderEventManager from "../utils/teamLeaderEvents";
+import { MdClose, MdSave, MdPerson, MdEmail, MdPhone, MdBadge, MdBusiness, MdAssignmentInd, MdInfoOutline } from "react-icons/md";
 
 export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated }) {
   const [formData, setFormData] = useState({
@@ -20,22 +21,19 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load data when modal opens
   useEffect(() => {
     if (isOpen) {
       loadDepartmentsAndPositions();
     }
   }, [isOpen]);
 
-  // 🔁 When modal opens, populate fields with selected employee
   useEffect(() => {
     if (employee) {
-      // Handle both old and new data formats
       let firstname = employee.firstname || '';
       let lastname = employee.lastname || '';
       
-      // If no firstname/lastname but fullname exists, split it
       if (!firstname && !lastname && employee.fullname) {
         const nameParts = employee.fullname.trim().split(' ');
         firstname = nameParts[0] || '';
@@ -58,18 +56,14 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
   const loadDepartmentsAndPositions = async () => {
     try {
       setLoading(true);
-      
-      // Load departments
-      const deptResponse = await fetchDepartments();
+      const [deptResponse, posResponse] = await Promise.all([
+        fetchDepartments(),
+        api.get('/positions')
+      ]);
       setDepartments(deptResponse);
-
-      // Load positions using axios instance (uses correct backend URL)
-      const posResponse = await api.get('/positions');
       setPositions(posResponse.data);
     } catch (error) {
       console.error('Error loading data:', error);
-      // Set empty arrays as fallback - let user know there was an error
-      setDepartments([]);
       setPositions([
         { id: 1, name: 'Picker' },
         { id: 2, name: 'Packer' },
@@ -77,7 +71,7 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
         { id: 4, name: 'Supervisor' },
         { id: 5, name: 'Team Leader' }
       ]);
-      toast.error("Failed to load departments and positions. Using fallback data.");
+      toast.error("Using fallback data for roles.");
     } finally {
       setLoading(false);
     }
@@ -89,182 +83,213 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
-      console.log('🔄 Updating employee:', { id: employee.id, formData });
-      
-      // Check if position is changing to/from Team Leader
       const oldPosition = employee.position;
       const newPosition = formData.position;
       const isTeamLeaderChange = (oldPosition === "Team Leader" && newPosition !== "Team Leader") ||
-                                (oldPosition !== "Team Leader" && newPosition === "Team Leader");
+                                 (oldPosition !== "Team Leader" && newPosition === "Team Leader");
 
-      const result = await updateEmployee(employee.id, formData);
-      console.log('✅ Employee update result:', result);
-      
+      await updateEmployee(employee.id, formData);
       toast.success("Employee updated successfully!");
       
-      // If position changed to/from Team Leader, notify team leader update
       if (isTeamLeaderChange) {
-        console.log('🔄 Position changed to/from Team Leader, notifying team leader update');
         teamLeaderEventManager.notifyTeamLeaderUpdate();
       }
       
-      console.log('🔄 Calling onUpdated callback to refresh employee list');
       onUpdated();
       onClose();
     } catch (error) {
-      console.error("❌ Error updating employee:", error);
-      console.error("Error details:", error.response?.data || error.message);
       toast.error("Failed to update employee");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   if (!isOpen) return null;
 
+  const inputClass = "w-full pl-10 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-gray-800 font-medium";
+  const labelClass = "block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1";
+
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative">
-        <h2 className="text-lg font-semibold mb-4 text-primary">Edit Employee</h2>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all duration-300">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all">
+        
+        {/* Header */}
+        <div className="bg-white px-6 py-4 flex items-center justify-between border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
+              <MdPerson size={22} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 tracking-tight">Edit Employee Profile</h3>
+              <p className="text-xs text-gray-500 font-medium tracking-wide">ID: {formData.employee_id}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 p-2 rounded-full transition-colors"
+          >
+            <MdClose size={20} />
+          </button>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Employee ID */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Employee ID</label>
-            <input
-              type="text"
-              name="employee_id"
-              value={formData.employee_id}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-              disabled
-            />
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+            
+            {/* First Name */}
+            <div>
+              <label className={labelClass}>First Name</label>
+              <div className="relative">
+                <MdPerson className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  name="firstname"
+                  value={formData.firstname}
+                  onChange={handleChange}
+                  required
+                  className={inputClass}
+                  placeholder="John"
+                />
+              </div>
+            </div>
+
+            {/* Last Name */}
+            <div>
+              <label className={labelClass}>Last Name</label>
+              <div className="relative">
+                <MdPerson className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  name="lastname"
+                  value={formData.lastname}
+                  onChange={handleChange}
+                  required
+                  className={inputClass}
+                  placeholder="Doe"
+                />
+              </div>
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className={labelClass}>Email Address</label>
+              <div className="relative">
+                <MdEmail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="example@company.com"
+                />
+              </div>
+            </div>
+
+            {/* Contact Number */}
+            <div>
+              <label className={labelClass}>Contact Number</label>
+              <div className="relative">
+                <MdPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  name="contact_number"
+                  value={formData.contact_number}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="09XXXXXXXXX"
+                />
+              </div>
+            </div>
+
+            {/* Department */}
+            <div>
+              <label className={labelClass}>Department</label>
+              <div className="relative">
+                <MdBusiness className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <select
+                  name="department"
+                  value={formData.department}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                  className={`${inputClass} appearance-none`}
+                >
+                  <option value="">{loading ? 'Loading...' : 'Select'}</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.name}>{dept.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Position */}
+            <div>
+              <label className={labelClass}>Position</label>
+              <div className="relative">
+                <MdAssignmentInd className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <select
+                  name="position"
+                  value={formData.position}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                  className={`${inputClass} appearance-none`}
+                >
+                  <option value="">{loading ? 'Loading...' : 'Select'}</option>
+                  {positions.map((pos) => (
+                    <option key={pos.id} value={pos.name}>{pos.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className={labelClass}>Work Status</label>
+              <div className="relative">
+                <MdInfoOutline className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  className={`${inputClass} appearance-none`}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          {/* First Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">First Name</label>
-            <input
-              type="text"
-              name="firstname"
-              value={formData.firstname}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="e.g., John"
-            />
-          </div>
-
-          {/* Last Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Last Name</label>
-            <input
-              type="text"
-              name="lastname"
-              value={formData.lastname}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="e.g., Doe"
-            />
-          </div>
-
-          {/* Department */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Department</label>
-            <select
-              name="department"
-              value={formData.department}
-              onChange={handleChange}
-              required
-              disabled={loading}
-              className="w-full border border-gray-300 rounded-md p-2 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <option value="">
-                {loading ? 'Loading departments...' : 'Select Department'}
-              </option>
-              {departments.map((dept) => (
-                <option key={dept.id} value={dept.name}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Position */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Position</label>
-            <select
-              name="position"
-              value={formData.position}
-              onChange={handleChange}
-              required
-              disabled={loading}
-              className="w-full border border-gray-300 rounded-md p-2 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <option value="">
-                {loading ? 'Loading positions...' : 'Select Position'}
-              </option>
-              {positions.map((position) => (
-                <option key={position.id} value={position.name}>
-                  {position.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Contact Number */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Contact Number</label>
-            <input
-              type="text"
-              name="contact_number"
-              value={formData.contact_number}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md p-2"
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md p-2"
-            />
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Status</label>
-            <select
-              name="status"
-              value={formData.status}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md p-2 bg-white"
-            >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-3 pt-4">
+          {/* Footer Actions */}
+          <div className="flex gap-3 pt-8 mt-4 border-t border-gray-100 sm:justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400"
+              disabled={isSubmitting}
+              className="flex-1 sm:flex-none px-6 py-2.5 bg-gray-50 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-100 transition-all duration-200"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover"
+              disabled={isSubmitting}
+              className="flex-1 sm:flex-none px-8 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 focus:ring-4 focus:ring-blue-100 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              Save Changes
+              {isSubmitting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <MdSave size={18} />
+                  Save Changes
+                </>
+              )}
             </button>
           </div>
         </form>

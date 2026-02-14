@@ -129,13 +129,25 @@ export default function AttendanceSummary() {
       const userRole = user.role;
       
       // Navigate based on user role
-      if (userRole === "teamleader") {
-        navigate("/team/myattendance");
-      } else {
-        navigate("/employee/myattendance");
+      let targetRoute;
+      switch (userRole) {
+        case "teamleader":
+          targetRoute = "/team/myattendance";
+          break;
+        case "supervisor":
+          targetRoute = "/supervisor/myattendance";
+          break;
+        case "warehouseadmin":
+          targetRoute = "/warehouseadmin/myattendance";
+          break;
+        case "employee":
+        default:
+          targetRoute = "/employee/myattendance";
+          break;
       }
       
-      console.log('✅ Navigation completed successfully to:', userRole === "teamleader" ? "/team/myattendance" : "/employee/myattendance");
+      navigate(targetRoute);
+      console.log('✅ Navigation completed successfully to:', targetRoute);
     } catch (error) {
       console.error('❌ Navigation error:', error);
     }

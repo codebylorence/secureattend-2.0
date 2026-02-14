@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { MdWarning, MdInfo } from "react-icons/md";
+import { 
+  MdWarning, MdInfo, MdClose, MdPerson, MdEmail, 
+  MdPhone, MdBadge, MdBusiness, MdAssignmentInd, 
+  MdLock, MdSave, MdAccountCircle 
+} from "react-icons/md";
 import { addEmployee, fetchEmployees } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
 import { toast } from 'react-toastify';
@@ -30,7 +34,6 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     if (isOpen) {
       loadDepartments();
       loadPositions();
-      // Reset form when modal opens
       setFormData({
         employee_id: "TSI",
         firstname: "",
@@ -52,15 +55,10 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
         fetchDepartments(),
         fetchEmployees()
       ]);
-
-      // Store all departments
       setAllDepartments(depts);
-
-      // Find departments that already have a team leader
       const deptsWithLeader = allEmployees
         .filter(emp => emp.position === "Team Leader")
         .map(emp => emp.department);
-
       setDepartmentsWithTeamLeader(deptsWithLeader);
     } catch (error) {
       console.error("Error fetching departments:", error);
@@ -73,13 +71,9 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
       const response = await api.get('/positions');
       setPositions(response.data);
     } catch (error) {
-      console.error('Error fetching positions:', error);
-      // Fallback to default positions if network fails
       setPositions([
-        { id: 1, name: 'Picker' },
-        { id: 2, name: 'Packer' },
-        { id: 3, name: 'Inventory Clerk' },
-        { id: 4, name: 'Supervisor' },
+        { id: 1, name: 'Picker' }, { id: 2, name: 'Packer' },
+        { id: 3, name: 'Inventory Clerk' }, { id: 4, name: 'Supervisor' },
         { id: 5, name: 'Team Leader' }
       ]);
     } finally {
@@ -87,19 +81,13 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     }
   };
 
-  // Get filtered departments based on selected position
   const getAvailableDepartments = () => {
     if (isTeamLeaderPosition(formData.position)) {
-      // Only show departments without team leaders
-      return allDepartments.filter(
-        dept => !departmentsWithTeamLeader.includes(dept.name)
-      );
+      return allDepartments.filter(dept => !departmentsWithTeamLeader.includes(dept.name));
     }
-    // Show all departments for other positions
     return allDepartments;
   };
 
-  // Check if position is Team Leader
   const isTeamLeaderPosition = (positionName) => {
     return positionName.toLowerCase().includes('team leader') || 
            positionName.toLowerCase().includes('teamleader');
@@ -107,29 +95,12 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
-    // Handle Employee ID format validation
     if (name === 'employee_id') {
-      // Remove any non-alphanumeric characters and convert to uppercase
       let formattedValue = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-      
-      // Enforce TSI prefix
       if (!formattedValue.startsWith('TSI')) {
-        if (formattedValue.length === 0) {
-          formattedValue = 'TSI';
-        } else if (formattedValue.length <= 3) {
-          formattedValue = 'TSI';
-        } else {
-          // If user typed something else, prepend TSI
-          formattedValue = 'TSI' + formattedValue.substring(3);
-        }
+        formattedValue = formattedValue.length <= 3 ? 'TSI' : 'TSI' + formattedValue.substring(3);
       }
-      
-      // Limit to TSI + 5 digits (TSI00123)
-      if (formattedValue.length > 8) {
-        formattedValue = formattedValue.substring(0, 8);
-      }
-      
+      if (formattedValue.length > 8) formattedValue = formattedValue.substring(0, 8);
       setFormData({ ...formData, [name]: formattedValue });
     } else {
       setFormData({ ...formData, [name]: value });
@@ -140,41 +111,19 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
     e.preventDefault();
     setLoading(true);
     setError("");
-    
     try {
-      // Validate Employee ID format
       const employeeIdPattern = /^TSI\d{5}$/;
-      if (!employeeIdPattern.test(formData.employee_id)) {
-        throw new Error("Employee ID must be in format TSI00123 (TSI followed by 5 digits)");
-      }
+      if (!employeeIdPattern.test(formData.employee_id)) throw new Error("Employee ID must be TSI followed by 5 digits");
+      if (formData.password.length < 6) throw new Error("Password must be at least 6 characters");
       
-      // Validate password length
-      if (formData.password.length < 6) {
-        throw new Error("Password must be at least 6 characters long");
-      }
-      
-      // Check if the new employee is a Team Leader
       const isTeamLeader = formData.position === "Team Leader";
+      await addEmployee({ ...formData, status: "Active" });
       
-      // Send employee data including username and password to backend
-      const employeeData = {
-        ...formData,
-        status: "Active" // Default status
-      };
-      
-      await addEmployee(employeeData);
-      
-      // If a team leader was added, notify team leader update
-      if (isTeamLeader) {
-        console.log('🔄 New Team Leader added, notifying team leader update');
-        teamLeaderEventManager.notifyTeamLeaderUpdate();
-      }
-      
-      onAdded(); // Refresh employee list
-      onClose(); // Close modal
+      if (isTeamLeader) teamLeaderEventManager.notifyTeamLeaderUpdate();
+      onAdded();
+      onClose();
       toast.success("Employee and user account created successfully!");
     } catch (error) {
-      console.error("Error adding employee:", error);
       const errorMessage = error.response?.data?.message || error.message || "Failed to add employee";
       toast.error(errorMessage);
       setError(errorMessage);
@@ -185,189 +134,138 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
 
   if (!isOpen) return null;
 
+  const inputClass = "w-full pl-10 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 text-gray-800 font-medium";
+  const labelClass = "block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1";
+
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-6 relative max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4 text-[#1E3A8A]">Add New Employee</h2>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded-md">
-            <p className="text-sm text-red-800">{error}</p>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all duration-300 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden my-auto transform transition-all">
+        
+        {/* Header */}
+        <div className="bg-white px-6 py-4 flex items-center justify-between border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
+              <MdAccountCircle size={24} />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 tracking-tight">Onboard New Employee</h3>
           </div>
-        )}
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full transition-colors"><MdClose size={20} /></button>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Employee ID */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Employee ID</label>
-            <input
-              type="text"
-              name="employee_id"
-              value={formData.employee_id}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="TSI00123"
-              maxLength={8}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Format: TSI followed by 5 digits (e.g., TSI00123)
-            </p>
-          </div>
+        <form onSubmit={handleSubmit} className="p-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+          {error && (
+            <div className="mb-6 p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-2 text-rose-700 text-xs font-medium">
+              <MdWarning size={18} /> {error}
+            </div>
+          )}
 
-          {/* First Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">First Name</label>
-            <input
-              type="text"
-              name="firstname"
-              value={formData.firstname}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="e.g., John"
-            />
-          </div>
-
-          {/* Last Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Last Name</label>
-            <input
-              type="text"
-              name="lastname"
-              value={formData.lastname}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="e.g., Doe"
-            />
-          </div>
-
-          {/* Position Dropdown - Moved before Department */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Position</label>
-            <select
-              name="position"
-              value={formData.position}
-              onChange={handleChange}
-              required
-              disabled={positionsLoading}
-              className="w-full border border-gray-300 rounded-md p-2 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <option value="">
-                {positionsLoading ? 'Loading positions...' : 'Select Position'}
-              </option>
-              {positions.map((position) => (
-                <option key={position.id} value={position.name}>
-                  {position.name}
-                </option>
-              ))}
-            </select>
+          {/* SECTION: Personal Information */}
+          <div className="mb-6">
+            <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <div className="h-px w-4 bg-blue-600"></div> Personal Details
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Employee ID</label>
+                <div className="relative">
+                  <MdBadge className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input type="text" name="employee_id" value={formData.employee_id} onChange={handleChange} required className={inputClass} placeholder="TSI00000" maxLength={8} />
+                </div>
+              </div>
+              <div className="hidden md:block"></div> {/* Spacer */}
+              <div>
+                <label className={labelClass}>First Name</label>
+                <div className="relative">
+                  <MdPerson className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input type="text" name="firstname" value={formData.firstname} onChange={handleChange} required className={inputClass} placeholder="First name" />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Last Name</label>
+                <div className="relative">
+                  <MdPerson className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input type="text" name="lastname" value={formData.lastname} onChange={handleChange} required className={inputClass} placeholder="Last name" />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Email Address</label>
+                <div className="relative">
+                  <MdEmail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input type="email" name="email" value={formData.email} onChange={handleChange} required className={inputClass} placeholder="email@company.com" />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Contact Number</label>
+                <div className="relative">
+                  <MdPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input type="text" name="contact_number" value={formData.contact_number} onChange={handleChange} required className={inputClass} placeholder="09XXXXXXXXX" />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Department Dropdown */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Department</label>
-            <select
-              name="department"
-              value={formData.department}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-md p-2 bg-white"
-            >
-              <option value="No Department">No Department</option>
-              {getAvailableDepartments().map((dept) => (
-                <option key={dept.id} value={dept.name}>
-                  {dept.name}
-                  {formData.position === "Team Leader" && " (Available)"}
-                </option>
-              ))}
-            </select>
-            {isTeamLeaderPosition(formData.position) && getAvailableDepartments().length === 0 && (
-              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                <MdWarning size={14} /> All departments already have team leaders assigned
-              </p>
-            )}
-            {isTeamLeaderPosition(formData.position) && getAvailableDepartments().length > 0 && (
-              <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                <MdInfo size={14} /> Only showing departments without team leaders
-              </p>
-            )}
+          {/* SECTION: Assignment */}
+          <div className="mb-6">
+            <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <div className="h-px w-4 bg-blue-600"></div> Work Assignment
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Position</label>
+                <div className="relative">
+                  <MdAssignmentInd className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <select name="position" value={formData.position} onChange={handleChange} required className={`${inputClass} appearance-none`}>
+                    <option value="">Select Position</option>
+                    {positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Department</label>
+                <div className="relative">
+                  <MdBusiness className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <select name="department" value={formData.department} onChange={handleChange} className={`${inputClass} appearance-none`}>
+                    <option value="No Department">No Department</option>
+                    {getAvailableDepartments().map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
+                </div>
+                {isTeamLeaderPosition(formData.position) && (
+                  <p className="text-[10px] font-medium text-amber-600 mt-1.5 flex items-center gap-1">
+                    <MdInfo size={12} /> Showing available team leader slots
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Contact Number */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Contact Number</label>
-            <input
-              type="text"
-              name="contact_number"
-              value={formData.contact_number}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-            />
+          {/* SECTION: Account Credentials */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">Account Credentials</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Username</label>
+                <div className="relative">
+                  <MdPerson className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" name="username" value={formData.username} onChange={handleChange} required className={inputClass} placeholder="Login username" />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Initial Password</label>
+                <div className="relative">
+                  <MdLock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="password" name="password" value={formData.password} onChange={handleChange} required className={inputClass} placeholder="Min. 6 characters" />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="e.g., john.doe@example.com"
-            />
-          </div>
-
-          {/* Username */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Username</label>
-            <input
-              type="text"
-              name="username"
-              value={formData.username}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="Login username"
-            />
-            <p className="text-xs text-gray-500 mt-1">This will be used to log into the system</p>
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              minLength="6"
-              className="w-full border border-gray-300 rounded-md p-2"
-              placeholder="Minimum 6 characters"
-            />
-            <p className="text-xs text-gray-500 mt-1">Employee will use this password to log in</p>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+          {/* Footer Actions */}
+          <div className="flex gap-3 pt-8 mt-4 border-t border-gray-100 sm:justify-end">
+            <button type="button" onClick={onClose} disabled={loading} className="flex-1 sm:flex-none px-6 py-2.5 text-gray-500 text-sm font-semibold rounded-xl hover:bg-gray-100 transition-all">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-[#1E3A8A] text-white rounded-md hover:bg-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Creating..." : "Save"}
+            <button type="submit" disabled={loading} className="flex-1 sm:flex-none px-8 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-70">
+              {loading ? <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> Processing</> : <><MdSave size={18} /> Save Employee</>}
             </button>
           </div>
         </form>
