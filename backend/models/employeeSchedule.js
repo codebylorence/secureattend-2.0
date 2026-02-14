@@ -13,28 +13,8 @@ const EmployeeSchedule = sequelize.define("EmployeeSchedule", {
   },
   template_id: {
     type: DataTypes.INTEGER,
-    allowNull: true, // UPDATED: Now nullable since we're not using templates
-    comment: "DEPRECATED: Reference to ScheduleTemplate (no longer used)"
-  },
-  shift_name: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: "Name of the shift (e.g., 'Morning Shift', 'Night Shift')"
-  },
-  start_time: {
-    type: DataTypes.TIME,
-    allowNull: true,
-    comment: "Shift start time (e.g., '08:00:00')"
-  },
-  end_time: {
-    type: DataTypes.TIME,
-    allowNull: true,
-    comment: "Shift end time (e.g., '17:00:00')"
-  },
-  department: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: "Department for this schedule"
+    allowNull: false,
+    comment: "Reference to ScheduleTemplate"
   },
   days: {
     type: DataTypes.JSON,

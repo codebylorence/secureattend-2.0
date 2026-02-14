@@ -44,12 +44,12 @@ namespace BiometricEnrollmentApp
             _syncService.StartSyncService();
             LogHelper.Write("🔄 Global sync service started from MainWindow");
             
-            // Start absent marking timer (runs every 5 minutes)
+            // Start absent marking timer (runs every 30 seconds for real-time absent marking)
             _absentMarkingTimer = new DispatcherTimer();
-            _absentMarkingTimer.Interval = TimeSpan.FromMinutes(5);
+            _absentMarkingTimer.Interval = TimeSpan.FromSeconds(30);
             _absentMarkingTimer.Tick += AbsentMarkingTimer_Tick;
             _absentMarkingTimer.Start();
-            LogHelper.Write("⏰ Absent marking timer started (runs every 5 minutes)");
+            LogHelper.Write("⏰ Absent marking timer started (runs every 30 seconds)");
             
             // Run absent marking immediately on startup - check last 7 days to catch missed absences
             Task.Run(() => RunAbsentMarking(daysToCheck: 7));
@@ -57,19 +57,29 @@ namespace BiometricEnrollmentApp
 
         private void AbsentMarkingTimer_Tick(object? sender, EventArgs e)
         {
-            // Run absent marking in background thread - check last 2 days (yesterday and today)
-            Task.Run(() => RunAbsentMarking(daysToCheck: 2));
+            // Run absent marking in background thread - check today only for real-time marking
+            Task.Run(() => RunAbsentMarking(daysToCheck: 1));
         }
 
-        private void RunAbsentMarking(int daysToCheck = 2)
+        private async void RunAbsentMarking(int daysToCheck = 1)
         {
             try
             {
+                LogHelper.Write($"⏰ Running absent marking check (last {daysToCheck} day(s))...");
+                
                 var result = _dataService.MarkAbsentAndMissedClockouts(daysToCheck);
                 
                 if (result.markedAbsent > 0 || result.markedMissedClockout > 0)
                 {
                     LogHelper.Write($"✅ Absent marking complete: {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs");
+                    
+                    // Trigger immediate sync to web app
+                    LogHelper.Write("⚡ Triggering immediate sync for new absent/missed clock-out records...");
+                    await _syncService.TriggerImmediateSync();
+                }
+                else
+                {
+                    LogHelper.Write($"ℹ️ Absent marking check complete: No new records to create");
                 }
             }
             catch (Exception ex)

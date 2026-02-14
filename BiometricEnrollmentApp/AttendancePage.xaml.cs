@@ -65,16 +65,14 @@ namespace BiometricEnrollmentApp
             _gridRefreshTimer.Elapsed += (_, _) => Dispatcher.Invoke(() => RefreshAttendances());
             _gridRefreshTimer.Start();
             
-            // Start absent marking timer (runs every minute for real-time absent marking)
-            _absentMarkingTimer = new System.Timers.Timer(60 * 1000); // every minute
-            _absentMarkingTimer.Elapsed += async (_, _) => await MarkAndSyncAbsentEmployeesAsync();
-            _absentMarkingTimer.Start();
+            // Note: Absent marking is now handled globally from MainWindow
+            // No need for page-specific absent marking timer
             
             // Note: SyncService is now started globally from MainWindow
             // Subscribe to schedule update notifications if needed
             // _syncService.OnSchedulesUpdated += OnSchedulesUpdated;
             
-            // Run schedule sync FIRST, then historical absent marking, then current absent marking on startup
+            // Run schedule sync FIRST, then let MainWindow handle absent marking globally
             Task.Run(async () => 
             {
                 // Wait a moment for everything to initialize
@@ -84,25 +82,7 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write("🔄 Initial schedule sync on AttendancePage startup...");
                 await SyncSchedulesFromServerAsync();
                 
-                // Wait for sync to complete
-                await Task.Delay(1000);
-                
-                // Run historical absent marking (for past dates)
-                LogHelper.Write("📅 Running historical absent marking for past dates...");
-                var historicalResult = _dataService.MarkHistoricalAbsences(30); // Check last 30 days
-                LogHelper.Write($"✅ Historical marking complete: {historicalResult.markedAbsent} absent, {historicalResult.markedMissedClockout} missed clock-outs");
-                
-                // Trigger immediate sync for historical records
-                if (historicalResult.markedAbsent > 0 || historicalResult.markedMissedClockout > 0)
-                {
-                    LogHelper.Write($"⚡ Triggering immediate sync for historical records...");
-                    await _syncService.TriggerImmediateSync();
-                    await Task.Delay(2000); // Wait for sync to complete
-                }
-                
-                // Then run current day absent marking
-                await Task.Delay(1000);
-                await MarkAndSyncAbsentEmployeesAsync();
+                LogHelper.Write("✅ AttendancePage initialization complete - MainWindow will handle absent marking");
             });
         }
         
@@ -334,9 +314,8 @@ namespace BiometricEnrollmentApp
             _clockTimer?.Dispose();
             _gridRefreshTimer?.Stop();
             _gridRefreshTimer?.Dispose();
-            _absentMarkingTimer?.Stop();
-            _absentMarkingTimer?.Dispose();
             
+            // Note: Absent marking is handled globally from MainWindow
             // Note: SyncService cleanup is handled globally from MainWindow
             // Unsubscribe from schedule update notifications if subscribed
             // if (_syncService != null)
