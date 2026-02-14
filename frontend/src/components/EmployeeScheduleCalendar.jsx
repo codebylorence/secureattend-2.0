@@ -224,110 +224,123 @@ const EmployeeScheduleCalendar = () => {
     return tableData;
   };
 
+  // ==========================================
+  // ONLY UI CHANGES BELOW THIS LINE
+  // ==========================================
+
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 lg:p-8 font-sans w-full">
       {schedules.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500">
+        <div className="text-center py-12 px-4 rounded-xl border border-dashed border-gray-200 bg-gray-50">
+          <p className="text-gray-500 font-medium">
             No schedules assigned yet. Contact your team leader.
           </p>
         </div>
       ) : (
-        <>
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              {/* View Toggle Button */}
-              <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode("calendar")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
-                    viewMode === "calendar"
-                      ? "bg-white text-primary-600 shadow-sm"
-                      : "text-gray-600 hover:text-gray-800"
-                  }`}
-                >
-                  <MdCalendarToday size={18} />
-                  <span className="text-sm font-medium">Calendar</span>
-                </button>
-                <button
-                  onClick={() => setViewMode("table")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
-                    viewMode === "table"
-                      ? "bg-white text-primary-600 shadow-sm"
-                      : "text-gray-600 hover:text-gray-800"
-                  }`}
-                >
-                  <MdTableChart size={18} />
-                  <span className="text-sm font-medium">Table</span>
-                </button>
-              </div>
+        <div className="flex flex-col gap-4">
+          
+          {/* Controls Header */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-gray-800 tracking-tight self-start sm:self-center">
+              My Schedule
+            </h2>
+            
+            {/* View Toggle Button */}
+            <div className="flex items-center gap-1 bg-gray-100/80 rounded-xl p-1 w-full sm:w-auto overflow-hidden">
+              <button
+                onClick={() => setViewMode("calendar")}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  viewMode === "calendar"
+                    ? "bg-white text-blue-600 shadow-sm font-semibold"
+                    : "text-gray-500 hover:text-gray-700 font-medium hover:bg-gray-200/50"
+                }`}
+              >
+                <MdCalendarToday size={18} />
+                <span className="text-sm">Calendar</span>
+              </button>
+              <button
+                onClick={() => setViewMode("table")}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  viewMode === "table"
+                    ? "bg-white text-blue-600 shadow-sm font-semibold"
+                    : "text-gray-500 hover:text-gray-700 font-medium hover:bg-gray-200/50"
+                }`}
+              >
+                <MdTableChart size={18} />
+                <span className="text-sm">Table</span>
+              </button>
             </div>
           </div>
           
           {/* Calendar View */}
           {viewMode === "calendar" && (
-            <FullCalendar
-              plugins={[dayGridPlugin, timeGridPlugin]}
-              initialView="dayGridMonth"
-              headerToolbar={{
-                left: "prev,next today",
-                center: "title",
-                right: "", // Removed week view, only month view available
-              }}
-              events={events}
-              eventDisplay="block"
-              displayEventTime={true}
-              eventTimeFormat={{
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-              }}
-              slotMinTime="06:00:00"
-              slotMaxTime="24:00:00"
-              allDaySlot={false}
-              height="auto"
-            />
+            <div className="w-full overflow-x-auto custom-scrollbar pb-2">
+              <div className="min-w-[700px]">
+                <FullCalendar
+                  plugins={[dayGridPlugin, timeGridPlugin]}
+                  initialView="dayGridMonth"
+                  headerToolbar={{
+                    left: "prev,next today",
+                    center: "title",
+                    right: "", // Removed week view, only month view available
+                  }}
+                  events={events}
+                  eventDisplay="block"
+                  displayEventTime={true}
+                  eventTimeFormat={{
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                  }}
+                  slotMinTime="06:00:00"
+                  slotMaxTime="24:00:00"
+                  allDaySlot={false}
+                  height="auto"
+                  contentHeight="auto"
+                />
+              </div>
+            </div>
           )}
 
           {/* Table View */}
           {viewMode === "table" && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+            <div className="w-full overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-4 text-left font-bold text-gray-500 uppercase tracking-wider text-xs">
                       Date
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-4 text-left font-bold text-gray-500 uppercase tracking-wider text-xs">
                       Day
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-4 text-left font-bold text-gray-500 uppercase tracking-wider text-xs">
                       Shift
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-4 text-left font-bold text-gray-500 uppercase tracking-wider text-xs">
                       Time
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-4 text-left font-bold text-gray-500 uppercase tracking-wider text-xs">
                       Department
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-gray-100">
                   {getTableData().map((row, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <tr key={index} className="hover:bg-blue-50/30 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-800 font-medium">
                         {row.displayDate}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-600 font-medium">
                         {row.dayName}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {row.events.length > 0 ? (
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-1.5">
                             {row.events.map((event, idx) => (
                               <span
                                 key={idx}
-                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white"
+                                className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold text-white uppercase tracking-wider shadow-sm w-max"
                                 style={{ backgroundColor: event.backgroundColor }}
                               >
                                 {event.title}
@@ -335,31 +348,34 @@ const EmployeeScheduleCalendar = () => {
                             ))}
                           </div>
                         ) : (
-                          <span className="text-gray-400 text-sm">No shift</span>
+                          <span className="text-gray-400 italic text-xs">No shift scheduled</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-600 font-medium">
                         {row.events.length > 0 ? (
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-1.5">
                             {row.events.map((event, idx) => (
-                              <span key={idx}>
+                              <span key={idx} className="bg-gray-50 px-2 py-1 rounded-md border border-gray-100 w-max text-xs">
                                 {event.extendedProps.startTime} - {event.extendedProps.endTime}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <span className="text-gray-300">-</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-600 font-medium">
                         {row.events.length > 0 ? (
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-1.5">
                             {row.events.map((event, idx) => (
-                              <span key={idx}>{event.extendedProps.department}</span>
+                              <span key={idx} className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                                {event.extendedProps.department}
+                              </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <span className="text-gray-300">-</span>
                         )}
                       </td>
                     </tr>
@@ -368,7 +384,7 @@ const EmployeeScheduleCalendar = () => {
               </table>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
