@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useSystemConfig } from '../contexts/SystemConfigContext';
-import { FaSearch, FaArrowLeft, FaFingerprint } from 'react-icons/fa';
+import { FaArrowLeft, FaFingerprint } from 'react-icons/fa';
 import api from '../api/axiosConfig';
 
 export default function CheckRegistrationStatus() {
@@ -37,87 +37,105 @@ export default function CheckRegistrationStatus() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-primary flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full">
-        <div className="bg-white shadow-lg rounded-lg p-8">
-          <div className="text-center mb-8">
-            {/* Logo */}
-            <div className="flex justify-center mb-4">
-              {systemConfig.logo ? (
-                <img 
-                  src={systemConfig.logo} 
-                  alt={systemConfig.systemName || "System Logo"} 
-                  className="max-h-12 max-w-32 object-contain"
-                />
-              ) : (
-                <div className="bg-primary-100 w-16 h-16 rounded-full flex items-center justify-center">
-                  <FaFingerprint className="text-primary text-2xl" />
-                </div>
-              )}
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900">Check Registration Status</h2>
-            <p className="mt-2 text-gray-600">Enter your Employee ID to check your registration status</p>
-            <p className="text-sm text-gray-500 mt-1">{systemConfig.systemName}</p>
-          </div>
+  // ==========================================
+  // ONLY UI CHANGES BELOW THIS LINE
+  // ==========================================
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Employee ID *
-              </label>
-              <input
-                type="text"
-                value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus-ring-primary"
-                placeholder="Enter your Employee ID"
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-100 font-sans px-4 sm:px-6 lg:px-8 py-6">
+      
+      {/* CARD CONTAINER */}
+      <div className="w-full max-w-sm bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl p-6 sm:p-8 border border-gray-100 relative overflow-hidden">
+        
+        {/* Header Section */}
+        <div className="flex flex-col items-center mb-6">
+          {systemConfig.logo ? (
+            // Display uploaded logo
+            <div className="mb-4">
+              <img 
+                src={systemConfig.logo} 
+                alt={systemConfig.systemName || "System Logo"} 
+                className="max-h-12 max-w-36 object-contain"
               />
             </div>
-
-            <div className="flex gap-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 bg-primary text-white py-3 px-4 rounded-md hover:bg-primary-hover focus:outline-none focus:ring-2 focus-ring-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Checking...
-                  </>
-                ) : (
-                  <>
-                    <FaSearch />
-                    Check Status
-                  </>
-                )}
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => navigate('/login')}
-                className="flex-1 bg-gray-600 text-white py-3 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 flex items-center justify-center gap-2 font-medium"
-              >
-                <FaArrowLeft />
-                Back to Login
-              </button>
+          ) : (
+            // Fallback to fingerprint icon
+            <div className="bg-blue-600 p-3 rounded-xl mb-4 shadow-lg transform transition hover:scale-105">
+              <FaFingerprint size={28} className="text-white" />
             </div>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-gray-600 text-sm">
-              Don't have a registration request?{' '}
-              <button
-                onClick={() => navigate('/register')}
-                className="text-primary hover:underline font-medium"
-              >
-                Register here
-              </button>
-            </p>
-          </div>
+          )}
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight text-center">
+            Check Status
+          </h2>
+          <p className="text-[10px] sm:text-xs text-blue-600 mt-1.5 font-medium bg-blue-50 inline-block px-2.5 py-0.5 rounded-full">
+            {systemConfig.systemName || "Attendance Management System"}
+          </p>
         </div>
+
+        {/* Informational Text */}
+        <p className="text-xs text-gray-500 text-center mb-5 leading-relaxed">
+          Enter your Employee ID below to view the current approval status of your registration request.
+        </p>
+
+        {/* Check Status Form */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Employee ID <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              required
+              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all duration-200 text-gray-800 uppercase"
+              placeholder="e.g. TSI00123"
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-blue-600 text-white py-2.5 px-4 rounded-lg text-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-sm transition-all duration-200 hover:shadow order-1 sm:order-2"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Checking...
+                </>
+              ) : (
+                <>
+                  Check Status
+                </>
+              )}
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="flex-1 bg-white text-gray-700 py-2.5 px-4 rounded-lg text-sm border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 flex items-center justify-center gap-2 font-semibold transition-all duration-200 order-2 sm:order-1"
+            >
+              <FaArrowLeft className="text-gray-500 text-xs" />
+              Back
+            </button>
+          </div>
+        </form>
+
+        {/* Registration Link Footer */}
+        <div className="mt-6 pt-5 border-t border-gray-100 text-center">
+          <p className="text-[11px] sm:text-xs text-gray-500">
+            Don't have a registration request?{' '}
+            <button
+              onClick={() => navigate('/register')}
+              className="text-blue-600 hover:text-blue-800 font-semibold transition-colors hover:underline ml-1"
+            >
+              Register here
+            </button>
+          </p>
+        </div>
+
       </div>
     </div>
   );
