@@ -832,139 +832,54 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     const clockedInEmployeeIds = todayAttendances.map(att => att.employee_id);
     console.log(`📋 Clocked in employee IDs:`, clockedInEmployeeIds);
 
-    // Step 3: Get all employee schedules for today using specific date only
-    // Check if today's date exists in schedule_dates JSON field
-    const employeeSchedules = await EmployeeSchedule.findAll({
-      where: {
-        status: 'Active',
-        employee_id: {
-          [Op.in]: clockedInEmployeeIds // Only check schedules for employees who clocked in
+    // Step 3: Check if already has overtime status
+    const employeesWithoutOvertime = [];
+    for (const empId of clockedInEmployeeIds) {
+      const hasOvertime = await Attendance.findOne({
+        where: {
+          employee_id: empId,
+          date: today,
+          status: "Overtime"
         }
+      });
+
+      if (!hasOvertime) {
+        employeesWithoutOvertime.push(empId);
       }
-    });
+    }
 
-    // Filter schedules that include today's date in schedule_dates
-    const todaySchedules = employeeSchedules.filter(schedule => {
-      if (!schedule.schedule_dates) return false;
-      
-      // Parse schedule_dates (it's a JSON array of dates)
-      try {
-        const dates = typeof schedule.schedule_dates === 'string' 
-          ? JSON.parse(schedule.schedule_dates) 
-          : schedule.schedule_dates;
-        
-        return Array.isArray(dates) && dates.includes(today);
-      } catch (error) {
-        console.log(`  ⚠️ Error parsing schedule_dates for ${schedule.employee_id}:`, error.message);
-        return false;
-      }
-    });
+    console.log(`📊 Employees without overtime (${employeesWithoutOvertime.length}):`, employeesWithoutOvertime);
 
-    console.log(`📊 Found ${todaySchedules.length} employee schedules for ${today} (filtered from ${employeeSchedules.length} total)`);
-    console.log(`📋 Schedule details:`, todaySchedules.map(s => ({
-      employee_id: s.employee_id,
-      days: s.days,
-      schedule_dates: s.schedule_dates,
-      shift_name: s.shift_name,
-      shift_start: s.shift_start,
-      shift_end: s.shift_end,
-      start_date: s.start_date,
-      end_date: s.end_date
-    })));
-    
-    // Step 4: Filter out employees whose shift has already ended
-    const nowTime = new Date();
-    const currentTime = nowTime.toLocaleTimeString('en-US', { 
-      timeZone: timezone, 
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    console.log(`⏰ Current time in ${timezone}: ${currentTime}`);
-    
-    // Helper function to compare times
-    const isTimeBeforeOrEqual = (time1, time2) => {
-      // Convert HH:mm to minutes since midnight for comparison
-      const [h1, m1] = time1.split(':').map(Number);
-      const [h2, m2] = time2.split(':').map(Number);
-      const minutes1 = h1 * 60 + m1;
-      const minutes2 = h2 * 60 + m2;
-      return minutes1 <= minutes2;
-    };
-    
-    const activeSchedules = todaySchedules.filter(schedule => {
-      if (!schedule.shift_end) {
-        console.log(`  - ${schedule.employee_id}: No shift_end time, allowing overtime`);
-        return true; // If no shift end time, allow overtime
-      }
-      
-      const shiftEndTime = schedule.shift_end;
-      const isShiftActive = isTimeBeforeOrEqual(currentTime, shiftEndTime);
-      
-      console.log(`  - ${schedule.employee_id}: shift ends at ${shiftEndTime}, current ${currentTime}, active: ${isShiftActive}`);
-      return isShiftActive;
-    });
-    
-    console.log(`📊 Found ${activeSchedules.length} active schedules (shift not ended yet)`);
-    
-    // Step 5: Get employee IDs who are scheduled today and shift hasn't ended
-    const scheduledEmployeeIds = [...new Set(activeSchedules.map(schedule => schedule.employee_id))];
-    console.log(`📋 Scheduled employee IDs with active shifts (${scheduledEmployeeIds.length}):`, scheduledEmployeeIds);
-
-    // Step 6: Find intersection - employees who are both scheduled AND clocked in
-    const eligibleEmployeeIds = clockedInEmployeeIds.filter(empId => 
-      scheduledEmployeeIds.includes(empId)
-    );
-    
-    console.log(`📊 Eligible employee IDs (scheduled AND clocked in AND shift active):`, eligibleEmployeeIds);
-
-    if (eligibleEmployeeIds.length === 0) {
-      console.log(`📊 No employees are both scheduled and clocked in today`);
-      console.log(`📊 Clocked in but not scheduled:`, clockedInEmployeeIds.filter(id => !scheduledEmployeeIds.includes(id)));
-      console.log(`📊 Scheduled but not clocked in:`, scheduledEmployeeIds.filter(id => !clockedInEmployeeIds.includes(id)));
+    if (employeesWithoutOvertime.length === 0) {
+      console.log(`📊 All clocked-in employees already have overtime assigned`);
       return res.status(200).json([]);
     }
 
-    // Step 7: Get employee details for eligible employees
+    // Step 4: Get employee details for eligible employees
     const eligibleEmployees = await Employee.findAll({
       where: {
         employee_id: {
-          [Op.in]: eligibleEmployeeIds
+          [Op.in]: employeesWithoutOvertime
         }
       }
     });
 
     console.log(`📊 Found ${eligibleEmployees.length} eligible employee records`);
 
-    // Step 8: Filter out employees who already have overtime status
-    const employeesWithoutOvertime = [];
-    for (const employee of eligibleEmployees) {
-      const hasOvertime = await Attendance.findOne({
-        where: {
-          employee_id: employee.employee_id,
-          date: today,
-          status: "Overtime"
-        }
-      });
+    // Return employee data with firstname and lastname
+    const result = eligibleEmployees.map(employee => {
+      const employeeData = employee.toJSON();
+      return {
+        ...employeeData,
+        firstname: employeeData.firstname || '',
+        lastname: employeeData.lastname || ''
+      };
+    });
 
-      console.log(`👤 Employee ${employee.employee_id}: hasOvertime=${!!hasOvertime}`);
-
-      if (!hasOvertime) {
-        const employeeData = employee.toJSON();
-        
-        // Return employee data with firstname and lastname
-        employeesWithoutOvertime.push({
-          ...employeeData,
-          firstname: employeeData.firstname || '',
-          lastname: employeeData.lastname || ''
-        });
-      }
-    }
-
-    console.log(`📊 Final result: ${employeesWithoutOvertime.length} overtime eligible employees`);
-    console.log(`📋 Eligible employees:`, employeesWithoutOvertime.map(e => `${e.employee_id} - ${e.firstname} ${e.lastname}`));
+    console.log(`📊 Final result: ${result.length} overtime eligible employees`);
+    console.log(`📋 Eligible employees:`, result.map(e => `${e.employee_id} - ${e.firstname} ${e.lastname}`));
     
-    res.status(200).json(employeesWithoutOvertime);
+    res.status(200).json(result);
   } catch (error) {
     console.error("❌ Error fetching overtime eligible employees:", error);
     console.error("❌ Error stack:", error.stack);
