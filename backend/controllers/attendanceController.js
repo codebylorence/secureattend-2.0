@@ -791,6 +791,10 @@ export const removeOvertime = async (req, res) => {
 
 export const getOvertimeEligibleEmployees = async (req, res) => {
   try {
+    console.log('🚀 [OVERTIME] getOvertimeEligibleEmployees called');
+    console.log('🚀 [OVERTIME] Request headers:', req.headers);
+    console.log('🚀 [OVERTIME] Request user:', req.user);
+    
     const today = getCurrentDateInTimezone();
     
     // Get weekday in the configured timezone
@@ -845,6 +849,8 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
 
       if (!hasOvertime) {
         employeesWithoutOvertime.push(empId);
+      } else {
+        console.log(`⏰ ${empId} already has overtime`);
       }
     }
 
@@ -878,6 +884,7 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
 
     console.log(`📊 Final result: ${result.length} overtime eligible employees`);
     console.log(`📋 Eligible employees:`, result.map(e => `${e.employee_id} - ${e.firstname} ${e.lastname}`));
+    console.log('🚀 [OVERTIME] Sending response with', result.length, 'employees');
     
     res.status(200).json(result);
   } catch (error) {
