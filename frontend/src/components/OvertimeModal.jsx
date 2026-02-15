@@ -100,11 +100,15 @@ const OvertimeModal = ({ isOpen, onClose }) => {
 
     setLoading(true);
     try {
+      const apiUrl = import.meta.env.VITE_API_URL || '/api';
+      const token = localStorage.getItem('token');
+      
       // Send bulk overtime assignment request
-      const response = await fetch('/api/attendances/overtime/assign', {
+      const response = await fetch(`${apiUrl}/attendances/overtime/assign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           employee_ids: selectedEmployees, // Send all selected employees
