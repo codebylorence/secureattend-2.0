@@ -29,7 +29,8 @@ const OvertimeModal = ({ isOpen, onClose }) => {
     try {
       console.log('🔍 Fetching overtime eligible employees...');
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/attendances/overtime/eligible', {
+      const apiUrl = import.meta.env.VITE_API_URL || '/api';
+      const response = await fetch(`${apiUrl}/attendances/overtime/eligible`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -43,7 +44,7 @@ const OvertimeModal = ({ isOpen, onClose }) => {
         // Show helpful message if no employees found
         if (data.length === 0) {
           console.log('ℹ️ No eligible employees found');
-          toast.info('No employees are eligible for overtime. Employees must be scheduled today and have clocked in for their regular shift.', {
+          toast.info('No employees are eligible for overtime. Employees must have clocked in today.', {
             autoClose: 6000
           });
         }
