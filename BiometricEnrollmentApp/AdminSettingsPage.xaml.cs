@@ -30,6 +30,7 @@ namespace BiometricEnrollmentApp
             LoadSystemInformation();
             CheckDeviceStatus();
             LoadAttendanceSettings();
+            LoadAdminAccountInfo();
         }
 
         private void LoadAttendanceSettings()
@@ -425,6 +426,128 @@ namespace BiometricEnrollmentApp
         {
             MessageBox.Show("Schedule notifications are no longer used.\nSchedules now sync automatically when WiFi is connected.", 
                           "Feature Removed", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void LoadAdminAccountInfo()
+        {
+            try
+            {
+                // Load current admin username from local database
+                var adminUsername = _dataService.GetAdminUsername();
+                CurrentUsernameTextBox.Text = adminUsername ?? "admin";
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"Error loading admin account info: {ex.Message}");
+                CurrentUsernameTextBox.Text = "admin";
+            }
+        }
+
+        private void UpdateAdminAccountBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string newUsername = NewUsernameTextBox.Text.Trim();
+                string newPassword = NewPasswordBox.Password;
+                string confirmPassword = ConfirmPasswordBox.Password;
+
+                // Validate inputs
+                if (string.IsNullOrEmpty(newUsername) && string.IsNullOrEmpty(newPassword))
+                {
+                    MessageBox.Show("Please enter a new username or password to update.", 
+                                  "No Changes", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // Validate username if provided
+                if (!string.IsNullOrEmpty(newUsername))
+                {
+                    if (newUsername.Length < 3)
+                    {
+                        MessageBox.Show("Username must be at least 3 characters long.", 
+                                      "Invalid Username", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        NewUsernameTextBox.Focus();
+                        return;
+                    }
+
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(newUsername, "^[a-zA-Z0-9_]+$"))
+                    {
+                        MessageBox.Show("Username can only contain letters, numbers, and underscores.", 
+                                      "Invalid Username", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        NewUsernameTextBox.Focus();
+                        return;
+                    }
+                }
+
+                // Validate password if provided
+                if (!string.IsNullOrEmpty(newPassword))
+                {
+                    if (newPassword.Length < 4)
+                    {
+                        MessageBox.Show("Password must be at least 4 characters long.", 
+                                      "Invalid Password", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        NewPasswordBox.Focus();
+                        return;
+                    }
+
+                    if (newPassword != confirmPassword)
+                    {
+                        MessageBox.Show("Passwords do not match. Please try again.", 
+                                      "Password Mismatch", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        ConfirmPasswordBox.Focus();
+                        return;
+                    }
+                }
+
+                // Confirm the change
+                var result = MessageBox.Show(
+                    "Are you sure you want to update the admin account?\n\n" +
+                    (string.IsNullOrEmpty(newUsername) ? "" : $"New Username: {newUsername}\n") +
+                    (string.IsNullOrEmpty(newPassword) ? "" : "New Password: ********\n") +
+                    "\nNote: This only affects the biometric app login.",
+                    "Confirm Update", 
+                    MessageBoxButton.YesNo, 
+                    MessageBoxImage.Question);
+
+                if (result != MessageBoxResult.Yes)
+                {
+                    return;
+                }
+
+                // Update admin account in local database
+                bool success = _dataService.UpdateAdminAccount(newUsername, newPassword);
+
+                if (success)
+                {
+                    MessageBox.Show(
+                        "Admin account updated successfully!\n\n" +
+                        "Please use the new credentials for your next login.",
+                        "Update Successful", 
+                        MessageBoxButton.OK, 
+                        MessageBoxImage.Information);
+
+                    LogHelper.Write($"✅ Admin account updated - Username: {newUsername ?? "(unchanged)"}, Password: {(string.IsNullOrEmpty(newPassword) ? "(unchanged)" : "********")}");
+
+                    // Clear the input fields
+                    NewUsernameTextBox.Clear();
+                    NewPasswordBox.Clear();
+                    ConfirmPasswordBox.Clear();
+
+                    // Reload current username
+                    LoadAdminAccountInfo();
+                }
+                else
+                {
+                    MessageBox.Show("Failed to update admin account. Please check the logs for details.", 
+                                  "Update Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error updating admin account: {ex.Message}");
+                MessageBox.Show($"Error updating admin account: {ex.Message}", 
+                              "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 

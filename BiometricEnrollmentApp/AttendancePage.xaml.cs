@@ -1492,7 +1492,7 @@ namespace BiometricEnrollmentApp
                 {
                     Id = s.Id,
                     EmployeeId = s.EmployeeId,
-                    EmployeeName = employeeNameMap.ContainsKey(s.EmployeeId) ? employeeNameMap[s.EmployeeId] : "Unknown",
+                    EmployeeName = employeeNameMap.ContainsKey(s.EmployeeId) ? employeeNameMap[s.EmployeeId] : s.EmployeeId,
                     Date = s.Date,
                     ClockIn = FormatTimeOnly(s.ClockIn),
                     ClockOut = FormatTimeOnly(s.ClockOut),
@@ -1512,11 +1512,41 @@ namespace BiometricEnrollmentApp
                     if (attendGrid != null) attendGrid.ItemsSource = rows;
                     else LogHelper.Write("⚠️ No DataGrid named SessionsGrid or AttendancesGrid found.");
                 }
+                
+                // Update metrics
+                UpdateAttendanceMetrics(sessions);
             }
             catch (Exception ex)
             {
                 UpdateStatus($"Failed to load sessions: {ex.Message}");
                 LogHelper.Write($"Failed to load sessions (stack): {ex}");
+            }
+        }
+        
+        private void UpdateAttendanceMetrics(List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> sessions)
+        {
+            try
+            {
+                // Count by status
+                int presentCount = sessions.Count(s => s.Status == "Present");
+                int lateCount = sessions.Count(s => s.Status == "Late");
+                int absentCount = sessions.Count(s => s.Status == "Absent");
+                int overtimeCount = sessions.Count(s => s.Status == "Overtime");
+                
+                // Update UI
+                var presentText = this.FindName("PresentCountText") as TextBlock;
+                var lateText = this.FindName("LateCountText") as TextBlock;
+                var absentText = this.FindName("AbsentCountText") as TextBlock;
+                var overtimeText = this.FindName("OvertimeCountText") as TextBlock;
+                
+                if (presentText != null) presentText.Text = presentCount.ToString();
+                if (lateText != null) lateText.Text = lateCount.ToString();
+                if (absentText != null) absentText.Text = absentCount.ToString();
+                if (overtimeText != null) overtimeText.Text = overtimeCount.ToString();
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Failed to update metrics: {ex.Message}");
             }
         }
 

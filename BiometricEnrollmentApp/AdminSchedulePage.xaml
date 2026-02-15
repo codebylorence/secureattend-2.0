@@ -1,0 +1,211 @@
+<Page x:Class="BiometricEnrollmentApp.AdminSchedulePage" 
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Title="Admin - Schedules"
+      Background="#F8FAFC"
+      FontFamily="Segoe UI">
+
+    <Page.Resources>
+        <SolidColorBrush x:Key="TextMainBrush" Color="#1E293B"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#64748B"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#E2E8F0"/>
+        <SolidColorBrush x:Key="PanelBackground" Color="#FFFFFF"/>
+        
+        <DropShadowEffect x:Key="PanelShadow" BlurRadius="15" ShadowDepth="2" Direction="270" Color="#000000" Opacity="0.04"/>
+
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#2563EB"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1D4ED8"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#334155"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#F1F5F9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Page.Resources>
+
+    <Grid Margin="32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,24">
+            <TextBlock Text="Employee Schedules" 
+                       FontSize="26" FontWeight="Bold" 
+                       Foreground="{StaticResource TextMainBrush}"
+                       Margin="0,0,0,4"/>
+            <TextBlock Text="View all employee schedules synced from the server" 
+                       FontSize="14" 
+                       Foreground="{StaticResource TextMutedBrush}"/>
+        </StackPanel>
+
+        <!-- Filters and Actions -->
+        <Border Grid.Row="1" Background="{StaticResource PanelBackground}" 
+                CornerRadius="12" Padding="20" 
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" 
+                Effect="{StaticResource PanelShadow}" Margin="0,0,0,24">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="📊 Total Schedules:" FontWeight="SemiBold" 
+                               Foreground="{StaticResource TextMainBrush}" 
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="TotalSchedulesText" Text="0" 
+                               FontWeight="Bold" FontSize="16"
+                               Foreground="#2563EB" VerticalAlignment="Center"/>
+                    
+                    <TextBlock Text="👥 Employees:" FontWeight="SemiBold" 
+                               Foreground="{StaticResource TextMainBrush}" 
+                               VerticalAlignment="Center" Margin="24,0,8,0"/>
+                    <TextBlock x:Name="TotalEmployeesText" Text="0" 
+                               FontWeight="Bold" FontSize="16"
+                               Foreground="#059669" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <Button Grid.Column="1" x:Name="RefreshBtn" Content="🔄 Refresh" 
+                        Click="RefreshBtn_Click" Style="{StaticResource SecondaryButton}" 
+                        Margin="0,0,12,0"/>
+                <Button Grid.Column="2" x:Name="SyncBtn" Content="⬇️ Sync from Server" 
+                        Click="SyncBtn_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- Schedules DataGrid -->
+        <Border Grid.Row="2" Background="{StaticResource PanelBackground}" 
+                CornerRadius="12" 
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" 
+                Effect="{StaticResource PanelShadow}">
+            <Grid>
+                <DataGrid x:Name="SchedulesDataGrid" 
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          GridLinesVisibility="None"
+                          HeadersVisibility="Column"
+                          SelectionMode="Single"
+                          CanUserResizeRows="False"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          AlternatingRowBackground="#F8FAFC"
+                          RowBackground="White"
+                          BorderThickness="0"
+                          FontSize="13"
+                          Margin="0">
+
+                    <DataGrid.Resources>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#F1F5F9"/>
+                            <Setter Property="Foreground" Value="#475569"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Padding" Value="16,12"/>
+                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                            <Setter Property="BorderBrush" Value="#E2E8F0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                        </Style>
+
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="16,12"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="DataGridCell">
+                                        <Border Background="{TemplateBinding Background}" 
+                                                BorderThickness="0" 
+                                                Padding="16,12">
+                                            <ContentPresenter VerticalAlignment="Center" 
+                                                            HorizontalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#EFF6FF"/>
+                                    <Setter Property="Foreground" Value="#1E293B"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="Background" Value="White"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#F8FAFC"/>
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#EFF6FF"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.Resources>
+
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="1.2*"/>
+                        <DataGridTextColumn Header="Shift Name" Binding="{Binding ShiftName}" Width="1.5*"/>
+                        <DataGridTextColumn Header="Start Time" Binding="{Binding StartTime}" Width="1*"/>
+                        <DataGridTextColumn Header="End Time" Binding="{Binding EndTime}" Width="1*"/>
+                        <DataGridTextColumn Header="Days" Binding="{Binding Days}" Width="2*"/>
+                        <DataGridTextColumn Header="Department" Binding="{Binding Department}" Width="1.5*"/>
+                        <DataGridTextColumn Header="Synced At" Binding="{Binding SyncedAt}" Width="1.5*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Empty State -->
+                <StackPanel x:Name="EmptyStatePanel" 
+                            VerticalAlignment="Center" 
+                            HorizontalAlignment="Center"
+                            Visibility="Collapsed">
+                    <TextBlock Text="📅" FontSize="64" 
+                               HorizontalAlignment="Center" Margin="0,0,0,16"/>
+                    <TextBlock Text="No Schedules Found" 
+                               FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource TextMainBrush}"
+                               HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                    <TextBlock Text="Click 'Sync from Server' to download employee schedules" 
+                               FontSize="14"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>
