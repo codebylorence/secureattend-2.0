@@ -791,11 +791,15 @@ export const removeOvertime = async (req, res) => {
 
 export const getOvertimeEligibleEmployees = async (req, res) => {
   try {
-    console.log('🚀 [OVERTIME] getOvertimeEligibleEmployees called');
-    console.log('🚀 [OVERTIME] Request headers:', req.headers);
-    console.log('🚀 [OVERTIME] Request user:', req.user);
+    console.log('='.repeat(80));
+    console.log('🚀 [OVERTIME] getOvertimeEligibleEmployees FUNCTION CALLED');
+    console.log('🚀 [OVERTIME] Timestamp:', new Date().toISOString());
+    console.log('🚀 [OVERTIME] Request method:', req.method);
+    console.log('🚀 [OVERTIME] Request path:', req.path);
+    console.log('='.repeat(80));
     
     const today = getCurrentDateInTimezone();
+    console.log(`📅 [OVERTIME] Today's date: ${today}`);
     
     // Get weekday in the configured timezone
     const configPath = path.join(process.cwd(), 'config', 'system-config.json');
@@ -808,10 +812,11 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
       weekday: 'long'
     }).format(now);
     
-    console.log(`📅 Fetching overtime eligible employees for ${today} (${todayWeekday}) in timezone ${timezone}`);
+    console.log(`📅 [OVERTIME] Fetching overtime eligible employees for ${today} (${todayWeekday}) in timezone ${timezone}`);
     
     // Step 1: Get all employees who have clocked in today (Present or Late)
-    // Note: We don't require clock_out because overtime can be assigned before they finish
+    console.log(`🔍 [OVERTIME] Step 1: Querying attendances for date=${today}, status IN (Present, Late), clock_in NOT NULL`);
+    
     const todayAttendances = await Attendance.findAll({
       where: {
         date: today,
@@ -824,19 +829,25 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
       }
     });
 
-    console.log(`📊 Found ${todayAttendances.length} employees who clocked in today:`, 
-      todayAttendances.map(a => `${a.employee_id} (${a.status}, in: ${a.clock_in}, out: ${a.clock_out || 'not yet'})`));
+    console.log(`📊 [OVERTIME] Found ${todayAttendances.length} employees who clocked in today`);
+    if (todayAttendances.length > 0) {
+      todayAttendances.forEach(a => {
+        console.log(`   👤 ${a.employee_id}: ${a.status}, in: ${a.clock_in}, out: ${a.clock_out || 'not yet'}`);
+      });
+    }
 
     if (todayAttendances.length === 0) {
-      console.log(`📊 No employees clocked in today, returning empty list`);
+      console.log(`⚠️ [OVERTIME] No employees clocked in today, returning empty array`);
+      console.log('='.repeat(80));
       return res.status(200).json([]);
     }
 
     // Step 2: Get employee IDs who clocked in
     const clockedInEmployeeIds = todayAttendances.map(att => att.employee_id);
-    console.log(`📋 Clocked in employee IDs:`, clockedInEmployeeIds);
+    console.log(`📋 [OVERTIME] Step 2: Clocked in employee IDs (${clockedInEmployeeIds.length}):`, clockedInEmployeeIds);
 
     // Step 3: Check if already has overtime status
+    console.log(`🔍 [OVERTIME] Step 3: Checking for existing overtime records...`);
     const employeesWithoutOvertime = [];
     for (const empId of clockedInEmployeeIds) {
       const hasOvertime = await Attendance.findOne({
@@ -849,19 +860,22 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
 
       if (!hasOvertime) {
         employeesWithoutOvertime.push(empId);
+        console.log(`   ✅ ${empId}: No overtime yet - ELIGIBLE`);
       } else {
-        console.log(`⏰ ${empId} already has overtime`);
+        console.log(`   ❌ ${empId}: Already has overtime - NOT ELIGIBLE`);
       }
     }
 
-    console.log(`📊 Employees without overtime (${employeesWithoutOvertime.length}):`, employeesWithoutOvertime);
+    console.log(`📊 [OVERTIME] Employees without overtime: ${employeesWithoutOvertime.length}`);
 
     if (employeesWithoutOvertime.length === 0) {
-      console.log(`📊 All clocked-in employees already have overtime assigned`);
+      console.log(`⚠️ [OVERTIME] All clocked-in employees already have overtime assigned`);
+      console.log('='.repeat(80));
       return res.status(200).json([]);
     }
 
     // Step 4: Get employee details for eligible employees
+    console.log(`🔍 [OVERTIME] Step 4: Fetching employee details for ${employeesWithoutOvertime.length} eligible employees...`);
     const eligibleEmployees = await Employee.findAll({
       where: {
         employee_id: {
@@ -870,7 +884,7 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
       }
     });
 
-    console.log(`📊 Found ${eligibleEmployees.length} eligible employee records`);
+    console.log(`📊 [OVERTIME] Found ${eligibleEmployees.length} employee records in database`);
 
     // Return employee data with firstname and lastname
     const result = eligibleEmployees.map(employee => {
@@ -882,14 +896,19 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
       };
     });
 
-    console.log(`📊 Final result: ${result.length} overtime eligible employees`);
-    console.log(`📋 Eligible employees:`, result.map(e => `${e.employee_id} - ${e.firstname} ${e.lastname}`));
-    console.log('🚀 [OVERTIME] Sending response with', result.length, 'employees');
+    console.log(`✅ [OVERTIME] Final result: ${result.length} overtime eligible employees`);
+    result.forEach(e => {
+      console.log(`   👤 ${e.employee_id}: ${e.firstname} ${e.lastname} (${e.department})`);
+    });
+    console.log('='.repeat(80));
     
     res.status(200).json(result);
   } catch (error) {
-    console.error("❌ Error fetching overtime eligible employees:", error);
-    console.error("❌ Error stack:", error.stack);
+    console.error('='.repeat(80));
+    console.error("❌ [OVERTIME] ERROR in getOvertimeEligibleEmployees");
+    console.error("❌ [OVERTIME] Error message:", error.message);
+    console.error("❌ [OVERTIME] Error stack:", error.stack);
+    console.error('='.repeat(80));
     res.status(500).json({ error: "Failed to fetch overtime eligible employees" });
   }
 };
