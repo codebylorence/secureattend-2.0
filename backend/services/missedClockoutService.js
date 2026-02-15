@@ -29,7 +29,7 @@ export async function markMissedClockouts() {
     console.log(`🕐 [Missed Clock-out Check] Starting check for ${today} at ${currentTime} (${timezone})`);
     
     // Get grace period from system config
-    const configPath = path.join(process.cwd(), 'backend', 'config', 'system-config.json');
+    const configPath = path.join(process.cwd(), 'config', 'system-config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     const gracePeriodMinutes = config.clockOutGracePeriodMinutes || 30;
     
