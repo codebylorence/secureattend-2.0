@@ -252,9 +252,7 @@ const OvertimeModal = ({ isOpen, onClose }) => {
                         To be eligible, employees must:
                       </p>
                       <ul className="text-sm mt-2 text-left max-w-md mx-auto">
-                        <li>• Be scheduled to work today</li>
-                        <li>• Have clocked in for their regular shift</li>
-                        <li>• Their shift must not have ended yet</li>
+                        <li>• Have clocked in today (Present or Late status)</li>
                         <li>• Not already have overtime assigned</li>
                       </ul>
                       <p className="text-xs mt-3 text-primary-600">

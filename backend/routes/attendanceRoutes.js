@@ -17,6 +17,17 @@ import { authenticateToken, requireAttendanceAccess, requireAdmin } from "../mid
 
 const router = express.Router();
 
+// Health check endpoint to verify deployment version
+router.get("/health", (req, res) => {
+  res.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    version: "overtime-fix-v3-simplified",
+    overtimeLogic: "Eligible if: clocked in today (Present/Late) AND no overtime assigned yet",
+    scheduleCheckRemoved: true
+  });
+});
+
 router.post("/", recordAttendance);
 router.get("/", authenticateToken, requireAttendanceAccess, getAttendances);
 router.get("/today", authenticateToken, requireAttendanceAccess, getTodayAttendances);
