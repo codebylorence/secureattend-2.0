@@ -22,9 +22,10 @@ router.get("/health", (req, res) => {
   res.json({ 
     status: "ok", 
     timestamp: new Date().toISOString(),
-    version: "overtime-fix-v3-simplified",
+    version: "overtime-fix-v4-FORCE-DEPLOY",
     overtimeLogic: "Eligible if: clocked in today (Present/Late) AND no overtime assigned yet",
-    scheduleCheckRemoved: true
+    scheduleCheckRemoved: true,
+    deployTimestamp: "2026-02-15T20:00:00Z"
   });
 });
 
