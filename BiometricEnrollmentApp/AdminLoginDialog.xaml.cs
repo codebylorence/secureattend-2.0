@@ -1,18 +1,17 @@
 using System.Windows;
+using BiometricEnrollmentApp.Services;
 
 namespace BiometricEnrollmentApp
 {
     public partial class AdminLoginDialog : Window
     {
         public bool IsAuthenticated { get; private set; } = false;
-
-        // Simple hardcoded credentials - you can modify these or load from config
-        private const string ADMIN_USERNAME = "admin";
-        private const string ADMIN_PASSWORD = "admin123";
+        private readonly DataService _dataService;
 
         public AdminLoginDialog()
         {
             InitializeComponent();
+            _dataService = new DataService();
             UsernameTextBox.Focus();
             
             // Allow Enter key to login
@@ -36,12 +35,12 @@ namespace BiometricEnrollmentApp
                 return;
             }
 
-            // Simple authentication check
-            if (username.Equals(ADMIN_USERNAME, System.StringComparison.OrdinalIgnoreCase) && 
-                password == ADMIN_PASSWORD)
+            // Validate credentials against database
+            if (_dataService.ValidateAdminCredentials(username, password))
             {
                 IsAuthenticated = true;
                 DialogResult = true;
+                LogHelper.Write($"✅ Admin login successful: {username}");
                 Close();
             }
             else
@@ -49,6 +48,7 @@ namespace BiometricEnrollmentApp
                 ShowError("Invalid username or password.");
                 PasswordBox.Clear();
                 PasswordBox.Focus();
+                LogHelper.Write($"❌ Failed admin login attempt: {username}");
             }
         }
 

@@ -117,6 +117,31 @@ namespace BiometricEnrollmentApp.Services
             ";
             cmd.ExecuteNonQuery();
 
+            // Admin credentials table
+            cmd.CommandText = @"
+                CREATE TABLE IF NOT EXISTS AdminCredentials (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    username TEXT NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    updated_at TEXT DEFAULT (datetime('now'))
+                );
+            ";
+            cmd.ExecuteNonQuery();
+
+            // Insert default admin credentials if table is empty
+            cmd.CommandText = "SELECT COUNT(*) FROM AdminCredentials";
+            var count = Convert.ToInt32(cmd.ExecuteScalar());
+            if (count == 0)
+            {
+                // Default credentials: admin / admin123
+                cmd.CommandText = @"
+                    INSERT INTO AdminCredentials (id, username, password_hash)
+                    VALUES (1, 'admin', 'admin123');
+                ";
+                cmd.ExecuteNonQuery();
+                LogHelper.Write("🔐 Default admin credentials created (username: admin, password: admin123)");
+            }
+
             LogHelper.Write($"📂 Database initialized at {_dbPath}");
         }
 
@@ -1046,6 +1071,51 @@ namespace BiometricEnrollmentApp.Services
             return result;
         }
 
+        /// <summary>
+        /// Get all schedules from the database for admin viewing
+        /// </summary>
+        public List<ScheduleDisplayItem> GetAllSchedules()
+        {
+            var result = new List<ScheduleDisplayItem>();
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT employee_id, shift_name, start_time, end_time, days, 
+                           IFNULL(department, 'N/A'), IFNULL(synced_at, created_at)
+                    FROM EmployeeSchedules
+                    ORDER BY employee_id, shift_name
+                ";
+
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var schedule = new ScheduleDisplayItem
+                    {
+                        EmployeeId = reader.GetString(0),
+                        ShiftName = reader.GetString(1),
+                        StartTime = reader.GetString(2),
+                        EndTime = reader.GetString(3),
+                        Days = reader.GetString(4),
+                        Department = reader.GetString(5),
+                        SyncedAt = reader.GetString(6)
+                    };
+                    
+                    result.Add(schedule);
+                }
+                
+                LogHelper.Write($"📊 Retrieved {result.Count} schedules from database");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting all schedules: {ex.Message}");
+            }
+            return result;
+        }
+
         public (bool IsScheduled, string ShiftName, string StartTime, string EndTime) IsEmployeeScheduledToday(string employeeId)
         {
             try
@@ -1826,28 +1896,33 @@ namespace BiometricEnrollmentApp.Services
                     bool isOvernightShift = IsOvernightShift(schedule.StartTime, schedule.EndTime);
                     LogHelper.Write($"  🌙 {schedule.EmployeeId} - Overnight shift: {isOvernightShift}");
                     
-                    // Check if shift has ended with grace period
-                    // This is the ONLY time check needed - if shift ended + grace period passed, mark absent/missed clock-out
+                    // Get settings for absent marking grace period
                     var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
                     int clockOutGracePeriod = settingsService.GetClockOutGracePeriodMinutes();
+                    int absentMarkingGracePeriod = 30; // 30 minutes after shift start to mark absent
                     
+                    // Check if shift has STARTED + grace period for absent marking
+                    LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Checking if shift started (start time: {schedule.StartTime}, grace: {absentMarkingGracePeriod} min)");
+                    bool shiftStartedWithGrace = HasShiftStartedWithGracePeriod(schedule.StartTime, absentMarkingGracePeriod);
+                    LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift started + grace result: {shiftStartedWithGrace}");
+                    
+                    // Check if shift has ENDED + grace period for missed clock-out marking
                     LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Checking if shift ended (end time: {schedule.EndTime}, grace: {clockOutGracePeriod} min)");
                     bool shiftEnded = HasShiftEndedWithGracePeriod(schedule.EndTime, clockOutGracePeriod);
                     LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift ended result: {shiftEnded}");
                     
-                    if (!shiftEnded)
-                    {
-                        LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet or within grace period ({schedule.EndTime} + {clockOutGracePeriod} min)");
-                        continue;
-                    }
-                    
-                    LogHelper.Write($"  ✅ {schedule.EmployeeId} - Shift ended + grace period passed, checking attendance...");
-                    
-                    // Check if employee has attendance session today (use pre-fetched sessions)
+                    // Get employee session once
                     var employeeSession = allSessions.FirstOrDefault(s => s.EmployeeId == schedule.EmployeeId);
+                    bool hasSession = employeeSession.EmployeeId != null;
+                    bool hasClockIn = hasSession && !string.IsNullOrEmpty(employeeSession.ClockIn);
                     
-                    if (employeeSession.EmployeeId == null)
+                    // ABSENT MARKING: Mark absent if shift started + grace period passed AND no clock-in
+                    if (shiftStartedWithGrace && !hasClockIn)
                     {
+                        LogHelper.Write($"  ✅ {schedule.EmployeeId} - Shift started + grace period passed, no clock-in, checking if should mark absent...");
+                        
+                        if (!hasSession)
+                        {
                         LogHelper.Write($"  ❌ {schedule.EmployeeId} - No attendance session found, will mark as absent");
                         // No attendance session - mark as absent
                         using var conn = new SqliteConnection(_connString);
@@ -1897,52 +1972,58 @@ namespace BiometricEnrollmentApp.Services
                             LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent");
                         }
                     }
+                    else if (hasSession && !hasClockIn)
+                    {
+                        // Has session but no clock-in - might be pre-created absent record
+                        if (employeeSession.Status == "Absent")
+                        {
+                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent (no clock-in)");
+                        }
+                        else
+                        {
+                            LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - Has session with status '{employeeSession.Status}' but no clock-in - this is unusual");
+                        }
+                    }
                     else
                     {
-                        // Has attendance session - check if needs to be marked as missed clock-out
-                        // IMPORTANT: Check clock in/out status FIRST, then check status field
-                        // This ensures we catch employees who clocked in but didn't clock out
+                        LogHelper.Write($"  ✅ {schedule.EmployeeId} - Has clocked in, not absent");
+                    }
+                    }
+                    
+                    // MISSED CLOCK-OUT MARKING: Only check if shift has ended
+                    if (shiftEnded && hasClockIn)
+                    {
+                        LogHelper.Write($"  📊 {schedule.EmployeeId} - Shift ended, checking for missed clock-out...");
+                        LogHelper.Write($"  📊 {schedule.EmployeeId} - Session: ClockIn={employeeSession.ClockIn ?? "NULL"}, ClockOut={employeeSession.ClockOut ?? "NULL"}, Status={employeeSession.Status}");
                         
-                        LogHelper.Write($"  📊 {schedule.EmployeeId} - Found session: ClockIn={employeeSession.ClockIn ?? "NULL"}, ClockOut={employeeSession.ClockOut ?? "NULL"}, Status={employeeSession.Status}");
-                        
-                        // CRITICAL FIX: If employee has clocked in, they are NOT absent!
-                        // Only mark as absent if there's NO clock-in at all
-                        if (!string.IsNullOrEmpty(employeeSession.ClockIn))
+                        // Check if needs missed clock-out marking
+                        if (string.IsNullOrEmpty(employeeSession.ClockOut))
                         {
-                            // Employee has clocked in - check if needs missed clock-out marking
-                            if (string.IsNullOrEmpty(employeeSession.ClockOut))
+                            // Clocked in but didn't clock out, and shift has ended
+                            // Only mark if not already marked as missed clock-out or absent
+                            if (employeeSession.Status != "Missed Clock-out" && employeeSession.Status != "Absent")
                             {
-                                // Clocked in but didn't clock out, and shift has ended
-                                // Only mark if not already marked as missed clock-out or absent
-                                if (employeeSession.Status != "Missed Clock-out" && employeeSession.Status != "Absent")
-                                {
-                                    MarkSessionAsMissedClockout(employeeSession.Id, schedule.EndTime);
-                                    markedMissedClockout++;
-                                    LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime}, previous status: {employeeSession.Status})");
-                                }
-                                else
-                                {
-                                    LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked as {employeeSession.Status}");
-                                }
+                                MarkSessionAsMissedClockout(employeeSession.Id, schedule.EndTime);
+                                markedMissedClockout++;
+                                LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime}, previous status: {employeeSession.Status})");
                             }
                             else
                             {
-                                LogHelper.Write($"  ✅ {schedule.EmployeeId} - Has complete attendance ({employeeSession.Status})");
+                                LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked as {employeeSession.Status}");
                             }
                         }
                         else
                         {
-                            // No clock-in but has a session record
-                            // This might be a pre-created absent record or an error
-                            if (employeeSession.Status == "Absent")
-                            {
-                                LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent (no clock-in)");
-                            }
-                            else
-                            {
-                                LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - Has session with status '{employeeSession.Status}' but no clock-in - this is unusual");
-                            }
+                            LogHelper.Write($"  ✅ {schedule.EmployeeId} - Has complete attendance ({employeeSession.Status})");
                         }
+                    }
+                    else if (shiftEnded && !hasClockIn)
+                    {
+                        LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Shift ended but no clock-in (already handled as absent)");
+                    }
+                    else if (!shiftEnded && hasClockIn)
+                    {
+                        LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet, will check for missed clock-out later");
                     }
                 }
                 
@@ -2256,6 +2337,77 @@ namespace BiometricEnrollmentApp.Services
             catch
             {
                 return -1;
+            }
+        }
+
+        /// <summary>
+        /// Check if shift start time has passed with a grace period for absent marking
+        /// This determines when to mark employees as absent if they haven't clocked in
+        /// </summary>
+        private bool HasShiftStartedWithGracePeriod(string startTime, int gracePeriodMinutes)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(startTime))
+                {
+                    LogHelper.Write($"⚠️ HasShiftStartedWithGracePeriod: startTime is null or empty");
+                    return false;
+                }
+
+                var now = TimezoneHelper.Now;
+                var currentTime = now.TimeOfDay;
+
+                // Parse start time
+                TimeSpan shiftStartTime;
+                if (startTime.Contains("AM") || startTime.Contains("PM"))
+                {
+                    // 12-hour format
+                    var timeParts = startTime.Replace("AM", "").Replace("PM", "").Trim().Split(':');
+                    if (timeParts.Length != 2)
+                    {
+                        LogHelper.Write($"⚠️ HasShiftStartedWithGracePeriod: Invalid time format: {startTime}");
+                        return false;
+                    }
+
+                    int hours = int.Parse(timeParts[0]);
+                    int minutes = int.Parse(timeParts[1]);
+
+                    if (startTime.Contains("PM") && hours != 12)
+                        hours += 12;
+                    else if (startTime.Contains("AM") && hours == 12)
+                        hours = 0;
+
+                    shiftStartTime = new TimeSpan(hours, minutes, 0);
+                }
+                else
+                {
+                    // 24-hour format
+                    var timeParts = startTime.Split(':');
+                    if (timeParts.Length < 2)
+                    {
+                        LogHelper.Write($"⚠️ HasShiftStartedWithGracePeriod: Invalid time format: {startTime}");
+                        return false;
+                    }
+
+                    int hours = int.Parse(timeParts[0]);
+                    int minutes = int.Parse(timeParts[1]);
+                    shiftStartTime = new TimeSpan(hours, minutes, 0);
+                }
+
+                // Add grace period to shift start time
+                var shiftStartWithGrace = shiftStartTime.Add(TimeSpan.FromMinutes(gracePeriodMinutes));
+
+                // Check if current time is past shift start + grace period
+                bool hasStarted = currentTime >= shiftStartWithGrace;
+
+                LogHelper.Write($"  ⏰ HasShiftStartedWithGracePeriod: start={startTime} ({shiftStartTime}), grace={gracePeriodMinutes}min, startWithGrace={shiftStartWithGrace}, current={currentTime}, result={hasStarted}");
+
+                return hasStarted;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 HasShiftStartedWithGracePeriod error for '{startTime}': {ex.Message}");
+                return false;
             }
         }
 
@@ -3019,6 +3171,125 @@ namespace BiometricEnrollmentApp.Services
                 return 0;
             }
         }
+
+        // -----------------------
+        // Admin Credentials Management
+        // -----------------------
+
+        /// <summary>
+        /// Get the current admin username from the database
+        /// </summary>
+        public string GetAdminUsername()
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT username FROM AdminCredentials WHERE id = 1";
+                
+                var result = cmd.ExecuteScalar();
+                return result?.ToString() ?? "admin";
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting admin username: {ex.Message}");
+                return "admin";
+            }
+        }
+
+        /// <summary>
+        /// Validate admin credentials
+        /// </summary>
+        public bool ValidateAdminCredentials(string username, string password)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT COUNT(*) FROM AdminCredentials 
+                    WHERE id = 1 AND username = $username AND password_hash = $password
+                ";
+                cmd.Parameters.AddWithValue("$username", username);
+                cmd.Parameters.AddWithValue("$password", password);
+                
+                var count = Convert.ToInt32(cmd.ExecuteScalar());
+                return count > 0;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error validating admin credentials: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Update admin account credentials (username and/or password)
+        /// </summary>
+        public bool UpdateAdminAccount(string? newUsername, string? newPassword)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(newUsername) && string.IsNullOrEmpty(newPassword))
+                {
+                    return false; // Nothing to update
+                }
+
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+
+                // Build dynamic update query based on what's being changed
+                var updates = new List<string>();
+                if (!string.IsNullOrEmpty(newUsername))
+                {
+                    updates.Add("username = $username");
+                }
+                if (!string.IsNullOrEmpty(newPassword))
+                {
+                    updates.Add("password_hash = $password");
+                }
+                updates.Add("updated_at = datetime('now')");
+
+                cmd.CommandText = $@"
+                    UPDATE AdminCredentials 
+                    SET {string.Join(", ", updates)}
+                    WHERE id = 1
+                ";
+
+                if (!string.IsNullOrEmpty(newUsername))
+                {
+                    cmd.Parameters.AddWithValue("$username", newUsername);
+                }
+                if (!string.IsNullOrEmpty(newPassword))
+                {
+                    cmd.Parameters.AddWithValue("$password", newPassword);
+                }
+
+                var rowsAffected = cmd.ExecuteNonQuery();
+                
+                if (rowsAffected > 0)
+                {
+                    LogHelper.Write($"✅ Admin account updated successfully");
+                    return true;
+                }
+                else
+                {
+                    LogHelper.Write($"⚠️ No admin account found to update");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error updating admin account: {ex.Message}");
+                return false;
+            }
+        }
     }
 
     public class SyncQueueItem
@@ -3030,5 +3301,16 @@ namespace BiometricEnrollmentApp.Services
         public string Payload { get; set; }
         public int RetryCount { get; set; }
         public string LastAttempt { get; set; }
+    }
+
+    public class ScheduleDisplayItem
+    {
+        public string EmployeeId { get; set; }
+        public string ShiftName { get; set; }
+        public string StartTime { get; set; }
+        public string EndTime { get; set; }
+        public string Days { get; set; }
+        public string Department { get; set; }
+        public string SyncedAt { get; set; }
     }
 }

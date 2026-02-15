@@ -28,7 +28,12 @@ const OvertimeModal = ({ isOpen, onClose }) => {
   const fetchEmployees = async () => {
     try {
       console.log('🔍 Fetching overtime eligible employees...');
-      const response = await fetch('/api/attendances/overtime/eligible');
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/attendances/overtime/eligible', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Received overtime eligible employees:', data);
@@ -249,6 +254,7 @@ const OvertimeModal = ({ isOpen, onClose }) => {
                       <ul className="text-sm mt-2 text-left max-w-md mx-auto">
                         <li>• Be scheduled to work today</li>
                         <li>• Have clocked in for their regular shift</li>
+                        <li>• Their shift must not have ended yet</li>
                         <li>• Not already have overtime assigned</li>
                       </ul>
                       <p className="text-xs mt-3 text-primary-600">

@@ -158,6 +158,13 @@ namespace BiometricEnrollmentApp
             ShowAttendanceLogs();
         }
 
+        private void SchedulesBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var schedulesPage = new AdminSchedulePage();
+            AdminFrame.Navigate(schedulesPage);
+            StatusText.Text = "Admin Mode - Employee Schedules";
+        }
+
         private void EnrollmentBtn_Click(object sender, RoutedEventArgs e)
         {
             try

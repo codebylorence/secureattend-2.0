@@ -10,7 +10,8 @@ import {
   getOvertimeAssignments,
   getOvertimeEligibleEmployees,
   updateOvertimeHours,
-  syncAttendanceFromBiometric
+  syncAttendanceFromBiometric,
+  triggerMissedClockoutCheck
 } from "../controllers/attendanceController.js";
 import { authenticateToken, requireAttendanceAccess, requireAdmin } from "../middleware/auth.js";
 
@@ -24,6 +25,9 @@ router.delete("/test", authenticateToken, requireAdmin, clearTestAttendance); //
 
 // Biometric sync endpoint - no auth required (called by biometric app)
 router.post("/sync-from-biometric", syncAttendanceFromBiometric);
+
+// Manual trigger for missed clock-out check - admin only
+router.post("/check-missed-clockouts", authenticateToken, requireAdmin, triggerMissedClockoutCheck);
 
 // Overtime management routes - attendance access required
 router.get("/overtime/eligible", authenticateToken, requireAttendanceAccess, getOvertimeEligibleEmployees);

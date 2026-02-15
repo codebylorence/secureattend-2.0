@@ -244,8 +244,57 @@
                     <TextBlock Text="Attendance Records" FontSize="20" FontWeight="Bold" Foreground="{StaticResource DarkTextBrush}"/>
                     <TextBlock Text="View and filter attendance records by date" FontSize="14" Foreground="{StaticResource LightTextBrush}"/>
                     
+                    <!-- Metrics Cards - Side by Side -->
+                    <Grid Margin="0,15,0,15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="15"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="15"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="15"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- Present Card -->
+                        <Border Grid.Column="0" Background="#ECFDF5" BorderBrush="#10B981" BorderThickness="2" CornerRadius="10" Padding="15">
+                            <StackPanel>
+                                <TextBlock Text="✅ PRESENT" FontSize="11" FontWeight="Bold" Foreground="#059669" Margin="0,0,0,5"/>
+                                <TextBlock x:Name="PresentCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#047857"/>
+                                <TextBlock Text="On-time arrivals" FontSize="11" Foreground="#059669" Opacity="0.8"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- Late Card -->
+                        <Border Grid.Column="2" Background="#FFF7ED" BorderBrush="#F59E0B" BorderThickness="2" CornerRadius="10" Padding="15">
+                            <StackPanel>
+                                <TextBlock Text="⚠️ LATE" FontSize="11" FontWeight="Bold" Foreground="#D97706" Margin="0,0,0,5"/>
+                                <TextBlock x:Name="LateCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#B45309"/>
+                                <TextBlock Text="Late arrivals" FontSize="11" Foreground="#D97706" Opacity="0.8"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- Absent Card -->
+                        <Border Grid.Column="4" Background="#FEF2F2" BorderBrush="#EF4444" BorderThickness="2" CornerRadius="10" Padding="15">
+                            <StackPanel>
+                                <TextBlock Text="❌ ABSENT" FontSize="11" FontWeight="Bold" Foreground="#DC2626" Margin="0,0,0,5"/>
+                                <TextBlock x:Name="AbsentCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#B91C1C"/>
+                                <TextBlock Text="Not present" FontSize="11" Foreground="#DC2626" Opacity="0.8"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- Overtime Card -->
+                        <Border Grid.Column="6" Background="#F5F3FF" BorderBrush="#8B5CF6" BorderThickness="2" CornerRadius="10" Padding="15">
+                            <StackPanel>
+                                <TextBlock Text="⏰ OVERTIME" FontSize="11" FontWeight="Bold" Foreground="#7C3AED" Margin="0,0,0,5"/>
+                                <TextBlock x:Name="OvertimeCountText" Text="0" FontSize="28" FontWeight="Bold" Foreground="#6D28D9"/>
+                                <TextBlock Text="Extra hours" FontSize="11" Foreground="#7C3AED" Opacity="0.8"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    
                     <!-- Date Filter Controls -->
-                    <Border Background="{StaticResource GrayBackgroundBrush}" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,15,0,0">
+                    <Border Background="{StaticResource GrayBackgroundBrush}" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,0">
                         <StackPanel>
                             <!-- Date Range Selectors -->
                             <Grid Margin="0,0,0,10">

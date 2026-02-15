@@ -107,7 +107,7 @@ namespace BiometricEnrollmentApp
                 {
                     Id = s.Id,
                     EmployeeId = s.EmployeeId,
-                    EmployeeName = employeeNameMap.ContainsKey(s.EmployeeId) ? employeeNameMap[s.EmployeeId] : "Unknown",
+                    EmployeeName = employeeNameMap.ContainsKey(s.EmployeeId) ? employeeNameMap[s.EmployeeId] : s.EmployeeId,
                     Date = s.Date,
                     ClockIn = FormatTimeOnly(s.ClockIn),
                     ClockOut = FormatTimeOnly(s.ClockOut),
@@ -126,12 +126,42 @@ namespace BiometricEnrollmentApp
                 if (recordCountText != null)
                     recordCountText.Text = $"({rows.Count} records)";
                 
+                // Update metrics
+                UpdateAttendanceMetrics(sessions);
+                
                 LogHelper.Write($"📊 Refreshed attendance data: {rows.Count} records");
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Failed to load attendance data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 LogHelper.Write($"Failed to load attendance data: {ex}");
+            }
+        }
+        
+        private void UpdateAttendanceMetrics(List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> sessions)
+        {
+            try
+            {
+                // Count by status
+                int presentCount = sessions.Count(s => s.Status == "Present");
+                int lateCount = sessions.Count(s => s.Status == "Late");
+                int absentCount = sessions.Count(s => s.Status == "Absent");
+                int missedClockoutCount = sessions.Count(s => s.Status == "Missed Clock-out");
+                
+                // Update UI
+                var presentText = this.FindName("PresentCountText") as TextBlock;
+                var lateText = this.FindName("LateCountText") as TextBlock;
+                var absentText = this.FindName("AbsentCountText") as TextBlock;
+                var missedClockoutText = this.FindName("MissedClockoutCountText") as TextBlock;
+                
+                if (presentText != null) presentText.Text = presentCount.ToString();
+                if (lateText != null) lateText.Text = lateCount.ToString();
+                if (absentText != null) absentText.Text = absentCount.ToString();
+                if (missedClockoutText != null) missedClockoutText.Text = missedClockoutCount.ToString();
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Failed to update metrics: {ex.Message}");
             }
         }
 

@@ -5,6 +5,7 @@ import EmployeeSchedule from "../models/employeeSchedule.js";
 import { Op } from "sequelize";
 import sequelize from "../config/database.js";
 import { getCurrentDateInTimezone, getDateInTimezone, getConfiguredTimezone } from "../utils/timezone.js";
+import { markMissedClockouts } from "../services/missedClockoutService.js";
 import fs from 'fs';
 import path from 'path';
 
@@ -425,10 +426,12 @@ export const getAttendances = async (req, res) => {
       const employee = attendanceData.employee;
       
       // Get employee name (handle both formats)
-      let employeeName = 'Unknown Employee';
+      let employeeName = attendanceData.employee_id; // Default to employee_id
       if (employee) {
         if (employee.firstname && employee.lastname) {
           employeeName = `${employee.firstname} ${employee.lastname}`;
+        } else if (employee.firstname) {
+          employeeName = employee.firstname;
         }
       }
 
@@ -583,10 +586,12 @@ export const getTodayAttendances = async (req, res) => {
       const employee = attendanceData.employee;
       
       // Get employee name (handle both formats)
-      let employeeName = 'Unknown Employee';
+      let employeeName = attendanceData.employee_id; // Default to employee_id
       if (employee) {
         if (employee.firstname && employee.lastname) {
           employeeName = `${employee.firstname} ${employee.lastname}`;
+        } else if (employee.firstname) {
+          employeeName = employee.firstname;
         }
       }
 
@@ -827,40 +832,91 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     const clockedInEmployeeIds = todayAttendances.map(att => att.employee_id);
     console.log(`📋 Clocked in employee IDs:`, clockedInEmployeeIds);
 
-    // Step 3: Get all employee schedules for today
+    // Step 3: Get all employee schedules for today using specific date only
     // Check if today's date exists in schedule_dates JSON field
     const employeeSchedules = await EmployeeSchedule.findAll({
       where: {
         status: 'Active',
-        [Op.or]: [
-          // Check if today's date is in schedule_dates for any weekday
-          sequelize.literal(`schedule_dates::text LIKE '%${today}%'`),
-          // Fallback: Check if today's weekday is in days array (for recurring schedules)
-          sequelize.literal(`days::text LIKE '%${todayWeekday}%'`)
-        ]
+        employee_id: {
+          [Op.in]: clockedInEmployeeIds // Only check schedules for employees who clocked in
+        }
       }
     });
 
-    console.log(`📊 Found ${employeeSchedules.length} employee schedules for ${today} (${todayWeekday})`);
-    console.log(`📋 Schedule details:`, employeeSchedules.map(s => ({
+    // Filter schedules that include today's date in schedule_dates
+    const todaySchedules = employeeSchedules.filter(schedule => {
+      if (!schedule.schedule_dates) return false;
+      
+      // Parse schedule_dates (it's a JSON array of dates)
+      try {
+        const dates = typeof schedule.schedule_dates === 'string' 
+          ? JSON.parse(schedule.schedule_dates) 
+          : schedule.schedule_dates;
+        
+        return Array.isArray(dates) && dates.includes(today);
+      } catch (error) {
+        console.log(`  ⚠️ Error parsing schedule_dates for ${schedule.employee_id}:`, error.message);
+        return false;
+      }
+    });
+
+    console.log(`📊 Found ${todaySchedules.length} employee schedules for ${today} (filtered from ${employeeSchedules.length} total)`);
+    console.log(`📋 Schedule details:`, todaySchedules.map(s => ({
       employee_id: s.employee_id,
       days: s.days,
       schedule_dates: s.schedule_dates,
       shift_name: s.shift_name,
+      shift_start: s.shift_start,
+      shift_end: s.shift_end,
       start_date: s.start_date,
       end_date: s.end_date
     })));
     
-    // Step 4: Get employee IDs who are scheduled today
-    const scheduledEmployeeIds = [...new Set(employeeSchedules.map(schedule => schedule.employee_id))];
-    console.log(`📋 Scheduled employee IDs (${scheduledEmployeeIds.length}):`, scheduledEmployeeIds);
+    // Step 4: Filter out employees whose shift has already ended
+    const nowTime = new Date();
+    const currentTime = nowTime.toLocaleTimeString('en-US', { 
+      timeZone: timezone, 
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    console.log(`⏰ Current time in ${timezone}: ${currentTime}`);
+    
+    // Helper function to compare times
+    const isTimeBeforeOrEqual = (time1, time2) => {
+      // Convert HH:mm to minutes since midnight for comparison
+      const [h1, m1] = time1.split(':').map(Number);
+      const [h2, m2] = time2.split(':').map(Number);
+      const minutes1 = h1 * 60 + m1;
+      const minutes2 = h2 * 60 + m2;
+      return minutes1 <= minutes2;
+    };
+    
+    const activeSchedules = todaySchedules.filter(schedule => {
+      if (!schedule.shift_end) {
+        console.log(`  - ${schedule.employee_id}: No shift_end time, allowing overtime`);
+        return true; // If no shift end time, allow overtime
+      }
+      
+      const shiftEndTime = schedule.shift_end;
+      const isShiftActive = isTimeBeforeOrEqual(currentTime, shiftEndTime);
+      
+      console.log(`  - ${schedule.employee_id}: shift ends at ${shiftEndTime}, current ${currentTime}, active: ${isShiftActive}`);
+      return isShiftActive;
+    });
+    
+    console.log(`📊 Found ${activeSchedules.length} active schedules (shift not ended yet)`);
+    
+    // Step 5: Get employee IDs who are scheduled today and shift hasn't ended
+    const scheduledEmployeeIds = [...new Set(activeSchedules.map(schedule => schedule.employee_id))];
+    console.log(`📋 Scheduled employee IDs with active shifts (${scheduledEmployeeIds.length}):`, scheduledEmployeeIds);
 
-    // Step 5: Find intersection - employees who are both scheduled AND clocked in
+    // Step 6: Find intersection - employees who are both scheduled AND clocked in
     const eligibleEmployeeIds = clockedInEmployeeIds.filter(empId => 
       scheduledEmployeeIds.includes(empId)
     );
     
-    console.log(`📊 Eligible employee IDs (scheduled AND clocked in):`, eligibleEmployeeIds);
+    console.log(`📊 Eligible employee IDs (scheduled AND clocked in AND shift active):`, eligibleEmployeeIds);
 
     if (eligibleEmployeeIds.length === 0) {
       console.log(`📊 No employees are both scheduled and clocked in today`);
@@ -869,7 +925,7 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
       return res.status(200).json([]);
     }
 
-    // Step 6: Get employee details for eligible employees
+    // Step 7: Get employee details for eligible employees
     const eligibleEmployees = await Employee.findAll({
       where: {
         employee_id: {
@@ -880,7 +936,7 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
 
     console.log(`📊 Found ${eligibleEmployees.length} eligible employee records`);
 
-    // Step 7: Filter out employees who already have overtime status
+    // Step 8: Filter out employees who already have overtime status
     const employeesWithoutOvertime = [];
     for (const employee of eligibleEmployees) {
       const hasOvertime = await Attendance.findOne({
@@ -945,10 +1001,12 @@ export const getOvertimeAssignments = async (req, res) => {
       const assignmentData = assignment.toJSON();
       const employee = assignmentData.employee;
       
-      let employeeName = 'Unknown Employee';
+      let employeeName = assignmentData.employee_id; // Default to employee_id
       if (employee) {
         if (employee.firstname && employee.lastname) {
           employeeName = `${employee.firstname} ${employee.lastname}`;
+        } else if (employee.firstname) {
+          employeeName = employee.firstname;
         }
       }
 
@@ -1262,5 +1320,27 @@ export const syncAttendanceFromBiometric = async (req, res) => {
   } catch (error) {
     console.error("❌ Error syncing attendance from biometric:", error);
     res.status(500).json({ error: "Failed to sync attendance records" });
+  }
+};
+
+
+// Manual trigger for missed clock-out marking (for testing and admin use)
+export const triggerMissedClockoutCheck = async (req, res) => {
+  try {
+    console.log("🔧 Manual trigger: Missed clock-out check");
+    
+    const result = await markMissedClockouts();
+    
+    res.status(200).json({
+      message: "Missed clock-out check completed",
+      summary: {
+        checked: result.checked,
+        marked: result.marked
+      }
+    });
+    
+  } catch (error) {
+    console.error("❌ Error in manual missed clock-out check:", error);
+    res.status(500).json({ error: "Failed to check missed clock-outs" });
   }
 };

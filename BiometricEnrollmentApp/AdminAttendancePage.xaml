@@ -3,184 +3,357 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:sys="clr-namespace:System;assembly=mscorlib"
       Title="Admin - Attendance Logs"
-      Background="#F6F7F9"
+      Background="#F8FAFC"
       FontFamily="Segoe UI">
 
     <Page.Resources>
-        <SolidColorBrush x:Key="PrimaryBrush" Color="#0078D7"/>
-        <SolidColorBrush x:Key="TextBrush" Color="#333333"/>
-        <SolidColorBrush x:Key="LightTextBrush" Color="#666666"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="#DDDDDD"/>
-
+        <SolidColorBrush x:Key="TextMainBrush" Color="#1E293B"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#64748B"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#E2E8F0"/>
+        <SolidColorBrush x:Key="PanelBackground" Color="#FFFFFF"/>
+        
         <Style TargetType="Button">
-            <Setter Property="Padding" Value="15,6"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#334155"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="16,8"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#F1F5F9"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#2563EB"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1D4ED8"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="StatusBorderStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="12,4"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Status}" Value="Present">
-                    <Setter Property="Background" Value="#E6FFFA"/>
+                    <Setter Property="Background" Value="#D1FAE5"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Status}" Value="Late">
-                    <Setter Property="Background" Value="#FFFAF0"/>
+                    <Setter Property="Background" Value="#FEF3C7"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Status}" Value="Absent">
-                    <Setter Property="Background" Value="#FFF5F5"/>
+                    <Setter Property="Background" Value="#FEE2E2"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Status}" Value="Overtime">
-                    <Setter Property="Background" Value="#EBF8FF"/>
+                    <Setter Property="Background" Value="#EDE9FE"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
 
         <Style x:Key="StatusTextStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Status}" Value="Present">
-                    <Setter Property="Foreground" Value="#047857"/>
+                    <Setter Property="Foreground" Value="#065F46"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Status}" Value="Late">
-                    <Setter Property="Foreground" Value="#C05621"/>
+                    <Setter Property="Foreground" Value="#92400E"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Status}" Value="Absent">
-                    <Setter Property="Foreground" Value="#C53030"/>
+                    <Setter Property="Foreground" Value="#991B1B"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Status}" Value="Overtime">
-                    <Setter Property="Foreground" Value="#2B6CB0"/>
+                    <Setter Property="Foreground" Value="#5B21B6"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        
+        <DropShadowEffect x:Key="PanelShadow" BlurRadius="15" ShadowDepth="2" Direction="270" Color="#000000" Opacity="0.04"/>
     </Page.Resources>
 
-    <Grid Margin="20">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>    </Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+        <Grid Grid.Row="0" Margin="0,0,0,24">
+            <StackPanel>
                 <TextBlock Text="Attendance Management" 
-                           FontSize="24" FontWeight="Bold" 
-                           Foreground="#1E3A8A"
-                           Margin="0,0,0,8"/>
+                           FontSize="26" FontWeight="Bold" 
+                           Foreground="{StaticResource TextMainBrush}"
+                           Margin="0,0,0,4"/>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="View and export attendance records" 
                                FontSize="14" 
-                               Foreground="#6B7280"
-                               Margin="0,0,10,0"/>
-                    <TextBlock Text="• Automatic absent marking runs every 5 minutes" 
-                               FontSize="12" 
-                               Foreground="#10B981"
-                               FontStyle="Italic"/>
+                               Foreground="{StaticResource TextMutedBrush}"
+                               Margin="0,0,16,0"/>
+                    <Border Background="#ECFDF5" CornerRadius="4" Padding="8,2">
+                        <TextBlock Text="• Auto-absent scanner active" 
+                                   FontSize="12" 
+                                   Foreground="#059669"
+                                   FontWeight="SemiBold"/>
+                    </Border>
                 </StackPanel>
-            </StackPanel>
-
-        <Grid Grid.Row="1" Margin="0,0,0,20">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-            <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock Text="From" VerticalAlignment="Center" Margin="0,0,10,0" Foreground="{StaticResource LightTextBrush}"/>
-                <DatePicker x:Name="FromDatePicker" SelectedDate="{x:Static sys:DateTime.Today}" Width="120" Margin="0,0,15,0"/>
-                
-                <TextBlock Text="To" VerticalAlignment="Center" Margin="0,0,10,0" Foreground="{StaticResource LightTextBrush}"/>
-                <DatePicker x:Name="ToDatePicker" SelectedDate="{x:Static sys:DateTime.Today}" Width="120" Margin="0,0,15,0"/>
-                
-                <Button x:Name="FilterBtn" Content="Apply Filter" Click="FilterBtn_Click" Style="{StaticResource PrimaryButton}"/>
-            </StackPanel>
-
-            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="20,0">
-                <Button x:Name="TodayBtn" Content="Today" Click="TodayBtn_Click"/>
-                <Button x:Name="YesterdayBtn" Content="Yesterday" Click="YesterdayBtn_Click"/>
-                <Button x:Name="ThisWeekBtn" Content="This Week" Click="ThisWeekBtn_Click"/>
-                <Button x:Name="ThisMonthBtn" Content="This Month" Click="ThisMonthBtn_Click"/>
-            </StackPanel>
-
-            <StackPanel Grid.Column="2" Orientation="Horizontal">
-                <Button x:Name="RefreshBtn" Content="🔄 Refresh" Click="RefreshBtn_Click" Style="{StaticResource PrimaryButton}"/>
-                <Button x:Name="ExportBtn" Content="📥 Export CSV" Click="ExportBtn_Click"/>
             </StackPanel>
         </Grid>
 
-        <DataGrid Grid.Row="2" 
-                  x:Name="AttendanceGrid"
-                  AutoGenerateColumns="False" 
-                  IsReadOnly="True" 
-                  HeadersVisibility="Column"
-                  GridLinesVisibility="Horizontal"
-                  HorizontalGridLinesBrush="#EEEEEE"
-                  VerticalGridLinesBrush="Transparent"
-                  Background="White"
-                  BorderThickness="1"
-                  BorderBrush="{StaticResource BorderBrush}"
-                  RowHeight="45"
-                  ColumnHeaderHeight="40"
-                  FontSize="13">
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-            <DataGrid.Resources>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="FontWeight" Value="SemiBold"/>
-                    <Setter Property="Padding" Value="10,0"/>
-                    <Setter Property="BorderThickness" Value="0,0,0,2"/>
-                    <Setter Property="BorderBrush" Value="#EEEEEE"/>
-                </Style>
-                <Style TargetType="DataGridCell">
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Setter Property="Padding" Value="10,0"/>
-                    <Setter Property="VerticalContentAlignment" Value="Center"/>
-                </Style>
-            </DataGrid.Resources>
+            <Border Grid.Column="0" Background="{StaticResource PanelBackground}" 
+                    CornerRadius="12" Padding="20" Margin="0,0,16,0"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    Effect="{StaticResource PanelShadow}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/> <RowDefinition Height="Auto"/> </Grid.RowDefinitions>
 
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="60" Foreground="#888888"/>
-                <DataGridTextColumn Header="Emp ID" Binding="{Binding EmployeeId}" Width="100" FontWeight="SemiBold"/>
-                <DataGridTextColumn Header="Employee Name" Binding="{Binding EmployeeName}" Width="200"/>
-                <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="120"/>
-                
-                <DataGridTextColumn Header="In" Binding="{Binding ClockIn}" Width="100">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#059669"/> </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
-
-                <DataGridTextColumn Header="Out" Binding="{Binding ClockOut}" Width="100">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#DC2626"/> </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
-
-                <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="80" FontWeight="SemiBold"/>
-
-                <DataGridTemplateColumn Header="Status" Width="100">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Border Style="{StaticResource StatusBorderStyle}">
-                                <TextBlock Text="{Binding Status}" Style="{StaticResource StatusTextStyle}"/>
+                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,16" Padding="0,0,8,0">
+                        <StackPanel>
+                            <TextBlock Text="Today's Summary" 
+                                       FontSize="16" FontWeight="Bold" 
+                                       Foreground="{StaticResource TextMainBrush}"
+                                       Margin="0,0,0,16"/>
+                            
+                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,0,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#D1FAE5" Width="40" Height="40" CornerRadius="20" Margin="0,0,12,0">
+                                        <TextBlock Text="✓" FontSize="18" FontWeight="Bold" Foreground="#059669" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="PRESENT" FontSize="11" FontWeight="Bold" Foreground="#64748B" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="PresentCountText" Text="0" FontSize="22" FontWeight="Bold" Foreground="#0F172A"/>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+                            
+                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,0,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#FEF3C7" Width="40" Height="40" CornerRadius="20" Margin="0,0,12,0">
+                                        <TextBlock Text="!" FontSize="20" FontWeight="Bold" Foreground="#D97706" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="LATE" FontSize="11" FontWeight="Bold" Foreground="#64748B" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="LateCountText" Text="0" FontSize="22" FontWeight="Bold" Foreground="#0F172A"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            
+                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,0,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#FEE2E2" Width="40" Height="40" CornerRadius="20" Margin="0,0,12,0">
+                                        <TextBlock Text="✕" FontSize="16" FontWeight="Bold" Foreground="#DC2626" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="ABSENT" FontSize="11" FontWeight="Bold" Foreground="#64748B" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="AbsentCountText" Text="0" FontSize="22" FontWeight="Bold" Foreground="#0F172A"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            
+                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,0,24">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#FED7AA" Width="40" Height="40" CornerRadius="20" Margin="0,0,12,0">
+                                        <TextBlock Text="⏰" FontSize="18" FontWeight="Bold" Foreground="#EA580C" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="MISSED CLOCK-OUT" FontSize="11" FontWeight="Bold" Foreground="#64748B" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="MissedClockoutCountText" Text="0" FontSize="22" FontWeight="Bold" Foreground="#0F172A"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <TextBlock Text="Date Filters" 
+                                       FontSize="16" FontWeight="Bold" 
+                                       Foreground="{StaticResource TextMainBrush}"
+                                       Margin="0,0,0,16"/>
+                            
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="From" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,6"/>
+                                    <DatePicker x:Name="FromDatePicker" SelectedDate="{x:Static sys:DateTime.Today}" Height="36"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="To" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,6"/>
+                                    <DatePicker x:Name="ToDatePicker" SelectedDate="{x:Static sys:DateTime.Today}" Height="36"/>
+                                </StackPanel>
+                            </Grid>
+                            
+                            <Button x:Name="FilterBtn" Content="Apply Filter" Click="FilterBtn_Click" Style="{StaticResource PrimaryButton}" Margin="0,0,0,20"/>
+                            
+                            <TextBlock Text="Quick Filters" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,8"/>
+                            <UniformGrid Columns="2" Rows="2">
+                                <Button x:Name="TodayBtn" Content="Today" Click="TodayBtn_Click" Margin="0,0,6,6"/>
+                                <Button x:Name="YesterdayBtn" Content="Yesterday" Click="YesterdayBtn_Click" Margin="0,0,0,6"/>
+                                <Button x:Name="ThisWeekBtn" Content="This Week" Click="ThisWeekBtn_Click" Margin="0,0,6,0"/>
+                                <Button x:Name="ThisMonthBtn" Content="This Month" Click="ThisMonthBtn_Click" Margin="0,0,0,0"/>
+                            </UniformGrid>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+                        <Separator Background="#E2E8F0" Margin="0,0,0,16"/>
+                        <Button x:Name="RefreshBtn" Content="Refresh Data" Click="RefreshBtn_Click" Margin="0,0,0,8"/>
+                        <Button x:Name="ExportBtn" Content="Export CSV" Click="ExportBtn_Click" Background="#10B981" Foreground="White" BorderThickness="0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Background="{StaticResource PanelBackground}" 
+                    CornerRadius="12" Padding="20"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    Effect="{StaticResource PanelShadow}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                        <TextBlock Text="Attendance Records" 
+                                   FontSize="18" FontWeight="Bold" 
+                                   Foreground="{StaticResource TextMainBrush}"
+                                   Margin="0,0,0,4"/>
+                    </StackPanel>
+
+                    <!-- Data Grid -->
+                    <DataGrid Grid.Row="1" 
+                              x:Name="AttendanceGrid"
+                              AutoGenerateColumns="False" 
+                              IsReadOnly="True" 
+                              CanUserResizeRows="False"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="None"
+                              Background="White"
+                              BorderBrush="#e5e7eb"
+                              BorderThickness="1"
+                              RowHeight="40"
+                              ColumnHeaderHeight="44"
+                              AlternatingRowBackground="#f9fafb"
+                              SelectionMode="Single"
+                              SelectionUnit="FullRow">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="0.5*"/>
+                            <DataGridTextColumn Header="Emp ID" Binding="{Binding EmployeeId}" Width="0.8*"/>
+                            <DataGridTextColumn Header="Employee Name" Binding="{Binding EmployeeName}" Width="1.5*"/>
+                            <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="1*"/>
+                            <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="0.8*"/>
+                            <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="0.8*"/>
+                            <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="0.6*"/>
+                            <DataGridTemplateColumn Header="Status" Width="1*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource StatusBorderStyle}">
+                                            <TextBlock Text="{Binding Status}" Style="{StaticResource StatusTextStyle}"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                        
+                        <DataGrid.ColumnHeaderStyle>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="#f1f5f9"/>
+                                <Setter Property="Foreground" Value="#1e293b"/>
+                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="Padding" Value="12,8"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                            </Style>
+                        </DataGrid.ColumnHeaderStyle>
+                        
+                        <DataGrid.CellStyle>
+                            <Style TargetType="DataGridCell">
+                                <Setter Property="Padding" Value="12,6"/>
+                                <Setter Property="Foreground" Value="#1f2937"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="TextBlock.TextAlignment" Value="Center"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="DataGridCell">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="#1f2937"/>
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.CellStyle>
+                        
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="SnapsToDevicePixels" Value="True"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Page>

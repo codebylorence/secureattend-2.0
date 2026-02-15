@@ -364,6 +364,21 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
           
           for (const department of zoneDepartments) {
             try {
+              // Check if team leader has fingerprint enrolled
+              const teamLeader = employees.find(emp => 
+                emp.department === department && emp.position === 'Team Leader'
+              );
+              
+              if (teamLeader && !fingerprintStatus[teamLeader.employee_id]) {
+                results.push({ 
+                  success: false, 
+                  action: 'added', 
+                  item: department, 
+                  error: 'Team leader no biometric' 
+                });
+                continue;
+              }
+              
               const existingTemplates = await getTemplates();
               const existingZoneShift = existingTemplates.find(template => 
                 template.specific_date === dateStr &&
@@ -452,6 +467,20 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
         
         for (const department of zoneDepartments) {
           try {
+            // Check if team leader has fingerprint enrolled
+            const teamLeader = employees.find(emp => 
+              emp.department === department && emp.position === 'Team Leader'
+            );
+            
+            if (teamLeader && !fingerprintStatus[teamLeader.employee_id]) {
+              results.push({ 
+                success: false, 
+                department, 
+                error: 'Team leader no biometric' 
+              });
+              continue;
+            }
+            
             const existingTemplates = await getTemplates();
             const existingZoneShift = existingTemplates.find(template => 
               template.specific_date === dateStr &&
@@ -722,22 +751,45 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                           <div className="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar pr-1">
                             {availableDepartments.map(dept => {
                               const isSelected = formData.departments.includes(dept.name);
+                              
+                              // Check if team leader has fingerprint for this zone
+                              const teamLeader = employees.find(emp => 
+                                emp.department === dept.name && emp.position === 'Team Leader'
+                              );
+                              const hasTeamLeaderFingerprint = teamLeader ? fingerprintStatus[teamLeader.employee_id] : true;
+                              const isDisabled = !hasTeamLeaderFingerprint;
+                              
                               return (
                                 <label 
                                   key={dept.id} 
-                                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                                    isSelected ? 'border-blue-500 bg-blue-50/30' : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50'
+                                  className={`flex items-center gap-3 p-3 border-2 rounded-lg transition-all ${
+                                    isDisabled 
+                                      ? 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed' 
+                                      : isSelected 
+                                        ? 'border-blue-500 bg-blue-50/30 cursor-pointer' 
+                                        : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50 cursor-pointer'
                                   }`}
+                                  title={isDisabled ? 'Team leader no biometric' : ''}
                                 >
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={() => handleDepartmentToggle(dept.name)}
-                                    className="text-blue-600 focus:ring-blue-500 w-4 h-4 rounded border-gray-300"
+                                    disabled={isDisabled}
+                                    className="text-blue-600 focus:ring-blue-500 w-4 h-4 rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                   />
-                                  <span className={`text-sm font-semibold ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
-                                    {dept.name}
-                                  </span>
+                                  <div className="flex-1">
+                                    <span className={`text-sm font-semibold ${
+                                      isDisabled ? 'text-gray-400' : isSelected ? 'text-blue-900' : 'text-gray-700'
+                                    }`}>
+                                      {dept.name}
+                                    </span>
+                                    {isDisabled && (
+                                      <div className="text-xs text-red-500 mt-1">
+                                        Team leader no biometric
+                                      </div>
+                                    )}
+                                  </div>
                                 </label>
                               );
                             })}

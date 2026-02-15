@@ -21,6 +21,7 @@ import systemConfigRoutes from "./routes/systemConfigRoutes.js";
 import scheduleNotificationRoutes from "./routes/scheduleNotificationRoutes.js";
 import shiftTemplateRoutes from "./routes/shiftTemplateRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
+import { startMissedClockoutJob } from "./services/missedClockoutService.js";
 // Import models first
 import "./models/employee.js";
 import "./models/user.js";
@@ -162,8 +163,11 @@ const startServer = async () => {
       // Start the schedule cleanup job
       startScheduleCleanupJob();
       
+      // Start the missed clock-out marking job
+      startMissedClockoutJob();
+      
       // Note: Absent marking is handled by the biometric app
-      // All attendance records originate from the biometric app and sync via API
+      // Missed clock-out marking is handled by both biometric app and this backend job
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
