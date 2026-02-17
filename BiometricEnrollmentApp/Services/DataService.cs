@@ -826,6 +826,43 @@ namespace BiometricEnrollmentApp.Services
             return list;
         }
 
+        public List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> GetRecentSessions(int daysBack = 7)
+        {
+            var list = new List<(long, string, string, string, string, double, string)>();
+            var now = TimezoneHelper.Now;
+            var fromDate = now.AddDays(-daysBack).ToString("yyyy-MM-dd");
+            var toDate = now.ToString("yyyy-MM-dd");
+
+            using var conn = new SqliteConnection($"Data Source={_dbPath}");
+            conn.Open();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT id, employee_id, date, clock_in, IFNULL(clock_out,''), IFNULL(total_hours,0), status
+                FROM AttendanceSessions
+                WHERE date >= $fromDate AND date <= $toDate
+                ORDER BY date DESC, clock_in DESC;
+            ";
+            cmd.Parameters.AddWithValue("$fromDate", fromDate);
+            cmd.Parameters.AddWithValue("$toDate", toDate);
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                string emp = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                string dt = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+                string cin = reader.IsDBNull(3) ? string.Empty : reader.GetString(3);
+                string cout = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
+                double hrs = reader.IsDBNull(5) ? 0.0 : reader.GetDouble(5);
+                string status = reader.IsDBNull(6) ? string.Empty : reader.GetString(6);
+
+                list.Add((id, emp, dt, cin, cout, hrs, status));
+            }
+
+            return list;
+        }
+
         public List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> GetSessionsByDateRange(DateTime fromDate, DateTime toDate)
         {
             var list = new List<(long, string, string, string, string, double, string)>();
