@@ -57,9 +57,36 @@ export default function TodaysSchedule() {
         console.log('  Checking schedule:', {
           id: s.id,
           specific_date: s.specific_date,
-          template_specific_date: s.template?.specific_date,
+          schedule_dates: s.schedule_dates,
           days: s.days
         });
+        
+        // Check if schedule_dates contains today
+        if (s.schedule_dates) {
+          try {
+            const dates = typeof s.schedule_dates === 'string' 
+              ? JSON.parse(s.schedule_dates) 
+              : s.schedule_dates;
+            
+            // schedule_dates is an object like { Monday: ['2026-02-15'], Tuesday: ['2026-02-16'] }
+            if (typeof dates === 'object' && !Array.isArray(dates)) {
+              // Check all days in the object
+              for (const dayDates of Object.values(dates)) {
+                if (Array.isArray(dayDates) && dayDates.includes(todayDate)) {
+                  console.log('    ✓ Found in schedule_dates object:', todayDate);
+                  return true;
+                }
+              }
+            }
+            // If it's an array (old format), check directly
+            else if (Array.isArray(dates) && dates.includes(todayDate)) {
+              console.log('    ✓ Found in schedule_dates array:', todayDate);
+              return true;
+            }
+          } catch (e) {
+            console.log('    ⚠️ Error parsing schedule_dates:', e);
+          }
+        }
         
         // Check if this is a template-based schedule with specific_date
         if (s.specific_date === todayDate) {
@@ -73,22 +100,7 @@ export default function TodaysSchedule() {
           return true;
         }
         
-        // Fallback: check if today is in the days array (for legacy schedules)
-        const currentDay = getCurrentDay();
-        let days = s.days;
-        if (typeof days === 'string') {
-          try {
-            days = JSON.parse(days);
-          } catch (e) {
-            days = [];
-          }
-        }
-        
-        const inDays = days && Array.isArray(days) && days.includes(currentDay);
-        if (inDays) {
-          console.log('    ✓ Found in legacy days array:', currentDay);
-        }
-        return inDays;
+        return false;
       });
       
       console.log('  ✅ Found Schedule:', todaySchedule ? 'YES' : 'NO');
