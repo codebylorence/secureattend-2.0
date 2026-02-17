@@ -13,7 +13,7 @@ export default function Login() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const { systemConfig } = useSystemConfig();
+  const { systemConfig, loadSystemConfig } = useSystemConfig();
 
   const navigate = useNavigate();
 
@@ -32,6 +32,9 @@ export default function Login() {
       localStorage.setItem("role", data.user.role);
       localStorage.setItem("username", data.user.username);
       localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Load system configuration after successful login
+      await loadSystemConfig();
 
       // Show success toast
       toast.success("Login successful! Welcome back.");
