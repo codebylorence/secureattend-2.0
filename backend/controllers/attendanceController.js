@@ -1136,6 +1136,15 @@ export const syncAttendanceFromBiometric = async (req, res) => {
           }
         });
         
+        // If syncing a Present/Late/Overtime record, delete any Absent record first
+        if (existingRecord && existingRecord.status === 'Absent' && 
+            (status === 'Present' || status === 'Late' || status === 'Overtime')) {
+          console.log(`🔄 Deleting Absent record for ${employee_id} - employee actually clocked in`);
+          await existingRecord.destroy();
+          // Set to null so we create a new record below
+          existingRecord = null;
+        }
+        
         if (existingRecord) {
           // Update existing record if biometric app has more recent data
           let updated = false;
