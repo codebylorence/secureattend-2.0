@@ -89,7 +89,7 @@ export default function AppRouter() {
           <Route element={<AdminLayout />}>
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/employees" element={<Employees />} />
-            <Route path="/admin/employee/:employeeId" element={<EmployeeProfile />} />
+            <Route path="/admin/profile/:employeeId" element={<EmployeeProfile />} />
             <Route path="/admin/schedule" element={<ManageSchedule />} />
             <Route path="/admin/view-schedules" element={<ViewSchedules />} />
             <Route path="/admin/attendance" element={<EmployeeAttendance />} />

@@ -22,7 +22,7 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
     if (event.target.closest('button') || event.target.closest('.action-cell')) {
       return;
     }
-    navigate(`/admin/employee/${employeeId}`);
+    navigate(`/admin/profile/${employeeId}`);
   };
 
   //  Fetch employees and fingerprint status from API
