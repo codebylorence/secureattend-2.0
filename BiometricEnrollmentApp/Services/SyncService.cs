@@ -372,26 +372,26 @@ namespace BiometricEnrollmentApp.Services
         public event Action<int>? OnSchedulesUpdated;
 
         /// <summary>
-        /// Sync all today's attendance records to the server in bulk
+        /// Sync all recent attendance records (last 7 days) to the server in bulk
         /// This is more efficient than syncing one by one
         /// </summary>
         public async Task<bool> SyncTodayAttendanceRecords()
         {
             try
             {
-                // Get all today's sessions from local database
-                var todaySessions = _dataService.GetTodaySessions();
+                // Get all sessions from last 7 days from local database
+                var recentSessions = _dataService.GetRecentSessions(7);
                 
-                if (todaySessions.Count == 0)
+                if (recentSessions.Count == 0)
                 {
                     return true; // No records to sync
                 }
 
-                LogHelper.Write($"📤 Syncing {todaySessions.Count} attendance records to server...");
+                LogHelper.Write($"📤 Syncing {recentSessions.Count} attendance records (last 7 days) to server...");
 
                 // Prepare records for bulk sync
                 var records = new List<object>();
-                foreach (var session in todaySessions)
+                foreach (var session in recentSessions)
                 {
                     // Parse dates
                     DateTime? clockIn = null;
