@@ -165,7 +165,22 @@ export const SystemConfigProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    // Load config on mount
     loadSystemConfig();
+    
+    // Also reload when authentication state changes
+    const handleStorageChange = (e) => {
+      if (e.key === 'token' || e.key === 'user') {
+        console.log('🔄 SystemConfig: Auth state changed, reloading config');
+        loadSystemConfig();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   // Listen for real-time config updates via WebSocket

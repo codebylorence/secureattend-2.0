@@ -17,7 +17,7 @@ import { useSystemConfig } from '../contexts/SystemConfigContext';
 import ResetConfirmationModal from '../components/ResetConfirmationModal';
 
 export default function Settings() {
-  const { systemConfig, loading, updateSystemConfig: updateContextConfig } = useSystemConfig();
+  const { systemConfig, loading, updateSystemConfig: updateContextConfig, loadSystemConfig } = useSystemConfig();
 
   const [localConfig, setLocalConfig] = useState(systemConfig);
   const [editingField, setEditingField] = useState(null);
@@ -25,6 +25,12 @@ export default function Settings() {
   const [savingField, setSavingField] = useState(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+
+  // Load config when component mounts
+  useEffect(() => {
+    console.log('⚙️ Settings: Component mounted, loading system config');
+    loadSystemConfig();
+  }, []);
 
   useEffect(() => {
     setLocalConfig(systemConfig);
