@@ -174,6 +174,9 @@ export default function AdminMetrics() {
         att.status === "Overtime"
       ).length;
 
+      // Calculate total employees who clocked in today (Present + Late + Overtime)
+      const totalClockedIn = present + late + overtime;
+
       // Count absent - only count actual "Absent" status records
       // Stale records are automatically cleaned up when schedules are assigned
       const absent = filteredAttendances.filter(att => att.status === "Absent").length;
@@ -184,7 +187,7 @@ export default function AdminMetrics() {
         .reduce((total, att) => total + parseFloat(att.overtime_hours || 0), 0);
 
       console.log('📊 Final metrics calculated:', {
-        totalEmployees,
+        totalClockedIn,
         present,
         absent,
         late,
@@ -194,7 +197,7 @@ export default function AdminMetrics() {
       });
 
       setMetrics({
-        totalEmployees,
+        totalEmployees: totalClockedIn,
         present,
         absent,
         late,
@@ -211,10 +214,10 @@ export default function AdminMetrics() {
     <>
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 w-full">
-        {/* Total Employees */}
+        {/* Total Clocked In (Present + Late + Overtime) */}
         <div className="bg-primary text-white rounded-md p-6 text-center shadow">
           <p className="text-3xl font-semibold">{metrics.totalEmployees}</p>
-          <p className="text-sm mt-1">Total Employees</p>
+          <p className="text-sm mt-1">Total Clocked In</p>
         </div>
 
         {/* Scheduled Today */}
