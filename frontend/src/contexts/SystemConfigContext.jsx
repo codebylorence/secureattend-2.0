@@ -40,14 +40,27 @@ export const useSystemConfig = () => {
 };
 
 export const SystemConfigProvider = ({ children }) => {
-  const [systemConfig, setSystemConfig] = useState({
-    systemName: 'SecureAttend',
-    primaryColor: '#1E3A8A',
-    secondaryColor: '#2563EB',
-    logo: null,
-    companyName: 'Your Company',
-    timezone: 'UTC'
-  });
+  // Try to load config from localStorage first for instant display
+  const getInitialConfig = () => {
+    try {
+      const cached = localStorage.getItem('systemConfig');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (err) {
+      console.error('Failed to parse cached system config:', err);
+    }
+    return {
+      systemName: 'SecureAttend',
+      primaryColor: '#1E3A8A',
+      secondaryColor: '#2563EB',
+      logo: null,
+      companyName: 'Your Company',
+      timezone: 'UTC'
+    };
+  };
+
+  const [systemConfig, setSystemConfig] = useState(getInitialConfig());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -70,6 +83,13 @@ export const SystemConfigProvider = ({ children }) => {
       
       const config = await getSystemConfig();
       setSystemConfig(config);
+      
+      // Cache config in localStorage for instant loading on next visit
+      try {
+        localStorage.setItem('systemConfig', JSON.stringify(config));
+      } catch (err) {
+        console.error('Failed to cache system config:', err);
+      }
       
       // Apply theme colors to CSS variables
       if (config.primaryColor) {
@@ -127,6 +147,13 @@ export const SystemConfigProvider = ({ children }) => {
     setSystemConfig(prev => {
       const updated = { ...prev, ...newConfig };
       
+      // Cache updated config in localStorage
+      try {
+        localStorage.setItem('systemConfig', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Failed to cache updated system config:', err);
+      }
+      
       // Apply theme colors immediately
       if (newConfig.primaryColor) {
         document.documentElement.style.setProperty('--primary-color', newConfig.primaryColor);
@@ -166,6 +193,39 @@ export const SystemConfigProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    // Apply cached config's theme colors immediately on mount
+    const applyThemeColors = (config) => {
+      if (config.primaryColor) {
+        document.documentElement.style.setProperty('--primary-color', config.primaryColor);
+        const hoverColor = adjustColorBrightness(config.primaryColor, -20);
+        document.documentElement.style.setProperty('--primary-hover', hoverColor);
+        
+        const rgb = hexToRgb(config.primaryColor);
+        if (rgb) {
+          document.documentElement.style.setProperty('--primary-50', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.05)`);
+          document.documentElement.style.setProperty('--primary-100', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`);
+          document.documentElement.style.setProperty('--primary-200', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`);
+          document.documentElement.style.setProperty('--primary-300', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`);
+          document.documentElement.style.setProperty('--primary-400', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`);
+          document.documentElement.style.setProperty('--primary-500', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`);
+          document.documentElement.style.setProperty('--primary-600', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`);
+          document.documentElement.style.setProperty('--primary-700', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.7)`);
+          document.documentElement.style.setProperty('--primary-800', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`);
+          document.documentElement.style.setProperty('--primary-900', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.9)`);
+        }
+        document.documentElement.style.setProperty('--text-primary', config.primaryColor);
+      }
+      if (config.secondaryColor) {
+        document.documentElement.style.setProperty('--secondary-color', config.secondaryColor);
+      }
+      if (config.systemName) {
+        document.title = config.systemName;
+      }
+    };
+
+    // Apply cached config immediately
+    applyThemeColors(systemConfig);
+
     // Load config on mount - try to load even if not authenticated yet
     // This handles the case where token exists but isAuthenticated() hasn't been called yet
     const token = localStorage.getItem('token');
@@ -206,6 +266,13 @@ export const SystemConfigProvider = ({ children }) => {
       
       // Update state with new config
       setSystemConfig(newConfig);
+      
+      // Cache in localStorage
+      try {
+        localStorage.setItem('systemConfig', JSON.stringify(newConfig));
+      } catch (err) {
+        console.error('Failed to cache WebSocket config update:', err);
+      }
       
       // Apply theme colors immediately
       if (newConfig.primaryColor) {
