@@ -54,13 +54,14 @@ export const SystemConfigProvider = ({ children }) => {
   // Get WebSocket connection
   const { socket, connected } = useSocket();
 
-  const loadSystemConfig = async () => {
+  const loadSystemConfig = async (forceLoad = false) => {
     try {
       setLoading(true);
       setError(null);
       
       // Check if user is authenticated before making the request
-      if (!isAuthenticated()) {
+      // Skip auth check if forceLoad is true (for initial load from public pages)
+      if (!forceLoad && !isAuthenticated()) {
         // User not authenticated, use default config
         console.log('🎨 SystemConfig: User not authenticated, using default configuration');
         setLoading(false);
@@ -165,14 +166,25 @@ export const SystemConfigProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Load config on mount
-    loadSystemConfig();
+    // Load config on mount - try to load even if not authenticated yet
+    // This handles the case where token exists but isAuthenticated() hasn't been called yet
+    const token = localStorage.getItem('token');
+    if (token) {
+      console.log('🎨 SystemConfig: Token found on mount, loading config');
+      loadSystemConfig(true); // Force load since we have a token
+    } else {
+      console.log('🎨 SystemConfig: No token found, using defaults');
+      setLoading(false);
+    }
     
     // Also reload when authentication state changes
     const handleStorageChange = (e) => {
       if (e.key === 'token' || e.key === 'user') {
         console.log('🔄 SystemConfig: Auth state changed, reloading config');
-        loadSystemConfig();
+        const newToken = localStorage.getItem('token');
+        if (newToken) {
+          loadSystemConfig(true);
+        }
       }
     };
     
