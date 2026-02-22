@@ -20,6 +20,13 @@ export default function AttendanceReports() {
   const [departments, setDepartments] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [statusFilters, setStatusFilters] = useState({
+    Present: true,
+    Late: true,
+    Absent: true,
+    Overtime: true,
+    'Missed Clock-out': true
+  });
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = user.role === "admin";
@@ -183,7 +190,8 @@ export default function AttendanceReports() {
                          record.employee?.lastname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          record.employee?.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          record.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()); // Also check direct employee_id field
-    return matchesSearch;
+    const matchesStatus = statusFilters[record.status] === true;
+    return matchesSearch && matchesStatus;
   });
 
   // Helper function to format time in 24-hour format
@@ -903,6 +911,51 @@ export default function AttendanceReports() {
               </div>
             )}
           </div>
+
+          {/* Status Filter Checkboxes (for attendance reports) */}
+          {reportType === "attendance" && isAdmin && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-semibold text-gray-700">Filter by Status:</label>
+                <button
+                  onClick={() => {
+                    const allChecked = Object.values(statusFilters).every(v => v);
+                    setStatusFilters({
+                      Present: !allChecked,
+                      Late: !allChecked,
+                      Absent: !allChecked,
+                      Overtime: !allChecked,
+                      'Missed Clock-out': !allChecked
+                    });
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {Object.values(statusFilters).every(v => v) ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {Object.keys(statusFilters).map(status => (
+                  <label key={status} className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={statusFilters[status]}
+                      onChange={(e) => setStatusFilters(prev => ({ ...prev, [status]: e.target.checked }))}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span className={`text-sm font-medium px-2.5 py-1 rounded-md transition-colors ${
+                      status === "Present" ? "bg-green-100 text-green-800 group-hover:bg-green-200" : 
+                      status === "Late" ? "bg-yellow-100 text-yellow-800 group-hover:bg-yellow-200" :
+                      status === "Absent" ? "bg-red-100 text-red-800 group-hover:bg-red-200" :
+                      status === "Overtime" ? "bg-purple-100 text-purple-800 group-hover:bg-purple-200" :
+                      "bg-orange-100 text-orange-800 group-hover:bg-orange-200"
+                    }`}>
+                      {status}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
