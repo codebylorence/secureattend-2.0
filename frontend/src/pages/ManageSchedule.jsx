@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import { MdCalendarToday } from "react-icons/md";
 import CalendarScheduleView from "../components/CalendarScheduleView";
 import { useSocket } from "../context/SocketContext";
-import { MdInfo } from "react-icons/md";
 
 export default function ManageSchedule() {
   const [refreshKey, setRefreshKey] = useState(0);

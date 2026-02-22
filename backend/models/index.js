@@ -4,6 +4,7 @@ import User from "./user.js";
 import Position from "./position.js";
 import Department from "./department.js";
 import Employee from "./employee.js";
+import PasswordReset from "./passwordReset.js";
 import "./notification.js"; // Import notification model for sync
 
 const syncDatabase = async () => {

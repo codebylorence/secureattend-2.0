@@ -118,7 +118,6 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
         ...baseItems,
         { key: "employees", label: "Employees", icon: FaUsers, path: "/admin/employees" },
         { key: "schedule", label: "Schedule Management", icon: FaCalendarAlt, path: "/admin/schedule" },
-        { key: "view-schedules", label: "View Schedules", icon: FaCalendarCheck, path: "/admin/view-schedules" },
         { key: "attendance", label: "Attendance", icon: FaClock, path: "/admin/attendance" },
         { key: "departments", label: "Departments", icon: FaBuilding, path: "/admin/departments" },
         ...(role === "admin" || role === "supervisor" ? [{ key: "reports", label: "Reports", icon: FaChartBar, path: "/admin/attendance-reports" }] : []),

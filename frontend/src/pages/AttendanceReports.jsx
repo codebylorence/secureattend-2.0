@@ -776,25 +776,25 @@ export default function AttendanceReports() {
     if (totalPages <= 1) return null;
 
     return (
-      <div className="flex items-center justify-between mt-6">
-        <div className="text-sm text-gray-700">
+      <div className="flex flex-col sm:flex-row items-center justify-between mt-6 gap-4 border-t border-gray-100 pt-4">
+        <div className="text-sm text-gray-700 text-center sm:text-left w-full sm:w-auto">
           Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, reportType === "employee" ? filteredEmployees.length : filteredAttendance.length)} of {reportType === "employee" ? filteredEmployees.length : filteredAttendance.length} results
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-2 w-full sm:w-auto">
           <button
             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
             disabled={currentPage === 1}
-            className="px-3 py-1 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            className="px-4 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors font-medium"
           >
             Previous
           </button>
-          <span className="px-3 py-1 text-sm">
-            Page {currentPage} of {totalPages}
+          <span className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 rounded-lg">
+            {currentPage} / {totalPages}
           </span>
           <button
             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
             disabled={currentPage === totalPages}
-            className="px-3 py-1 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            className="px-4 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors font-medium"
           >
             Next
           </button>
@@ -811,18 +811,18 @@ export default function AttendanceReports() {
 
       {/* Report Type Selection */}
       <div className="mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <h2 className="text-lg font-semibold text-gray-800">Report Type</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={() => {
                   setReportType("employee");
                   setCurrentPage(1);
                 }}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                className={`w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg font-medium text-sm transition-all ${
                   reportType === "employee"
-                    ? "bg-blue-600 text-white shadow-sm"
+                    ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-600 ring-offset-1"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
@@ -833,9 +833,9 @@ export default function AttendanceReports() {
                   setReportType("attendance");
                   setCurrentPage(1);
                 }}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                className={`w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg font-medium text-sm transition-all ${
                   reportType === "attendance"
-                    ? "bg-blue-600 text-white shadow-sm"
+                    ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-600 ring-offset-1"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
@@ -844,9 +844,9 @@ export default function AttendanceReports() {
             </div>
           </div>
           {!isAdmin && reportType === "attendance" && (
-            <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-              <p className="text-sm text-yellow-800">
-                Attendance reports are only available for administrators.
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800 flex items-center gap-2">
+                <span className="font-bold">⚠️</span> Attendance reports are only available for administrators.
               </p>
             </div>
           )}
@@ -855,27 +855,28 @@ export default function AttendanceReports() {
 
       {/* Filters and Search */}
       <div className="mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
             {/* Search */}
-            <div className="relative">
+            <div className="relative w-full">
               <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search employees..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
               />
             </div>
 
             {/* Department Filter */}
-            <div className="relative">
+            <div className="relative w-full">
               <FaFilter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <select
                 value={departmentFilter}
                 onChange={(e) => setDepartmentFilter(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none transition-all shadow-sm bg-white"
               >
                 <option value="">All Departments</option>
                 {departments.map(dept => (
@@ -886,18 +887,18 @@ export default function AttendanceReports() {
 
             {/* Date Range (for attendance reports) */}
             {reportType === "attendance" && isAdmin && (
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
                 <input
                   type="date"
                   value={dateFilter.startDate}
                   onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full sm:flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
                 />
                 <input
                   type="date"
                   value={dateFilter.endDate}
                   onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full sm:flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
                 />
               </div>
             )}
@@ -907,14 +908,14 @@ export default function AttendanceReports() {
 
       {/* Export Buttons */}
       <div className="mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <h3 className="text-lg font-semibold text-gray-800">Export Options</h3>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
               <button
                 onClick={reportType === "employee" ? generateEmployeePDF : generateAttendancePDF}
                 disabled={loading || (reportType === "attendance" && !isAdmin)}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 <FaFilePdf />
                 Generate PDF Report
@@ -922,7 +923,7 @@ export default function AttendanceReports() {
               <button
                 onClick={reportType === "employee" ? generateEmployeeExcel : generateAttendanceExcel}
                 disabled={loading || (reportType === "attendance" && !isAdmin)}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 <FaFileExcel />
                 Export to Excel
@@ -933,11 +934,11 @@ export default function AttendanceReports() {
       </div>
 
       {/* Data Display */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 relative">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 relative overflow-hidden">
         {/* Real-time update indicator */}
         {loading && (
           <div className="absolute top-4 right-4 z-10">
-            <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs">
+            <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-semibold shadow-sm">
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
               Updating...
             </div>
@@ -945,39 +946,39 @@ export default function AttendanceReports() {
         )}
         
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading...</p>
+          <div className="p-12 text-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-500 font-medium">Loading report data...</p>
           </div>
         ) : (
-          <>
+          <div className="p-4 sm:p-0"> {/* Padding on mobile for breathing room around the table */}
             {reportType === "employee" ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full min-w-[600px]">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Employee ID</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Department</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Position</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-gray-100">
                     {getCurrentPageData(filteredEmployees).map((employee, index) => (
-                      <tr key={employee.id || index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{employee.employee_id}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <tr key={employee.id || index} className="hover:bg-blue-50/50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{employee.employee_id}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">
                           {`${employee.firstname || ""} ${employee.lastname || ""}`.trim()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {employee.department || "N/A"}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {employee.position || "N/A"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          <span className={`inline-flex px-2.5 py-1 text-xs font-bold rounded-md ${
                             (employee.status || "active").toLowerCase() === "active" ? "bg-green-100 text-green-800" : 
                             (employee.status || "").toLowerCase() === "inactive" ? "bg-gray-100 text-gray-800" :
                             "bg-blue-100 text-blue-800"
@@ -990,47 +991,53 @@ export default function AttendanceReports() {
                   </tbody>
                 </table>
                 {filteredEmployees.length === 0 && (
-                  <div className="p-8 text-center text-gray-500">
+                  <div className="p-8 text-center text-gray-500 font-medium">
                     No employees found matching your criteria.
                   </div>
                 )}
-                {renderPagination(getTotalPages(filteredEmployees))}
+                <div className="p-4 sm:p-6">
+                  {renderPagination(getTotalPages(filteredEmployees))}
+                </div>
               </div>
             ) : (
               // Attendance Report Display
               isAdmin ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full min-w-[700px]">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee ID</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock In</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock Out</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Employee ID</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Employee</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Clock In</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Clock Out</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white divide-y divide-gray-100">
                       {getCurrentPageData(filteredAttendance).map((record, index) => (
-                        <tr key={record.id || index} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <tr key={record.id || index} className="hover:bg-blue-50/50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {record.employee?.employee_id || "N/A"}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">
                             {`${record.employee?.firstname || ""} ${record.employee?.lastname || ""}`.trim()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {new Date(record.date).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatTime(record.clock_in)}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            <span className="bg-gray-50 px-2 py-1 rounded border border-gray-100 font-mono text-xs">
+                              {formatTime(record.clock_in)}
+                            </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatTime(record.clock_out)}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            <span className="bg-gray-50 px-2 py-1 rounded border border-gray-100 font-mono text-xs">
+                              {formatTime(record.clock_out)}
+                            </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            <span className={`inline-flex px-2.5 py-1 text-xs font-bold rounded-md shadow-sm ${
                               record.status === "Present" ? "bg-green-100 text-green-800" : 
                               record.status === "Late" ? "bg-yellow-100 text-yellow-800" :
                               record.status === "Absent" ? "bg-red-100 text-red-800" :
@@ -1045,19 +1052,23 @@ export default function AttendanceReports() {
                     </tbody>
                   </table>
                   {filteredAttendance.length === 0 && (
-                    <div className="p-8 text-center text-gray-500">
+                    <div className="p-8 text-center text-gray-500 font-medium">
                       No attendance records found matching your criteria.
                     </div>
                   )}
-                  {renderPagination(getTotalPages(filteredAttendance))}
+                  <div className="p-4 sm:p-6">
+                    {renderPagination(getTotalPages(filteredAttendance))}
+                  </div>
                 </div>
               ) : (
-                <div className="p-8 text-center text-gray-500">
-                  You don't have permission to view attendance reports.
+                <div className="p-12 text-center text-gray-500 bg-gray-50">
+                  <div className="text-4xl mb-3">🔒</div>
+                  <h3 className="text-lg font-bold text-gray-700">Access Denied</h3>
+                  <p className="mt-1">You don't have permission to view attendance reports.</p>
                 </div>
               )
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

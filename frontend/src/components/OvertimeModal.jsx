@@ -41,7 +41,6 @@ const OvertimeModal = ({ isOpen, onClose }) => {
         console.log('📊 Number of eligible employees:', data.length);
         setEmployees(data);
         
-        // Show helpful message if no employees found
         if (data.length === 0) {
           console.log('ℹ️ No eligible employees found');
           toast.info('No employees are eligible for overtime. Employees must have clocked in today.', {
@@ -103,7 +102,6 @@ const OvertimeModal = ({ isOpen, onClose }) => {
       const apiUrl = import.meta.env.VITE_API_URL || '/api';
       const token = localStorage.getItem('token');
       
-      // Send bulk overtime assignment request
       const response = await fetch(`${apiUrl}/attendances/overtime/assign`, {
         method: 'POST',
         headers: {
@@ -111,10 +109,10 @@ const OvertimeModal = ({ isOpen, onClose }) => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          employee_ids: selectedEmployees, // Send all selected employees
+          employee_ids: selectedEmployees, 
           reason,
           estimated_hours: parseFloat(estimatedHours),
-          assigned_by: 'Admin' // In a real system, get from auth context
+          assigned_by: 'Admin' 
         }),
       });
 
@@ -127,18 +125,16 @@ const OvertimeModal = ({ isOpen, onClose }) => {
           toast.success(`Overtime assigned to ${summary.success} employee(s)`);
         }
         if (summary.errors > 0) {
-          // Show detailed error messages
           const errorMessages = results
             .filter(r => !r.success)
             .map(r => `${r.employee_id}: ${r.error}`)
             .join('\n');
           
           toast.error(`Failed to assign overtime to ${summary.errors} employee(s):\n${errorMessages}`, {
-            autoClose: 8000 // Longer display time for detailed errors
+            autoClose: 8000 
           });
         }
 
-        // Reset form and close modal if all successful
         if (summary.errors === 0) {
           setSelectedEmployees([]);
           setReason('Production Rush');
@@ -146,10 +142,9 @@ const OvertimeModal = ({ isOpen, onClose }) => {
           setSearchTerm('');
           onClose();
           
-          // Auto refresh the browser to show updated attendance records
           setTimeout(() => {
             window.location.reload();
-          }, 500); // Small delay to ensure modal closes first
+          }, 500); 
         }
       } else {
         const error = await response.json();
@@ -164,36 +159,43 @@ const OvertimeModal = ({ isOpen, onClose }) => {
     }
   };
 
+  // UI Helper: Get initials for the employee avatar
+  const getInitials = (first, last) => {
+    return ((first?.[0] || '') + (last?.[0] || '')).toUpperCase() || 'ID';
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">Assign Overtime</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl"
-            >
-              ×
-            </button>
-          </div>
+    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-300">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        {/* Header (Sticky) */}
+        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-white z-10 shrink-0">
+          <h2 className="text-xl font-bold text-gray-800 tracking-tight">Assign Overtime</h2>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
+        {/* Scrollable Content */}
+        <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50">
+          
           {/* Overtime Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Reason for Overtime
               </label>
               <select
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all shadow-sm"
               >
                 {reasons.map((r) => (
                   <option key={r} value={r}>{r}</option>
@@ -202,7 +204,7 @@ const OvertimeModal = ({ isOpen, onClose }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Estimated Hours
               </label>
               <input
@@ -212,123 +214,146 @@ const OvertimeModal = ({ isOpen, onClose }) => {
                 max="12"
                 value={estimatedHours}
                 onChange={(e) => setEstimatedHours(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all shadow-sm"
                 required
               />
             </div>
           </div>
 
           {/* Employee Selection */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium text-gray-900">Select Employees</h3>
-              <div className="text-sm text-gray-600">
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Select Employees</h3>
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
                 {selectedEmployees.length} of {filteredEmployees.length} selected
-              </div>
+              </span>
             </div>
 
             {/* Search and Select All */}
-            <div className="flex items-center gap-4 mb-4">
-              <div className="flex-1">
+            <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
+              <div className="relative flex-1 w-full">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
                 <input
                   type="text"
-                  placeholder="Search employees..."
+                  placeholder="Search by name, ID, or department..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all shadow-sm"
                 />
               </div>
               <button
                 onClick={handleSelectAll}
-                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                className="w-full sm:w-auto px-5 py-3 text-sm font-medium bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-all shadow-sm"
               >
-                {selectedEmployees.length === filteredEmployees.length ? 'Deselect All' : 'Select All'}
+                {selectedEmployees.length === filteredEmployees.length && filteredEmployees.length > 0 ? 'Deselect All' : 'Select All'}
               </button>
             </div>
 
-            {/* Employee List */}
-            <div className="border border-gray-300 rounded-md max-h-64 overflow-y-auto">
-              {filteredEmployees.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  {employees.length === 0 ? (
-                    <div>
-                      <p className="font-medium">No employees eligible for overtime</p>
-                      <p className="text-sm mt-1">
-                        To be eligible, employees must:
-                      </p>
-                      <ul className="text-sm mt-2 text-left max-w-md mx-auto">
-                        <li>• Have clocked in today (Present or Late status)</li>
-                        <li>• Not already have overtime assigned</li>
-                      </ul>
-                      <p className="text-xs mt-3 text-primary-600">
-                        Check the server console for detailed debugging information
-                      </p>
-                    </div>
-                  ) : (
-                    "No employees match your search"
-                  )}
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-200">
-                  {filteredEmployees.map((employee) => (
-                    <div
-                      key={employee.employee_id}
-                      className="p-3 hover:bg-gray-50 cursor-pointer"
-                      onClick={() => handleEmployeeToggle(employee.employee_id)}
-                    >
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedEmployees.includes(employee.employee_id)}
-                          onChange={() => handleEmployeeToggle(employee.employee_id)}
-                          className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                        />
-                        <div className="ml-3 flex-1">
-                          <div className="flex items-center justify-between">
+            {/* Employee List Card */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="max-h-[300px] overflow-y-auto">
+                {filteredEmployees.length === 0 ? (
+                  <div className="p-8 text-center">
+                    {employees.length === 0 ? (
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                          <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                          </svg>
+                        </div>
+                        <p className="text-gray-900 font-semibold mb-1">No eligible employees</p>
+                        <p className="text-sm text-gray-500 max-w-sm mx-auto mb-4">
+                          Employees must have clocked in today (Present/Late) and not already have overtime assigned.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 font-medium">No employees match your search.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {filteredEmployees.map((employee) => (
+                      <div
+                        key={employee.employee_id}
+                        className="flex items-center p-4 hover:bg-purple-50/50 cursor-pointer transition-colors"
+                        onClick={() => handleEmployeeToggle(employee.employee_id)}
+                      >
+                        <div className="flex-shrink-0 mr-4">
+                          <div className={`w-5 h-5 border-2 rounded flex items-center justify-center transition-colors ${selectedEmployees.includes(employee.employee_id) ? 'bg-purple-600 border-purple-600' : 'border-gray-300 bg-white'}`}>
+                            {selectedEmployees.includes(employee.employee_id) && (
+                              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex-shrink-0 mr-4 hidden sm:flex">
+                          <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm">
+                            {getInitials(employee.firstname, employee.lastname)}
+                          </div>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
                             <div>
-                              <p className="text-sm font-medium text-gray-900">
+                              <p className="text-sm font-bold text-gray-900 truncate">
                                 {`${employee.firstname || ''} ${employee.lastname || ''}`.trim() || employee.employee_id}
                               </p>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-xs text-gray-500 mt-0.5">
                                 ID: {employee.employee_id} • {employee.department || 'N/A'}
                               </p>
                             </div>
-                            <div className="text-sm text-gray-500">
-                              {employee.position || 'N/A'}
+                            <div className="mt-1 sm:mt-0">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                {employee.position || 'N/A'}
+                              </span>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-          <div className="text-sm text-gray-600">
-            {selectedEmployees.length > 0 && (
-              <span>
-                {selectedEmployees.length} employee(s) selected for {estimatedHours}h overtime
+        {/* Footer (Sticky) */}
+        <div className="px-6 py-4 border-t border-gray-100 bg-white flex flex-col-reverse sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="text-sm font-medium text-gray-500 w-full sm:w-auto text-center sm:text-left">
+            {selectedEmployees.length > 0 ? (
+              <span className="text-purple-600">
+                {selectedEmployees.length} selected for {estimatedHours}h
               </span>
-            )}
+            ) : "No employees selected"}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300"
             >
               Cancel
             </button>
             <button
               onClick={handleAssignOvertime}
               disabled={loading || selectedEmployees.length === 0}
-              className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-white bg-purple-600 rounded-xl hover:bg-purple-700 active:bg-purple-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 shadow-sm flex items-center justify-center"
             >
-              {loading ? 'Assigning...' : `Assign Overtime (${selectedEmployees.length})`}
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Assigning...
+                </span>
+              ) : (
+                `Assign Overtime`
+              )}
             </button>
           </div>
         </div>

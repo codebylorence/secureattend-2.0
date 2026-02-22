@@ -1,4 +1,4 @@
-import { verifyLogin, changeUserCredentials } from "../services/authService.js";
+import { verifyLogin, changeUserCredentials, requestPasswordReset, resetPassword, verifyResetToken } from "../services/authService.js";
 
 export const loginUser = async (req, res) => {
   try {
@@ -50,3 +50,58 @@ export const updateProfile = async (req, res) => {
   }
 };
 
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const result = await requestPasswordReset(email);
+    
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("❌ Forgot password error:", error);
+    res.status(500).json({ error: "Failed to process password reset request" });
+  }
+};
+
+export const resetPasswordController = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "Token and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters long" });
+    }
+
+    const result = await resetPassword(token, newPassword);
+    
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("❌ Reset password error:", error);
+    res.status(400).json({ error: error.message || "Failed to reset password" });
+  }
+};
+
+export const verifyResetTokenController = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: "Token is required" });
+    }
+
+    const result = await verifyResetToken(token);
+    
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("❌ Verify token error:", error);
+    res.status(500).json({ error: "Failed to verify token" });
+  }
+};

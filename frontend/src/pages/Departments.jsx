@@ -25,27 +25,33 @@ export default function Departments() {
         </h1>
       </div>
 
-      <div className="flex justify-between my-6">
-        <div className="flex items-center gap-4">
-          {/* Search Bar */}
-          <div className="flex items-center w-64 border border-gray-300 rounded-md overflow-hidden">
+      {/* Responsive Action Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between my-6 gap-4">
+        
+        {/* Search Bar Container */}
+        <div className="w-full sm:w-auto">
+          {/* w-full on mobile, fixed width on larger screens */}
+          <div className="flex items-center w-full sm:w-72 border border-gray-300 rounded-lg overflow-hidden shadow-sm focus-within:border-gray-400 transition-colors bg-white">
             <input
               type="text"
               placeholder="Search departments..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 px-3 py-2 text-sm text-gray-700 focus:outline-none"
+              className="flex-1 px-4 py-2.5 sm:py-2 text-sm text-gray-700 focus:outline-none bg-transparent"
             />
-            <button className="bg-gray-700 hover:bg-gray-800 text-white px-3 py-2 flex items-center justify-center cursor-pointer">
-              <IoSearchOutline size="25"/>
+            <button className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2.5 sm:py-2 flex items-center justify-center cursor-pointer transition-colors">
+              <IoSearchOutline size={20} />
             </button>
           </div>
         </div>
 
         {/* Only show Add button for admin */}
         {!isSupervisor && (
-          <div className="flex">
-            <AddDeptButton onDepartmentAdded={handleDepartmentAdded} />
+          <div className="w-full sm:w-auto flex shrink-0">
+            {/* Added a wrapper here to ensure the button can handle stretching on mobile if needed */}
+            <div className="w-full sm:w-auto">
+              <AddDeptButton onDepartmentAdded={handleDepartmentAdded} />
+            </div>
           </div>
         )}
       </div>

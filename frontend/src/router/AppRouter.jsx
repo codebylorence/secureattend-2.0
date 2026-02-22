@@ -3,6 +3,8 @@ import PrivateRoute from "../components/PrivateRoute";
 import AdminLayout from "../layouts/AdminLayout";
 import AdminDashboard from "../pages/AdminDashboard";
 import Login from "../pages/Login";
+import ForgotPassword from "../pages/ForgotPassword";
+import ResetPassword from "../pages/ResetPassword";
 import Employees from "../pages/Employees";
 import EmployeeLayout from "../layouts/EmployeeLayout";
 import EmployeeDashboard from "../pages/EmployeeDashboard";
@@ -12,7 +14,6 @@ import TeamLeaderLayout from "../layouts/TeamLeaderLayout";
 import TeamDashboard from "../pages/TeamDashboard";
 import TeamSchedule from "../pages/TeamSchedule";
 import ManageSchedule from "../pages/ManageSchedule";
-import ViewSchedules from "../pages/ViewSchedules";
 import EmployeeAttendance from "../pages/EmployeeAttendance";
 
 import Departments from "../pages/Departments";
@@ -80,6 +81,8 @@ export default function AppRouter() {
         {/* Public Routes */}
         <Route path="/" element={<LoginRedirect />} />
         <Route path="/login" element={<LoginRedirect />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/register" element={<EmployeeRegistration />} />
         <Route path="/check-status" element={<CheckRegistrationStatus />} />
         <Route path="/registration-status/:employee_id" element={<RegistrationStatus />} />
@@ -91,7 +94,6 @@ export default function AppRouter() {
             <Route path="/admin/employees" element={<Employees />} />
             <Route path="/admin/profile/:employeeId" element={<EmployeeProfile />} />
             <Route path="/admin/schedule" element={<ManageSchedule />} />
-            <Route path="/admin/view-schedules" element={<ViewSchedules />} />
             <Route path="/admin/attendance" element={<EmployeeAttendance />} />
             <Route path="/admin/departments" element={<Departments />} />
             

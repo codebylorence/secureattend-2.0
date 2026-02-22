@@ -26,7 +26,7 @@ export default function Employees() {
   };
 
   return (
-    <div className="w-full font-sans pt-15 sm:pt-10">
+      <div className="w-full font-sans pt-15 sm:pt-10">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
         <h1 className="text-heading text-[21px] font-semibold">
@@ -34,18 +34,38 @@ export default function Employees() {
         </h1>
       </div>
 
-      {/* Filters and Add Button */}
-      <div className="flex justify-between my-6">
-        <div className="flex items-center gap-4">
-          <p className="text-heading mr-5">Filter :</p>
-          <DropdownZone value={zoneFilter} onChange={setZoneFilter} />
-          <DropdownEmpStatus value={statusFilter} onChange={setStatusFilter} />
-          <SearchBar value={searchTerm} onChange={setSearchTerm} />
+      {/* Responsive Filters and Add Button */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between my-6 gap-4">
+        
+        {/* Filters & Search Group */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto flex-1">
+          {/* Hide label on mobile to save space */}
+          <p className="text-heading mr-2 font-medium whitespace-nowrap hidden sm:block">
+            Filter :
+          </p>
+          
+          <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
+            {/* Wrappers added around custom components. 
+              w-full makes them stretch on mobile, sm:w-auto shrinks them to fit on larger screens.
+            */}
+            <div className="w-full sm:w-auto">
+              <DropdownZone value={zoneFilter} onChange={setZoneFilter} />
+            </div>
+            
+            <div className="w-full sm:w-auto">
+              <DropdownEmpStatus value={statusFilter} onChange={setStatusFilter} />
+            </div>
+            
+            <div className="w-full sm:w-auto flex-1">
+              <SearchBar value={searchTerm} onChange={setSearchTerm} />
+            </div>
+          </div>
         </div>
 
-        {/* Only show Add button for admin */}
+        {/* Add Employee Button */}
         {!isSupervisor && (
-          <div className="flex">
+          <div className="w-full lg:w-auto shrink-0 pt-2 lg:pt-0">
+            {/* Wrapped to ensure it handles full-width properly on mobile if the button supports it */}
             <AddEmpButton onClick={() => setIsModalOpen(true)} />
           </div>
         )}

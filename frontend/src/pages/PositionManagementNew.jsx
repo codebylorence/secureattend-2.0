@@ -162,7 +162,7 @@ export default function PositionManagementNew() {
 
   if (loading) {
     return (
-      <div className="pr-10 bg-gray-50">
+      <div className="w-full font-sans pt-15 sm:pt-10 pr-0 sm:pr-10">
         <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
           <h1 className="text-heading text-[21px] font-semibold">Position Management</h1>
         </div>
@@ -179,9 +179,9 @@ export default function PositionManagementNew() {
 
   return (
     <div className="w-full font-sans pt-15 sm:pt-10">
-      {/* Header Section */}
-      <div className="border-b-2 border-gray-200 pb-2 mb-4 pt-3">
-        <div className="flex justify-between items-center">
+      {/* Responsive Header Section */}
+      <div className="border-b-2 border-gray-200 pb-4 mb-6 pt-3">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-heading text-[21px] font-semibold flex items-center gap-2">
               Positions
@@ -192,7 +192,7 @@ export default function PositionManagementNew() {
               console.log('Add Position button clicked - setting showAddModal to true');
               setShowAddModal(true);
             }}
-            className="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-700 flex items-center gap-2"
+            className="w-full sm:w-auto bg-primary text-white px-5 py-2.5 sm:py-2 rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 transition-colors shadow-sm font-medium"
           >
             <FaPlus />
             Add Position
@@ -201,71 +201,76 @@ export default function PositionManagementNew() {
       </div>
 
       {/* Positions Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
-            All Positions ({positions.length})
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+          <h3 className="text-lg font-semibold text-gray-800">
+            All Positions <span className="text-sm font-normal text-gray-500 ml-2 bg-gray-200 px-2 py-0.5 rounded-full">{positions.length}</span>
           </h3>
         </div>
 
         {positions.length === 0 ? (
-          <div className="p-6 text-center text-gray-500">
-            <FaBriefcase className="text-4xl mx-auto mb-4 text-gray-300" />
-            <p>No positions found</p>
+          <div className="p-10 text-center text-gray-500">
+            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FaBriefcase className="text-2xl text-gray-400" />
+            </div>
+            <p className="font-medium text-gray-600">No positions found</p>
+            <p className="text-sm text-gray-400 mt-1">Click the button above to add your first position.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[500px]">
+              <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Position
+                  <th className="px-4 sm:px-6 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    Position Details
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-32">
                     Employees
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 sm:px-6 py-3.5 text-right sm:text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-24">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-gray-50">
                 {positions.map((position) => (
-                  <tr key={position.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
+                  <tr key={position.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <td className="px-4 sm:px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
                           {position.name}
-                        </div>
+                        </span>
                         {position.description && (
-                          <div className="text-sm text-gray-500">
+                          <span className="text-xs text-gray-500 mt-1 line-clamp-2 max-w-md">
                             {position.description}
-                          </div>
+                          </span>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="flex items-center gap-1">
-                        <FaUsers className="text-gray-400" />
-                        {position.employeeCount}
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 rounded-md w-max border border-gray-100">
+                        <FaUsers className={position.employeeCount > 0 ? "text-blue-500" : "text-gray-400"} size={14} />
+                        <span className={`text-sm font-semibold ${position.employeeCount > 0 ? "text-blue-700" : "text-gray-600"}`}>
+                          {position.employeeCount}
+                        </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex gap-2">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right sm:text-left">
+                      <div className="flex justify-end sm:justify-start gap-2">
                         <button
                           onClick={() => openEditModal(position)}
-                          className="w-7 h-7 rounded-md bg-blue-600 hover:bg-primary-600 text-white flex items-center justify-center transition-colors"
+                          className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-all shadow-sm"
                           title="Edit position"
                         >
-                          <FaEdit size={12} />
+                          <FaEdit size={14} />
                         </button>
                         <button
                           onClick={() => handleDeletePosition(position)}
-                          className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-50 disabled:hover:text-red-500"
                           disabled={position.employeeCount > 0}
-                          title="Delete position"
+                          title={position.employeeCount > 0 ? "Cannot delete position in use" : "Delete position"}
                         >
-                          <FaTrash size={12} />
+                          <FaTrash size={14} />
                         </button>
                       </div>
                     </td>
@@ -280,20 +285,25 @@ export default function PositionManagementNew() {
       {/* Add Position Modal */}
       {showAddModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               closeModals();
             }
           }}
         >
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 relative">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Position</h3>
+          <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Add New Position</h3>
+              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600 p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors">
+                <FaTimes />
+              </button>
+            </div>
             
-            <form onSubmit={handleAddPosition} className="space-y-4">
+            <form onSubmit={handleAddPosition} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Position Name *
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Position Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -301,40 +311,39 @@ export default function PositionManagementNew() {
                   value={formData.name}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter position name"
+                  className="w-full px-4 py-3 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white"
+                  placeholder="e.g. Senior Developer"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
                   Description
                 </label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter position description (optional)"
+                  rows={4}
+                  className="w-full px-4 py-3 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white resize-none"
+                  placeholder="Briefly describe the responsibilities..."
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 flex items-center justify-center gap-2"
-                >
-                  <FaSave />
-                  Add Position
-                </button>
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
                 <button
                   type="button"
                   onClick={closeModals}
-                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 flex items-center justify-center gap-2"
+                  className="w-full sm:flex-1 bg-white border border-gray-200 text-gray-700 py-3 sm:py-2.5 px-4 rounded-xl hover:bg-gray-50 font-bold transition-colors"
                 >
-                  <FaTimes />
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-full sm:flex-1 bg-primary text-white py-3 sm:py-2.5 px-4 rounded-xl hover:bg-primary-700 flex items-center justify-center gap-2 font-bold shadow-sm shadow-blue-200 transition-colors"
+                >
+                  <FaSave />
+                  Save Position
                 </button>
               </div>
             </form>
@@ -345,20 +354,28 @@ export default function PositionManagementNew() {
       {/* Edit Position Modal */}
       {editingPosition && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               closeModals();
             }
           }}
         >
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 relative">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Position</h3>
+          <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <FaEdit className="text-blue-500" />
+                Edit Position
+              </h3>
+              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600 p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors">
+                <FaTimes />
+              </button>
+            </div>
             
-            <form onSubmit={handleEditPosition} className="space-y-4">
+            <form onSubmit={handleEditPosition} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Position Name *
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Position Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -366,40 +383,37 @@ export default function PositionManagementNew() {
                   value={formData.name}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter position name"
+                  className="w-full px-4 py-3 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
                   Description
                 </label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter position description (optional)"
+                  rows={4}
+                  className="w-full px-4 py-3 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white resize-none"
                 />
               </div>
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 flex items-center justify-center gap-2"
-                >
-                  <FaSave />
-                  Update Position
-                </button>
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
                 <button
                   type="button"
                   onClick={closeModals}
-                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 flex items-center justify-center gap-2"
+                  className="w-full sm:flex-1 bg-white border border-gray-200 text-gray-700 py-3 sm:py-2.5 px-4 rounded-xl hover:bg-gray-50 font-bold transition-colors"
                 >
-                  <FaTimes />
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-full sm:flex-1 bg-blue-600 text-white py-3 sm:py-2.5 px-4 rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2 font-bold shadow-sm shadow-blue-200 transition-colors"
+                >
+                  <FaSave />
+                  Save Changes
                 </button>
               </div>
             </form>

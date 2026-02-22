@@ -57,6 +57,280 @@ const getShiftColor = (shiftName) => {
 };
 
 // ==========================================
+// View-Only Schedule Modal (for past dates with attendance)
+// ==========================================
+
+function ViewOnlyScheduleModal({ shiftData, onClose, employees }) {
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (shiftData) {
+      fetchAttendanceData();
+    }
+  }, [shiftData]);
+
+  const fetchAttendanceData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || '/api';
+      
+      // Fetch attendance for this specific date
+      const response = await fetch(
+        `${apiUrl}/attendances?date=${shiftData.date}`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAttendanceData(data);
+      }
+    } catch (error) {
+      console.error('Error fetching attendance:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getEmployeeName = (employeeId) => {
+    const employee = employees.find(emp => emp.employee_id === employeeId);
+    if (employee) {
+      return employee.firstname && employee.lastname 
+        ? `${employee.firstname} ${employee.lastname}`
+        : employeeId;
+    }
+    return employeeId;
+  };
+
+  const getAttendanceStatus = (employeeId) => {
+    const attendance = attendanceData.find(att => att.employee_id === employeeId);
+    return attendance?.status || 'Absent';
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      'Present': 'bg-green-100 text-green-800 border border-green-200',
+      'Late': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
+      'Absent': 'bg-red-100 text-red-800 border border-red-200',
+      'Overtime': 'bg-purple-100 text-purple-800 border border-purple-200',
+      'Missed Clock-out': 'bg-orange-100 text-orange-800 border border-orange-200'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800 border border-gray-200';
+  };
+
+  // Helper function to get initials for avatars
+  const getInitials = (name) => {
+    if (!name || name === "Unknown Employee") return "ID";
+    const parts = name.split(' ');
+    return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase();
+  };
+
+  if (!shiftData) return null;
+
+  const zones = shiftData.zones.filter(zone => zone.department !== 'Role-Based');
+  const roleBasedZones = shiftData.zones.filter(zone => zone.department === 'Role-Based');
+  
+  const roles = roleBasedZones.length > 0 ? [{
+    department: 'Management Roles',
+    members: roleBasedZones.reduce((allMembers, zone) => [...allMembers, ...(zone.members || [])], [])
+  }] : [];
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4 transition-opacity duration-300 font-sans">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        {/* Sticky Header */}
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 flex items-start sm:items-center justify-between bg-white z-10 shrink-0">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div 
+              className="w-10 h-10 rounded-full flex items-center justify-center shadow-sm shrink-0"
+              style={{ backgroundColor: getShiftColor(shiftData.shift_name) }}
+            >
+              <MdCalendarToday size={20} className="text-white" />
+            </div>
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">
+                  {shiftData.shift_name}
+                </h3>
+                <span className="text-[10px] font-bold uppercase tracking-widest bg-gray-100 text-gray-500 px-2 py-1 rounded-md w-max">
+                  View Only (Past)
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1">
+                {shiftData.date} • {shiftData.start_time} - {shiftData.end_time}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 sm:p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors focus:outline-none shrink-0 ml-2"
+          >
+            <MdClose size={20} className="sm:w-6 sm:h-6" />
+          </button>
+        </div>
+
+        {/* Scrollable Content */}
+        <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/50">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-sm font-medium text-gray-500">Loading attendance data...</p>
+            </div>
+          ) : (
+            <div className="space-y-6 sm:space-y-8">
+              
+              {/* Management Roles */}
+              {roles.length > 0 && roles[0].members.length > 0 && (
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-purple-600 uppercase tracking-widest flex items-center gap-2 mb-3">
+                    <MdSupervisorAccount size={18} />
+                    Management Roles
+                  </h4>
+                  
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    <div className="divide-y divide-gray-100">
+                      {roles[0].members.map((member, idx) => {
+                        const status = getAttendanceStatus(member.employee_id);
+                        const name = getEmployeeName(member.employee_id);
+                        return (
+                          <div key={idx} className="p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                {getInitials(name)}
+                              </div>
+                              <div className="min-w-0 pr-2">
+                                <div className="font-bold text-sm text-gray-900 truncate">{name}</div>
+                                <div className="text-[11px] font-medium text-gray-500 font-mono mt-0.5 truncate">ID: {member.employee_id}</div>
+                              </div>
+                            </div>
+                            <span className={`text-[9px] sm:text-[10px] px-2 sm:px-2.5 py-1 rounded-md font-bold uppercase tracking-wider shrink-0 shadow-sm ${getStatusColor(status)}`}>
+                              {status}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Zones Grid */}
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-3">
+                  <MdLocationOn size={18} />
+                  Zones ({zones.length})
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                  {zones.map((zone, index) => (
+                    <div key={index} className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col overflow-hidden max-h-[350px]">
+                      
+                      {/* Zone Header */}
+                      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/80 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div 
+                            className="w-2.5 h-2.5 rounded-full shadow-sm shrink-0"
+                            style={{ backgroundColor: getShiftColor(shiftData.shift_name) }}
+                          ></div>
+                          <span className="font-bold text-gray-800 text-sm truncate pr-2">{zone.department}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-200 shadow-sm shrink-0">
+                          <MdPeople size={14} className="text-gray-400" />
+                          <span>{zone.members?.length || 0}</span>
+                        </div>
+                      </div>
+
+                      {/* Zone Members List */}
+                      <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        {zone.members && zone.members.length > 0 ? (
+                          <div className="divide-y divide-gray-50">
+                            {zone.members.map((member, memberIdx) => {
+                              const status = getAttendanceStatus(member.employee_id);
+                              const name = getEmployeeName(member.employee_id);
+                              return (
+                                <div key={memberIdx} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 hover:bg-blue-50/30 transition-colors">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center font-bold text-[10px] shrink-0">
+                                      {getInitials(name)}
+                                    </div>
+                                    <div className="min-w-0 pr-2">
+                                      <div className="font-bold text-[13px] text-gray-900 truncate">{name}</div>
+                                      <div className="text-[10px] font-medium text-gray-500 font-mono mt-0.5 truncate">ID: {member.employee_id}</div>
+                                    </div>
+                                  </div>
+                                  <span className={`text-[9px] px-2 py-0.5 rounded w-max font-bold uppercase tracking-wider self-start sm:self-auto shrink-0 shadow-sm ${getStatusColor(status)}`}>
+                                    {status}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                            <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center mb-2">
+                              <MdPeople size={18} className="text-gray-300" />
+                            </div>
+                            <p className="text-xs font-medium text-gray-500">No members assigned</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          )}
+        </div>
+
+        {/* Footer & Summary */}
+        <div className="bg-slate-50 border-t border-gray-200 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 z-10">
+          
+          {/* Stats Summary - Only show if not loading */}
+          {!loading ? (
+            <div className="flex items-center justify-center sm:justify-start gap-4 sm:gap-8 w-full sm:w-auto">
+              <div className="text-center sm:text-left">
+                <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Total</p>
+                <p className="text-lg sm:text-xl font-black text-gray-800">
+                  {zones.reduce((sum, zone) => sum + (zone.members?.length || 0), 0) + 
+                   roles.reduce((sum, role) => sum + (role.members?.length || 0), 0)}
+                </p>
+              </div>
+              <div className="w-px h-8 bg-gray-200"></div>
+              <div className="text-center sm:text-left">
+                <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Attended</p>
+                <p className="text-lg sm:text-xl font-black text-emerald-600">
+                  {attendanceData.filter(att => ['Present', 'Late', 'Overtime'].includes(att.status)).length}
+                </p>
+              </div>
+              <div className="w-px h-8 bg-gray-200"></div>
+              <div className="text-center sm:text-left">
+                <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Absent</p>
+                <p className="text-lg sm:text-xl font-black text-rose-600">
+                  {attendanceData.filter(att => att.status === 'Absent').length}
+                </p>
+              </div>
+            </div>
+          ) : <div className="flex-1"></div>}
+
+          {/* Close Button */}
+          <button
+            onClick={onClose}
+            className="w-full sm:w-auto bg-white border border-gray-200 text-gray-700 py-2.5 px-8 rounded-xl hover:bg-gray-50 font-bold shadow-sm transition-all focus:ring-4 focus:ring-gray-100"
+          >
+            Close Panel
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
 // Schedule Modal Component (ENHANCED UI)
 // ==========================================
 
@@ -1685,6 +1959,7 @@ export default function CalendarScheduleView() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showShiftTemplateModal, setShowShiftTemplateModal] = useState(false);
   const [showShiftDetailsModal, setShowShiftDetailsModal] = useState(false);
+  const [showViewOnlyModal, setShowViewOnlyModal] = useState(false);
   const [selectedShiftData, setSelectedShiftData] = useState(null);
   const [shiftTemplateForm, setShiftTemplateForm] = useState({ name: "", start: "", end: "" });
   const [editingShiftIndex, setEditingShiftIndex] = useState(null);
@@ -1872,13 +2147,20 @@ export default function CalendarScheduleView() {
   const handleEventClick = (info) => {
     const event = info.event;
     const props = event.extendedProps;
+    
+    // Check if this is a past date
     if (props.isPast) {
-      toast.info("Cannot modify past schedules");
-      return;
-    }
-    if (props.shiftData) {
-      setSelectedShiftData(props.shiftData);
-      setShowShiftDetailsModal(true);
+      // Show view-only modal with attendance data
+      if (props.shiftData) {
+        setSelectedShiftData(props.shiftData);
+        setShowViewOnlyModal(true);
+      }
+    } else {
+      // Show regular edit modal for current/future dates
+      if (props.shiftData) {
+        setSelectedShiftData(props.shiftData);
+        setShowShiftDetailsModal(true);
+      }
     }
   };
 
@@ -1942,8 +2224,8 @@ export default function CalendarScheduleView() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 w-full">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-3"></div>
         <button
           onClick={() => {
@@ -1951,78 +2233,95 @@ export default function CalendarScheduleView() {
             setEditingShiftIndex(null);
             setShowShiftTemplateModal(true);
           }}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md hover:bg-[#2546b3] transition-colors shadow-sm"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary text-white px-4 py-3 sm:py-2 rounded-md hover:bg-[#2546b3] transition-colors shadow-sm"
         >
-          <span className="hidden sm:inline font-medium">Manage Shift Templates</span>
+          <span className="font-medium">Manage Shift Templates</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white rounded-lg shadow-md p-3 sm:p-6 w-full">
         <style jsx>{`
           .fc-day-past {
-            background-color: #f3f4f6 !important;
-            color: #9ca3af !important;
+            background-color: #f9fafb !important;
           }
           .fc-day-past .fc-daygrid-day-number {
             color: #9ca3af !important;
           }
           .fc-day-past:hover {
             background-color: #f3f4f6 !important;
-            cursor: not-allowed !important;
+          }
+          
+          /* Only modify the header for mobile */
+          @media (max-width: 640px) {
+            .fc .fc-toolbar {
+              flex-direction: column !important;
+              align-items: flex-start !important; /* Forces buttons to stay on the left */
+              gap: 0.75rem !important;
+            }
+            .fc .fc-toolbar-title {
+              font-size: 1.25rem !important;
+            }
           }
         `}</style>
-        <FullCalendar
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          headerToolbar={{
-            left: "prev,next today",
-            center: "title",
-            right: "",
-          }}
-          events={calendarEvents}
-          dateClick={handleDateClick}
-          eventClick={handleEventClick}
-          eventDisplay="block"
-          displayEventTime={false}
-          slotMinTime="06:00:00"
-          slotMaxTime="24:00:00"
-          allDaySlot={false}
-          height="auto"
-          selectable={true}
-          selectMirror={true}
-          dayMaxEvents={3}
-          moreLinkClick="popover"
-          selectConstraint={{
-            start: new Date().toISOString().split('T')[0]
-          }}
-          eventMouseEnter={(info) => {
-            info.el.style.cursor = 'pointer';
-            if (!info.event.extendedProps.isPast) {
-              info.el.style.transform = 'scale(1.02)';
-              info.el.style.transition = 'transform 0.2s ease';
-            }
-          }}
-          eventMouseLeave={(info) => {
-            info.el.style.transform = 'scale(1)';
-          }}
-          eventDidMount={(info) => {
-            if (info.event.extendedProps.isPast) {
-              info.el.style.opacity = '0.6';
-              info.el.style.cursor = 'default';
-            }
-          }}
-          dayCellDidMount={(info) => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const cellDate = new Date(info.date);
-            if (cellDate < today) {
-              info.el.classList.add('fc-day-past');
-              info.el.style.cursor = 'not-allowed';
-            }
-          }}
-        />
+        
+        {/* SLIDABLE WRAPPER: overflow-x-auto allows swiping, min-w-[800px] stops the calendar from squishing */}
+        <div className="w-full overflow-x-auto custom-scrollbar pb-2">
+          <div className="min-w-[800px]">
+            <FullCalendar
+              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+              initialView="dayGridMonth"
+              headerToolbar={{
+                left: "prev,next today",
+                center: "title",
+                right: "",
+              }}
+              events={calendarEvents}
+              dateClick={handleDateClick}
+              eventClick={handleEventClick}
+              eventDisplay="block"
+              displayEventTime={false}
+              slotMinTime="06:00:00"
+              slotMaxTime="24:00:00"
+              allDaySlot={false}
+              height="auto"
+              selectable={true}
+              selectMirror={true}
+              dayMaxEvents={3}
+              moreLinkClick="popover"
+              selectConstraint={{
+                start: new Date().toISOString().split('T')[0]
+              }}
+              eventMouseEnter={(info) => {
+                info.el.style.cursor = 'pointer';
+                // Allow hover effect for all events (past and future)
+                info.el.style.transform = 'scale(1.02)';
+                info.el.style.transition = 'transform 0.2s ease';
+              }}
+              eventMouseLeave={(info) => {
+                info.el.style.transform = 'scale(1)';
+              }}
+              eventDidMount={(info) => {
+                if (info.event.extendedProps.isPast) {
+                  // Make past events slightly transparent but still clickable
+                  info.el.style.opacity = '0.7';
+                  info.el.style.cursor = 'pointer';
+                }
+              }}
+              dayCellDidMount={(info) => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const cellDate = new Date(info.date);
+                if (cellDate < today) {
+                  info.el.classList.add('fc-day-past');
+                  // Allow clicking on past dates to view schedules
+                }
+              }}
+            />
+          </div>
+        </div>
       </div>
 
+      {/* --- Modals remain exactly the same --- */}
       {showScheduleModal && selectedDate && (
         <ScheduleModal
           selectedDate={selectedDate}
@@ -2043,107 +2342,116 @@ export default function CalendarScheduleView() {
       )}
 
       {showShiftTemplateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-3">
-              {editingShiftIndex !== null ? "Edit" : "Manage"} Shift Templates
-            </h3>
-            
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Shift Name</label>
-                <input
-                  placeholder="e.g., Morning Shift"
-                  className="w-full border border-gray-200 bg-gray-50 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium"
-                  value={shiftTemplateForm.name}
-                  onChange={e => setShiftTemplateForm({...shiftTemplateForm, name: e.target.value})}
-                />
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Start Time</label>
-                  <input
-                    type="time"
-                    className="w-full border border-gray-200 bg-gray-50 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium"
-                    value={shiftTemplateForm.start}
-                    onChange={e => setShiftTemplateForm({...shiftTemplateForm, start: e.target.value})}
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">End Time</label>
-                  <input
-                    type="time"
-                    className="w-full border border-gray-200 bg-gray-50 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium"
-                    value={shiftTemplateForm.end}
-                    onChange={e => setShiftTemplateForm({...shiftTemplateForm, end: e.target.value})}
-                  />
-                </div>
-              </div>
-              <button
-                onClick={handleShiftTemplateSubmit}
-                className="w-full bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 font-bold shadow-sm transition-colors"
-              >
-                {editingShiftIndex !== null ? "Update Template" : "Create Template"}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] backdrop-blur-sm p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl w-full max-w-lg max-h-[100dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="shrink-0 border-b pb-3 mb-4 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-800">
+                {editingShiftIndex !== null ? "Edit" : "Manage"} Shift Templates
+              </h3>
+              <button onClick={() => setShowShiftTemplateModal(false)} className="text-gray-400 hover:text-gray-600 p-2 focus:outline-none">
+                 <MdClose size={20} />
               </button>
             </div>
             
-            <div className="max-h-60 overflow-y-auto space-y-2 border-t pt-4 custom-scrollbar pr-1">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Existing Templates</h4>
-              {shiftTemplates.map((template, i) => (
-                <div key={i} className="flex justify-between items-center border border-gray-100 p-3 rounded-xl bg-white hover:border-gray-200 shadow-sm transition-all">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getShiftColor(template.name) }}></div>
-                    <div>
-                      <h5 className="text-sm font-bold text-gray-800">{template.name}</h5>
-                      <span className="text-xs font-medium text-gray-500">
-                        {template.start_time?.substring(0, 5)} - {template.end_time?.substring(0, 5)}
-                      </span>
-                    </div>
+            <div className="overflow-y-auto flex-1 custom-scrollbar pr-1">
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Shift Name</label>
+                  <input
+                    placeholder="e.g., Morning Shift"
+                    className="w-full border border-gray-200 bg-gray-50 p-3 sm:p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium text-base sm:text-sm"
+                    value={shiftTemplateForm.name}
+                    onChange={e => setShiftTemplateForm({...shiftTemplateForm, name: e.target.value})}
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      className="w-full border border-gray-200 bg-gray-50 p-3 sm:p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium text-base sm:text-sm"
+                      value={shiftTemplateForm.start}
+                      onChange={e => setShiftTemplateForm({...shiftTemplateForm, start: e.target.value})}
+                    />
                   </div>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => {
-                        setShiftTemplateForm({
-                          name: template.name,
-                          start: template.start_time?.substring(0, 5) || "",
-                          end: template.end_time?.substring(0, 5) || ""
-                        });
-                        setEditingShiftIndex(i);
-                      }}
-                      className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
-                    >
-                      <MdEdit size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        confirmAction("Delete shift template?", async () => {
-                          try {
-                            await deleteShiftTemplate(template.id);
-                            await fetchShiftTemplatesData();
-                            toast.success("Shift template deleted!");
-                          } catch (error) {
-                            toast.error("Failed to delete template");
-                          }
-                        });
-                      }}
-                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
-                    >
-                      <MdDelete size={16} />
-                    </button>
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">End Time</label>
+                    <input
+                      type="time"
+                      className="w-full border border-gray-200 bg-gray-50 p-3 sm:p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-medium text-base sm:text-sm"
+                      value={shiftTemplateForm.end}
+                      onChange={e => setShiftTemplateForm({...shiftTemplateForm, end: e.target.value})}
+                    />
                   </div>
                 </div>
-              ))}
-              {shiftTemplates.length === 0 && (
-                <p className="text-gray-400 text-center py-4 text-sm font-medium">No shift templates created yet.</p>
-              )}
+                <button
+                  onClick={handleShiftTemplateSubmit}
+                  className="w-full bg-blue-600 text-white py-3 sm:py-2.5 rounded-lg hover:bg-blue-700 font-bold shadow-sm transition-colors mt-2"
+                >
+                  {editingShiftIndex !== null ? "Update Template" : "Create Template"}
+                </button>
+              </div>
+              
+              <div className="space-y-2 border-t pt-4">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Existing Templates</h4>
+                {shiftTemplates.map((template, i) => (
+                  <div key={i} className="flex justify-between items-center border border-gray-100 p-3 rounded-xl bg-white hover:border-gray-200 shadow-sm transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: getShiftColor(template.name) }}></div>
+                      <div>
+                        <h5 className="text-sm font-bold text-gray-800">{template.name}</h5>
+                        <span className="text-xs font-medium text-gray-500">
+                          {template.start_time?.substring(0, 5)} - {template.end_time?.substring(0, 5)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => {
+                          setShiftTemplateForm({
+                            name: template.name,
+                            start: template.start_time?.substring(0, 5) || "",
+                            end: template.end_time?.substring(0, 5) || ""
+                          });
+                          setEditingShiftIndex(i);
+                        }}
+                        className="p-2 sm:p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                      >
+                        <MdEdit size={18} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          confirmAction("Delete shift template?", async () => {
+                            try {
+                              await deleteShiftTemplate(template.id);
+                              await fetchShiftTemplatesData();
+                              toast.success("Shift template deleted!");
+                            } catch (error) {
+                              toast.error("Failed to delete template");
+                            }
+                          });
+                        }}
+                        className="p-2 sm:p-1.5 text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
+                      >
+                        <MdDelete size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {shiftTemplates.length === 0 && (
+                  <p className="text-gray-400 text-center py-4 text-sm font-medium">No shift templates created yet.</p>
+                )}
+              </div>
             </div>
             
-            <button
-              onClick={() => setShowShiftTemplateModal(false)}
-              className="w-full mt-4 bg-gray-100 text-gray-600 py-2.5 rounded-lg hover:bg-gray-200 font-bold transition-colors"
-            >
-              Close
-            </button>
+            <div className="shrink-0 mt-4 pt-4 border-t border-gray-100">
+              <button
+                onClick={() => setShowShiftTemplateModal(false)}
+                className="w-full bg-gray-100 text-gray-600 py-3 sm:py-2.5 rounded-lg hover:bg-gray-200 font-bold transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2163,6 +2471,17 @@ export default function CalendarScheduleView() {
             setSelectedShiftData(null);
           }}
           isSupervisor={isSupervisor}
+        />
+      )}
+
+      {showViewOnlyModal && selectedShiftData && (
+        <ViewOnlyScheduleModal
+          shiftData={selectedShiftData}
+          employees={employees}
+          onClose={() => {
+            setShowViewOnlyModal(false);
+            setSelectedShiftData(null);
+          }}
         />
       )}
     </div>
