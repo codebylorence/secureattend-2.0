@@ -17,6 +17,7 @@ import {
 // } from "../services/scheduleTemplateService.js";
 import { getTodaysSchedule } from "../utils/scheduleDateGenerator.js";
 import { createScheduleNotification } from "./scheduleNotificationController.js";
+import { notifyEmployees } from "../services/notificationService.js";
 import User from "../models/user.js";
 import Employee from "../models/employee.js";
 
@@ -177,6 +178,29 @@ export const assignSchedule = async (req, res) => {
       // Don't fail the main operation if notification fails
     }
     
+    // Send notification to employee
+    try {
+      const io = req.app.get('io');
+      const assignedByUser = assigned_by || req.user?.username || "System";
+      const notificationShiftName = shift_name || "Schedule";
+      const daysText = Array.isArray(days) ? days.join(", ") : days;
+      
+      await notifyEmployees(
+        [employee_id],
+        "New Schedule Assigned",
+        `You have been assigned to ${notificationShiftName} (${start_time} - ${end_time}) on ${daysText} by ${assignedByUser}`,
+        "schedule_update",
+        result.id || null,
+        assignedByUser,
+        io
+      );
+      
+      console.log(`📧 Sent schedule assignment notification to employee ${employee_id}`);
+    } catch (notificationError) {
+      console.error("⚠️ Failed to send employee notification:", notificationError);
+      // Don't fail the main operation if notification fails
+    }
+    
     res.status(201).json({ 
       id: result.id || `schedule-${employee_id}`,
       message: "Schedule assigned successfully",
@@ -209,7 +233,7 @@ export const editEmployeeSchedule = async (req, res) => {
     try {
       const updatedBy = req.user?.username || "System";
       const employeeId = schedule.employee_id;
-      const shiftName = schedule.template?.shift_name || "Schedule";
+      const shiftName = schedule.template?.shift_name || schedule.shift_name || "Schedule";
       
       await createScheduleNotification(
         `Schedule updated for employee ${employeeId}: ${shiftName}`,
@@ -224,6 +248,30 @@ export const editEmployeeSchedule = async (req, res) => {
       );
     } catch (notificationError) {
       console.error("⚠️ Failed to create schedule notification:", notificationError);
+    }
+    
+    // Send notification to employee
+    try {
+      const io = req.app.get('io');
+      const updatedBy = req.user?.username || "System";
+      const employeeId = schedule.employee_id;
+      const shiftName = schedule.template?.shift_name || schedule.shift_name || "Schedule";
+      const startTime = schedule.start_time || "N/A";
+      const endTime = schedule.end_time || "N/A";
+      
+      await notifyEmployees(
+        [employeeId],
+        "Schedule Updated",
+        `Your schedule for ${shiftName} (${startTime} - ${endTime}) has been updated by ${updatedBy}`,
+        "schedule_update",
+        schedule.id,
+        updatedBy,
+        io
+      );
+      
+      console.log(`📧 Sent schedule update notification to employee ${employeeId}`);
+    } catch (notificationError) {
+      console.error("⚠️ Failed to send employee notification:", notificationError);
     }
     
     res.status(200).json({ message: "Schedule updated successfully", schedule });
@@ -292,7 +340,7 @@ export const removeEmployeeSchedule = async (req, res) => {
     try {
       const deletedBy = userRecord.employee.fullname || userRecord.username;
       const employeeId = schedule.employee_id;
-      const shiftName = schedule.template?.shift_name || "Schedule";
+      const shiftName = schedule.template?.shift_name || schedule.shift_name || "Schedule";
       
       await createScheduleNotification(
         `Schedule deleted for employee ${employeeId}: ${shiftName}`,
@@ -307,6 +355,28 @@ export const removeEmployeeSchedule = async (req, res) => {
       );
     } catch (notificationError) {
       console.error("⚠️ Failed to create schedule notification:", notificationError);
+    }
+    
+    // Send notification to employee
+    try {
+      const io = req.app.get('io');
+      const deletedBy = userRecord.employee.fullname || userRecord.username;
+      const employeeId = schedule.employee_id;
+      const shiftName = schedule.template?.shift_name || schedule.shift_name || "Schedule";
+      
+      await notifyEmployees(
+        [employeeId],
+        "Schedule Removed",
+        `Your schedule for ${shiftName} has been removed by ${deletedBy}`,
+        "sched_delete",
+        null,
+        deletedBy,
+        io
+      );
+      
+      console.log(`📧 Sent schedule deletion notification to employee ${employeeId}`);
+    } catch (notificationError) {
+      console.error("⚠️ Failed to send employee notification:", notificationError);
     }
     
     console.log(`✅ Schedule ${id} deleted successfully by ${currentUser.role} user ${userRecord.employee.employee_id}`);

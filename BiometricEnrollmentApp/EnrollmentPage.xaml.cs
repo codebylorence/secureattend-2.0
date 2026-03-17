@@ -41,8 +41,10 @@ namespace BiometricEnrollmentApp
         private readonly ZKTecoService _zkService;
         private readonly EnrollmentScannerService _enrollmentScanner;
         private readonly DataService _dataService = new();
+        private readonly PhotoService _photoService = new();
         private ObservableCollection<EmployeeSuggestion> _employeeSuggestions = new();
         private List<EmployeeDto> _allEmployees = new();
+        private string? _selectedPhotoPath = null;
 
         public EnrollmentPage(ZKTecoService zkService)
         {
@@ -887,6 +889,38 @@ namespace BiometricEnrollmentApp
 
                         if (rowId > 0)
                         {
+                            // Save photo if one was selected
+                            if (!string.IsNullOrEmpty(_selectedPhotoPath))
+                            {
+                                try
+                                {
+                                    bool photoSaved = _photoService.SavePhoto(empId, _selectedPhotoPath);
+                                    if (photoSaved)
+                                    {
+                                        LogHelper.Write($"📷 Photo saved for {empId}");
+                                    }
+                                    else
+                                    {
+                                        LogHelper.Write($"⚠️ Failed to save photo for {empId}");
+                                    }
+                                }
+                                catch (Exception photoEx)
+                                {
+                                    LogHelper.Write($"⚠️ Photo save error for {empId}: {photoEx.Message}");
+                                    // Don't fail enrollment if photo save fails
+                                }
+                                
+                                // Clear photo selection after enrollment
+                                Dispatcher.Invoke(() =>
+                                {
+                                    _selectedPhotoPath = null;
+                                    PhotoPreview.Source = null;
+                                    PhotoPreview.Visibility = Visibility.Collapsed;
+                                    PhotoPlaceholder.Visibility = Visibility.Visible;
+                                    RemovePhotoBtn.Visibility = Visibility.Collapsed;
+                                });
+                            }
+
                             // Load the new template into the attendance scanner SDK (not enrollment scanner)
                             try
                             {
@@ -1313,6 +1347,65 @@ namespace BiometricEnrollmentApp
                 LogHelper.Write($"❌ Delete enrollment error: {ex.Message}");
                 StatusText.Text = $"❌ Delete failed: {ex.Message}";
                 MessageBox.Show($"Failed to delete enrollment: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Photo upload button click handler
+        private void UploadPhotoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var openFileDialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "Select Employee Photo",
+                    Filter = "Image Files (*.jpg;*.jpeg;*.png;*.bmp)|*.jpg;*.jpeg;*.png;*.bmp|All Files (*.*)|*.*",
+                    FilterIndex = 1
+                };
+
+                if (openFileDialog.ShowDialog() == true)
+                {
+                    _selectedPhotoPath = openFileDialog.FileName;
+                    
+                    // Load and display preview
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.UriSource = new Uri(_selectedPhotoPath, UriKind.Absolute);
+                    bitmap.EndInit();
+                    
+                    PhotoPreview.Source = bitmap;
+                    PhotoPreview.Visibility = Visibility.Visible;
+                    PhotoPlaceholder.Visibility = Visibility.Collapsed;
+                    RemovePhotoBtn.Visibility = Visibility.Visible;
+                    
+                    LogHelper.Write($"📷 Photo selected: {_selectedPhotoPath}");
+                    StatusText.Text = "📷 Photo selected - ready to enroll";
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"❌ Error selecting photo: {ex.Message}");
+                MessageBox.Show($"Failed to load photo: {ex.Message}", "Photo Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Remove photo button click handler
+        private void RemovePhotoBtn_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _selectedPhotoPath = null;
+                PhotoPreview.Source = null;
+                PhotoPreview.Visibility = Visibility.Collapsed;
+                PhotoPlaceholder.Visibility = Visibility.Visible;
+                RemovePhotoBtn.Visibility = Visibility.Collapsed;
+                
+                LogHelper.Write("🗑️ Photo removed");
+                StatusText.Text = "Photo removed";
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"❌ Error removing photo: {ex.Message}");
             }
         }
     }

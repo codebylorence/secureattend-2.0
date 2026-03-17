@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using BiometricEnrollmentApp.Services;
 
@@ -15,6 +16,8 @@ namespace BiometricEnrollmentApp
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
         private readonly SyncService _syncService;
+        private readonly PhotoService _photoService;
+        private readonly Dictionary<string, BitmapImage?> _photoCache = new Dictionary<string, BitmapImage?>();
 
         public AdminAttendancePage(ZKTecoService zkService)
         {
@@ -23,9 +26,13 @@ namespace BiometricEnrollmentApp
             _dataService = new DataService();
             _apiService = new ApiService();
             _syncService = new SyncService(_dataService, _apiService);
+            _photoService = new PhotoService();
 
             Loaded += AdminAttendancePage_Loaded;
             Unloaded += AdminAttendancePage_Unloaded;
+            
+            // Add event handler for loading photos when rows are displayed
+            AttendanceGrid.LoadingRow += AttendanceGrid_LoadingRow;
         }
 
         private async void AdminAttendancePage_Loaded(object sender, RoutedEventArgs e)
@@ -274,6 +281,110 @@ namespace BiometricEnrollmentApp
         private string FormatHours(double hours)
         {
             return hours > 0 ? hours.ToString("0.00") : "-";
+        }
+
+        private void AttendanceGrid_LoadingRow(object? sender, DataGridRowEventArgs e)
+        {
+            try
+            {
+                // Get the employee ID from the row data
+                dynamic rowData = e.Row.Item;
+                string employeeId = rowData.EmployeeId;
+                
+                if (string.IsNullOrEmpty(employeeId))
+                    return;
+
+                // Load photo asynchronously
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        BitmapImage? photo = null;
+                        
+                        // Check cache first
+                        lock (_photoCache)
+                        {
+                            if (_photoCache.TryGetValue(employeeId, out var cachedPhoto))
+                            {
+                                photo = cachedPhoto;
+                            }
+                            else
+                            {
+                                // Load from file system
+                                photo = _photoService.LoadPhoto(employeeId);
+                                _photoCache[employeeId] = photo;
+                            }
+                        }
+
+                        if (photo != null)
+                        {
+                            // Update UI on dispatcher thread
+                            Dispatcher.Invoke(() =>
+                            {
+                                try
+                                {
+                                    // Find the Image control in the row
+                                    var photoColumn = AttendanceGrid.Columns[1] as DataGridTemplateColumn;
+                                    if (photoColumn != null)
+                                    {
+                                        var cellContent = photoColumn.GetCellContent(e.Row);
+                                        if (cellContent != null)
+                                        {
+                                            var border = FindVisualChild<Border>(cellContent);
+                                            if (border != null)
+                                            {
+                                                var grid = border.Child as Grid;
+                                                if (grid != null && grid.Children.Count > 1)
+                                                {
+                                                    var image = grid.Children[1] as Image;
+                                                    if (image != null)
+                                                    {
+                                                        image.Source = photo;
+                                                        image.Visibility = Visibility.Visible;
+                                                        
+                                                        // Hide placeholder
+                                                        if (grid.Children[0] is TextBlock placeholder)
+                                                        {
+                                                            placeholder.Visibility = Visibility.Collapsed;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogHelper.Write($"⚠️ Error updating photo UI for {employeeId}: {ex.Message}");
+                                }
+                            });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"⚠️ Error loading photo for {employeeId}: {ex.Message}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Error in AttendanceGrid_LoadingRow: {ex.Message}");
+            }
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild)
+                    return typedChild;
+                
+                var result = FindVisualChild<T>(child);
+                if (result != null)
+                    return result;
+            }
+            return null;
         }
     }
 }

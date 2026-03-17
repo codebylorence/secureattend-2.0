@@ -84,6 +84,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
@@ -139,7 +140,42 @@
                                 </Grid>
                             </StackPanel>
 
-                            <Button Grid.Row="2" x:Name="EnrollBtn" Click="EnrollBtn_Click" 
+                            <!-- Photo Upload Section -->
+                            <StackPanel Grid.Row="2" Margin="0,0,0,16">
+                                <TextBlock Text="Employee Photo (Optional)" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextMainBrush}" Margin="0,0,0,8"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Photo Preview -->
+                                    <Border Grid.Column="0" Width="70" Height="70" Background="White" CornerRadius="8" BorderBrush="#E2E8F0" BorderThickness="1" Margin="0,0,12,0">
+                                        <Grid>
+                                            <TextBlock x:Name="PhotoPlaceholder" Text="📷" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#CBD5E1"/>
+                                            <Image x:Name="PhotoPreview" Stretch="UniformToFill" Visibility="Collapsed"/>
+                                        </Grid>
+                                    </Border>
+                                    
+                                    <!-- Upload/Remove Buttons -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <Button x:Name="UploadPhotoBtn" Click="UploadPhotoBtn_Click" Height="32" Padding="12,6" Margin="0,0,0,6">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="📁" FontSize="14" Margin="0,0,6,0"/>
+                                                <TextBlock Text="Upload Photo" FontSize="12"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="RemovePhotoBtn" Click="RemovePhotoBtn_Click" Height="32" Padding="12,6" Visibility="Collapsed">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🗑️" FontSize="14" Margin="0,0,6,0"/>
+                                                <TextBlock Text="Remove Photo" FontSize="12"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <Button Grid.Row="3" x:Name="EnrollBtn" Click="EnrollBtn_Click" 
                                     Height="46" Background="{StaticResource PrimaryActionBrush}" Foreground="White" BorderThickness="0" Margin="0,0,0,24">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="+" FontSize="16" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center"/>
@@ -156,7 +192,7 @@
                                 </Button.Style>
                             </Button>
 
-                            <Border Grid.Row="3" Background="#F8FAFC" CornerRadius="12" Padding="24" BorderBrush="#E2E8F0" BorderThickness="1" Margin="0,0,0,16">
+                            <Border Grid.Row="4" Background="#F8FAFC" CornerRadius="12" Padding="24" BorderBrush="#E2E8F0" BorderThickness="1" Margin="0,0,0,16">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*"/>

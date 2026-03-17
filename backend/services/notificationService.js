@@ -48,9 +48,12 @@ export const notifyTeamLeaders = async (
   message,
   type,
   relatedId = null,
-  sentBy = "system"
+  sentBy = "system",
+  io = null
 ) => {
   try {
+    const { Op } = await import("sequelize");
+
     // Find all team leaders in the specified departments
     const teamLeaders = await User.findAll({
       where: { role: "teamleader" },
@@ -58,12 +61,18 @@ export const notifyTeamLeaders = async (
         {
           model: Employee,
           as: "employee",
-          where: { department: departments },
+          where: { department: { [Op.in]: departments } },
+          required: true,
         },
       ],
     });
 
     console.log(`📧 Found ${teamLeaders.length} team leader(s) in departments: ${departments.join(", ")}`);
+
+    if (teamLeaders.length === 0) {
+      console.log(`⚠️ No team leaders found for departments: ${departments.join(", ")}`);
+      return [];
+    }
 
     // Create notifications for each team leader
     const notifications = await Promise.all(
@@ -74,13 +83,23 @@ export const notifyTeamLeaders = async (
           message,
           type,
           related_id: relatedId,
-          sent_by: sentBy,
+          created_by: sentBy,
           is_read: false,
         })
       )
     );
 
     console.log(`✅ Created ${notifications.length} notification(s)`);
+    
+    // Emit Socket.IO event for real-time notifications
+    if (io && notifications.length > 0) {
+      teamLeaders.forEach((leader, index) => {
+        io.to(`user:${leader.id}`).emit("notification:new", notifications[index]);
+        io.emit(`notification:${leader.id}`, notifications[index]);
+      });
+      console.log(`📡 Emitted ${notifications.length} real-time notification(s) via Socket.IO`);
+    }
+    
     return notifications;
   } catch (error) {
     console.error("❌ Error notifying team leaders:", error);
@@ -97,7 +116,8 @@ export const notifySupervisors = async (
   message,
   type,
   relatedId = null,
-  sentBy = "system"
+  sentBy = "system",
+  io = null
 ) => {
   try {
     // Find all supervisors in the specified departments
@@ -123,13 +143,22 @@ export const notifySupervisors = async (
           message,
           type,
           related_id: relatedId,
-          sent_by: sentBy,
+          created_by: sentBy,
           is_read: false,
         })
       )
     );
 
     console.log(`✅ Created ${notifications.length} notification(s)`);
+    
+    // Emit Socket.IO event for real-time notifications
+    if (io && notifications.length > 0) {
+      supervisors.forEach((supervisor, index) => {
+        io.emit(`notification:${supervisor.id}`, notifications[index]);
+      });
+      console.log(`📡 Emitted ${notifications.length} real-time notification(s) via Socket.IO`);
+    }
+    
     return notifications;
   } catch (error) {
     console.error("❌ Error notifying supervisors:", error);
@@ -145,7 +174,8 @@ export const notifyAdmins = async (
   message,
   type,
   relatedId = null,
-  sentBy = "system"
+  sentBy = "system",
+  io = null
 ) => {
   try {
     // Find all admin users
@@ -164,13 +194,22 @@ export const notifyAdmins = async (
           message,
           type,
           related_id: relatedId,
-          sent_by: sentBy,
+          created_by: sentBy,
           is_read: false,
         })
       )
     );
 
     console.log(`✅ Created ${notifications.length} notification(s)`);
+    
+    // Emit Socket.IO event for real-time notifications
+    if (io && notifications.length > 0) {
+      admins.forEach((admin, index) => {
+        io.emit(`notification:${admin.id}`, notifications[index]);
+      });
+      console.log(`📡 Emitted ${notifications.length} real-time notification(s) via Socket.IO`);
+    }
+    
     return notifications;
   } catch (error) {
     console.error("❌ Error notifying admins:", error);
@@ -181,15 +220,21 @@ export const notifyAdmins = async (
 /**
  * Send notification to specific employees
  */
+/**
+ * Send notification to specific employees
+ */
 export const notifyEmployees = async (
   employeeIds,
   title,
   message,
   type,
   relatedId = null,
-  sentBy = "system"
+  sentBy = "system",
+  io = null
 ) => {
   try {
+    const { Op } = await import("sequelize");
+
     // Find users for the specified employee IDs
     const employees = await User.findAll({
       where: { role: "employee" },
@@ -197,30 +242,45 @@ export const notifyEmployees = async (
         {
           model: Employee,
           as: "employee",
-          where: { employee_id: employeeIds },
+          where: { employee_id: { [Op.in]: employeeIds } },
+          required: true,
         },
       ],
     });
 
-    console.log(`📧 Found ${employees.length} employee(s) for IDs: ${employeeIds.join(", ")}`);
+    console.log(`📧 Found ${employees.length} employee user(s) for IDs: ${employeeIds.join(", ")}`);
+
+    if (employees.length === 0) {
+      console.log(`⚠️ No employee users found for IDs: ${employeeIds.join(", ")}`);
+      return [];
+    }
 
     // Create notifications for each employee
     const notifications = await Promise.all(
-      employees.map((employee) =>
+      employees.map((emp) =>
         Notification.create({
-          user_id: employee.id,
-          employee_id: employee.employee.employee_id,
+          user_id: emp.id,
           title,
           message,
           type,
           related_id: relatedId,
-          sent_by: sentBy,
+          created_by: sentBy,
           is_read: false,
         })
       )
     );
 
-    console.log(`✅ Created ${notifications.length} notification(s)`);
+    console.log(`✅ Created ${notifications.length} employee notification(s)`);
+
+    // Emit real-time Socket.IO events
+    if (io && notifications.length > 0) {
+      employees.forEach((emp, index) => {
+        io.to(`user:${emp.id}`).emit("notification:new", notifications[index]);
+        io.emit(`notification:${emp.id}`, notifications[index]);
+      });
+      console.log(`📡 Emitted ${notifications.length} real-time notification(s) to employees`);
+    }
+
     return notifications;
   } catch (error) {
     console.error("❌ Error notifying employees:", error);
@@ -264,7 +324,7 @@ export const notifyEmployeesByDepartment = async (
           message,
           type,
           related_id: relatedId,
-          sent_by: sentBy,
+          created_by: sentBy,
           is_read: false,
         })
       )

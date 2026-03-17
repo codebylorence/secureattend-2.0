@@ -114,6 +114,7 @@ export async function markMissedClockouts() {
 
 /**
  * Checks if shift has ended + grace period has passed
+ * Handles overnight shifts properly (e.g., 22:00 to 06:00)
  * @param {string} shiftEndTime - Shift end time in "HH:mm" format (e.g., "17:00")
  * @param {string} currentTime - Current time in "HH:mm" format (e.g., "17:35")
  * @param {number} gracePeriodMinutes - Grace period in minutes
@@ -125,15 +126,51 @@ function hasShiftEndedWithGracePeriod(shiftEndTime, currentTime, gracePeriodMinu
     const [shiftHour, shiftMin] = shiftEndTime.split(':').map(Number);
     const [currentHour, currentMin] = currentTime.split(':').map(Number);
     
-    // Convert to minutes since midnight
-    const shiftEndMinutes = shiftHour * 60 + shiftMin;
-    const currentMinutes = currentHour * 60 + currentMin;
+    // Create Date objects for proper time comparison
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Set current time
+    const currentDateTime = new Date(today);
+    currentDateTime.setHours(currentHour, currentMin, 0, 0);
+    
+    // Set shift end time
+    let shiftEndDateTime = new Date(today);
+    shiftEndDateTime.setHours(shiftHour, shiftMin, 0, 0);
+    
+    // CRITICAL: Handle overnight shifts
+    // If shift ends in early morning (00:00-06:00), we need to determine if it's today or tomorrow
+    if (shiftHour >= 0 && shiftHour < 6) {
+      // If we're currently in early morning (00:00-06:00) and shift ends in early morning
+      if (currentHour >= 0 && currentHour < 6) {
+        // Both current time and shift end are in early morning
+        // Simple comparison: if now < shiftEndTime, shift hasn't ended
+        if (currentDateTime < shiftEndDateTime) {
+          console.log(`  🌅 Early morning shift still active - ends at ${shiftEndTime}, now is ${currentTime}`);
+          return false;
+        }
+      }
+      // If we're in afternoon/evening/night (after 12 PM) and shift ends in early morning
+      // The shift ends tomorrow - this is an overnight shift
+      else if (currentHour >= 12) {
+        shiftEndDateTime.setDate(shiftEndDateTime.getDate() + 1);
+        console.log(`  🌙 Overnight shift detected - ends tomorrow at ${shiftEndTime}`);
+        return false; // Shift hasn't ended yet since it ends tomorrow
+      }
+      // If we're in late morning (06:00-12:00) and shift ends in early morning
+      // The shift already ended earlier today (no adjustment needed)
+    }
     
     // Add grace period to shift end time
-    const shiftEndWithGrace = shiftEndMinutes + gracePeriodMinutes;
+    const shiftEndWithGrace = new Date(shiftEndDateTime);
+    shiftEndWithGrace.setMinutes(shiftEndWithGrace.getMinutes() + gracePeriodMinutes);
     
-    // Check if current time is past shift end + grace period
-    return currentMinutes >= shiftEndWithGrace;
+    // Check if current time is past the shift end + grace period
+    const ended = currentDateTime >= shiftEndWithGrace;
+    
+    console.log(`  🕐 Shift end: ${shiftEndTime}, Grace end: ${shiftEndWithGrace.toTimeString().slice(0, 5)}, Current: ${currentTime}, Ended: ${ended}`);
+    
+    return ended;
     
   } catch (error) {
     console.error(`❌ Error parsing times: shiftEndTime=${shiftEndTime}, currentTime=${currentTime}`, error);

@@ -13,6 +13,8 @@ namespace BiometricEnrollmentApp
         private readonly DataService _dataService;
         private readonly SyncService _syncService;
         private readonly ApiService _apiService;
+        private List<ScheduleDisplayItem> _allSchedules;
+        private string _currentFilter = "All";
 
         public AdminSchedulePage()
         {
@@ -20,16 +22,18 @@ namespace BiometricEnrollmentApp
             _dataService = new DataService();
             _apiService = new ApiService();
             _syncService = new SyncService(_dataService, _apiService);
+            _allSchedules = new List<ScheduleDisplayItem>();
 
             Loaded += AdminSchedulePage_Loaded;
         }
 
         private void AdminSchedulePage_Loaded(object sender, RoutedEventArgs e)
         {
-            LoadSchedules();
+            // Use async loading without blocking
+            _ = LoadSchedulesAsync();
         }
 
-        private void LoadSchedules()
+        private async Task LoadSchedulesAsync()
         {
             try
             {
@@ -49,19 +53,12 @@ namespace BiometricEnrollmentApp
                 }
                 else
                 {
-                    // Show data grid
-                    SchedulesDataGrid.Visibility = Visibility.Visible;
-                    EmptyStatePanel.Visibility = Visibility.Collapsed;
-
-                    // Bind data
-                    SchedulesDataGrid.ItemsSource = schedules;
-
-                    // Update statistics
-                    TotalSchedulesText.Text = schedules.Count.ToString();
-                    var uniqueEmployees = schedules.Select(s => s.EmployeeId).Distinct().Count();
-                    TotalEmployeesText.Text = uniqueEmployees.ToString();
-
-                    LogHelper.Write($"📅 Loaded {schedules.Count} schedules for {uniqueEmployees} employees");
+                    _allSchedules = schedules;
+                    
+                    // Apply current filter
+                    ApplyFilter(_currentFilter);
+                    
+                    LogHelper.Write($"✅ Loaded {schedules.Count} schedules");
                 }
             }
             catch (Exception ex)
@@ -72,14 +69,168 @@ namespace BiometricEnrollmentApp
             }
         }
 
-        private void RefreshBtn_Click(object sender, RoutedEventArgs e)
+        private void ApplyFilter(string filter)
+        {
+            try
+            {
+                _currentFilter = filter;
+                
+                if (_allSchedules == null || _allSchedules.Count == 0)
+                {
+                    SchedulesDataGrid.Visibility = Visibility.Collapsed;
+                    EmptyStatePanel.Visibility = Visibility.Visible;
+                    TotalSchedulesText.Text = "0";
+                    TotalEmployeesText.Text = "0";
+                    return;
+                }
+
+                var today = TimezoneHelper.Now.ToString("yyyy-MM-dd");
+                List<ScheduleDisplayItem> filteredSchedules;
+
+                switch (filter)
+                {
+                    case "Today":
+                        filteredSchedules = _allSchedules
+                            .Where(s => s.ScheduleDates != null && s.ScheduleDates.Contains(today))
+                            .ToList();
+                        break;
+                        
+                    case "Coming":
+                        filteredSchedules = _allSchedules
+                            .Where(s => s.ScheduleDates != null && HasFutureDates(s.ScheduleDates, today))
+                            .ToList();
+                        break;
+                        
+                    case "Past":
+                        filteredSchedules = _allSchedules
+                            .Where(s => s.ScheduleDates != null && HasOnlyPastDates(s.ScheduleDates, today))
+                            .ToList();
+                        break;
+                        
+                    case "DateRange":
+                        // Date range filtering will be handled by date pickers
+                        if (StartDatePicker != null && EndDatePicker != null && 
+                            StartDatePicker.SelectedDate.HasValue && EndDatePicker.SelectedDate.HasValue)
+                        {
+                            var startDate = StartDatePicker.SelectedDate.Value.ToString("yyyy-MM-dd");
+                            var endDate = EndDatePicker.SelectedDate.Value.ToString("yyyy-MM-dd");
+                            filteredSchedules = _allSchedules
+                                .Where(s => s.ScheduleDates != null && HasDatesInRange(s.ScheduleDates, startDate, endDate))
+                                .ToList();
+                        }
+                        else
+                        {
+                            filteredSchedules = _allSchedules;
+                        }
+                        break;
+                        
+                    default: // "All"
+                        filteredSchedules = _allSchedules;
+                        break;
+                }
+
+                // Show data grid
+                SchedulesDataGrid.Visibility = Visibility.Visible;
+                EmptyStatePanel.Visibility = Visibility.Collapsed;
+
+                // Bind filtered data
+                SchedulesDataGrid.ItemsSource = filteredSchedules;
+
+                // Update statistics
+                TotalSchedulesText.Text = filteredSchedules.Count.ToString();
+                var uniqueEmployees = filteredSchedules.Select(s => s.EmployeeId).Distinct().Count();
+                TotalEmployeesText.Text = uniqueEmployees.ToString();
+
+                LogHelper.Write($"📅 Showing {filteredSchedules.Count} schedules (filter: {filter})");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"❌ Error applying filter: {ex.Message}");
+                LogHelper.Write($"❌ Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        private bool HasFutureDates(string scheduleDates, string today)
+        {
+            try
+            {
+                var dates = scheduleDates.Split(',').Select(d => d.Trim()).ToList();
+                return dates.Any(d => string.Compare(d, today) > 0);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool HasOnlyPastDates(string scheduleDates, string today)
+        {
+            try
+            {
+                var dates = scheduleDates.Split(',').Select(d => d.Trim()).ToList();
+                return dates.All(d => string.Compare(d, today) < 0);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool HasDatesInRange(string scheduleDates, string startDate, string endDate)
+        {
+            try
+            {
+                var dates = scheduleDates.Split(',').Select(d => d.Trim()).ToList();
+                return dates.Any(d => string.Compare(d, startDate) >= 0 && string.Compare(d, endDate) <= 0);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void FilterComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (FilterComboBox == null || FilterComboBox.SelectedItem == null)
+                    return;
+                    
+                if (FilterComboBox.SelectedItem is ComboBoxItem selectedItem)
+                {
+                    var filter = selectedItem.Tag?.ToString() ?? "All";
+                    
+                    // Show/hide date range pickers
+                    if (DateRangePanel != null)
+                    {
+                        DateRangePanel.Visibility = filter == "DateRange" ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                    
+                    ApplyFilter(filter);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"❌ Error in filter selection: {ex.Message}");
+            }
+        }
+
+        private void DatePicker_SelectedDateChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_currentFilter == "DateRange")
+            {
+                ApplyFilter("DateRange");
+            }
+        }
+
+        private async void RefreshBtn_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 RefreshBtn.IsEnabled = false;
                 RefreshBtn.Content = "⏳ Refreshing...";
 
-                LoadSchedules();
+                await LoadSchedulesAsync();
 
                 MessageBox.Show("Schedules refreshed successfully!", 
                               "Refresh Complete", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -114,9 +265,9 @@ namespace BiometricEnrollmentApp
                         // Sync schedules from server
                         await _syncService.SyncSchedulesAsync();
                         
-                        Dispatcher.Invoke(() =>
+                        await Dispatcher.InvokeAsync(async () =>
                         {
-                            LoadSchedules();
+                            await LoadSchedulesAsync();
                             MessageBox.Show("Schedules synced successfully from server!", 
                                           "Sync Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                             LogHelper.Write("✅ Manual schedule sync completed successfully");

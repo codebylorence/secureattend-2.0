@@ -450,7 +450,7 @@ namespace BiometricEnrollmentApp.Services
                     if (clockInTime.Hour >= 0 && clockInTime.Hour < 12) // Early morning hours
                     {
                         var yesterday = clockInTime.AddDays(-1);
-                        var yesterdayDayOfWeek = yesterday.DayOfWeek.ToString();
+                        var yesterdayDate = yesterday.ToString("yyyy-MM-dd");
                         
                         // Check if the employee was scheduled yesterday
                         using var conn = new SqliteConnection($"Data Source={_dbPath}");
@@ -460,10 +460,10 @@ namespace BiometricEnrollmentApp.Services
                         cmd.CommandText = @"
                             SELECT COUNT(1)
                             FROM EmployeeSchedules
-                            WHERE employee_id = $emp_id AND days LIKE '%' || $yesterday || '%'
+                            WHERE employee_id = $emp_id AND schedule_dates LIKE '%' || $yesterday || '%'
                         ";
                         cmd.Parameters.AddWithValue("$emp_id", employeeId);
-                        cmd.Parameters.AddWithValue("$yesterday", yesterdayDayOfWeek);
+                        cmd.Parameters.AddWithValue("$yesterday", yesterdayDate);
                         
                         var count = Convert.ToInt32(cmd.ExecuteScalar());
                         
@@ -471,7 +471,7 @@ namespace BiometricEnrollmentApp.Services
                         {
                             // Employee was scheduled yesterday and this is an overnight shift
                             // Use yesterday's date for the attendance session
-                            var attendanceDate = yesterday.ToString("yyyy-MM-dd");
+                            var attendanceDate = yesterdayDate;
                             LogHelper.Write($"🌙 Overnight shift detected for {employeeId}, using shift start date: {attendanceDate}");
                             return attendanceDate;
                         }
@@ -988,21 +988,8 @@ namespace BiometricEnrollmentApp.Services
                     cmd.Parameters.AddWithValue("$start", schedule.Start_Time ?? "");
                     cmd.Parameters.AddWithValue("$end", schedule.End_Time ?? "");
                     
-                    // Handle both old Days format and new Specific_Date format
+                    // Store days as empty string - we only use schedule_dates now
                     string daysValue = "";
-                    if (schedule.Days != null && schedule.Days.Count > 0)
-                    {
-                        daysValue = string.Join(",", schedule.Days);
-                    }
-                    else if (!string.IsNullOrEmpty(schedule.Specific_Date))
-                    {
-                        // Convert specific date to day of week for backward compatibility
-                        if (DateTime.TryParse(schedule.Specific_Date, out var specificDate))
-                        {
-                            daysValue = specificDate.DayOfWeek.ToString();
-                            LogHelper.Write($"📅 Converted specific date {schedule.Specific_Date} to day: {daysValue}");
-                        }
-                    }
                     cmd.Parameters.AddWithValue("$days", daysValue);
                     
                     // Handle both old Schedule_Dates and new Specific_Date
@@ -1013,15 +1000,10 @@ namespace BiometricEnrollmentApp.Services
                     }
                     else if (!string.IsNullOrEmpty(schedule.Specific_Date))
                     {
-                        // Create a schedule_dates structure for backward compatibility
-                        var scheduleDates = new Dictionary<string, List<string>>();
-                        if (DateTime.TryParse(schedule.Specific_Date, out var specificDate))
-                        {
-                            var dayOfWeek = specificDate.DayOfWeek.ToString();
-                            scheduleDates[dayOfWeek] = new List<string> { schedule.Specific_Date };
-                            scheduleDatesValue = System.Text.Json.JsonSerializer.Serialize(scheduleDates);
-                            LogHelper.Write($"📅 Created schedule_dates for {schedule.Specific_Date}: {scheduleDatesValue}");
-                        }
+                        // Store the specific date directly in schedule_dates as a simple array
+                        var dates = new List<string> { schedule.Specific_Date };
+                        scheduleDatesValue = System.Text.Json.JsonSerializer.Serialize(dates);
+                        LogHelper.Write($"📅 Created schedule_dates for {schedule.Specific_Date}: {scheduleDatesValue}");
                     }
                     cmd.Parameters.AddWithValue("$dates", scheduleDatesValue);
                     
@@ -1051,10 +1033,9 @@ namespace BiometricEnrollmentApp.Services
             try
             {
                 var now = TimezoneHelper.Now;
-                var today = now.DayOfWeek.ToString();
                 var todayDate = now.ToString("yyyy-MM-dd");
                 
-                LogHelper.Write($"📅 Getting schedules for {today} ({todayDate})");
+                LogHelper.Write($"📅 Getting schedules for {todayDate} (date-based matching only)");
                 
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
                 conn.Open();
@@ -1068,14 +1049,12 @@ namespace BiometricEnrollmentApp.Services
                 }
 
                 using var cmd = conn.CreateCommand();
-                // Check BOTH recurring schedules (days column) AND specific date schedules (schedule_dates column)
+                // ONLY check specific date schedules (schedule_dates column) - NO day name matching
                 cmd.CommandText = @"
                     SELECT employee_id, shift_name, start_time, end_time, days, schedule_dates
                     FROM EmployeeSchedules
-                    WHERE days LIKE '%' || $today || '%'
-                       OR schedule_dates LIKE '%' || $date || '%'
+                    WHERE schedule_dates LIKE '%' || $date || '%'
                 ";
-                cmd.Parameters.AddWithValue("$today", today);
                 cmd.Parameters.AddWithValue("$date", todayDate);
 
                 using var reader = cmd.ExecuteReader();
@@ -1088,12 +1067,7 @@ namespace BiometricEnrollmentApp.Services
                     var days = reader.GetString(4);
                     var scheduleDates = reader.IsDBNull(5) ? "" : reader.GetString(5);
                     
-                    // Determine if this is a recurring schedule or specific date schedule
-                    bool isRecurring = days.Contains(today);
-                    bool isSpecificDate = scheduleDates.Contains(todayDate);
-                    
-                    string scheduleType = isSpecificDate ? $"specific date ({todayDate})" : $"recurring ({days})";
-                    LogHelper.Write($"  ✓ Found schedule: {empId} - {shift} ({start} - {end}) [{scheduleType}]");
+                    LogHelper.Write($"  ✓ Found schedule: {empId} - {shift} ({start} - {end}) [specific date: {todayDate}]");
                     
                     result.Add((empId, shift, start, end, days));
                 }
@@ -1121,30 +1095,51 @@ namespace BiometricEnrollmentApp.Services
 
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = @"
-                    SELECT employee_id, shift_name, start_time, end_time, days, 
-                           IFNULL(department, 'N/A'), IFNULL(synced_at, created_at)
-                    FROM EmployeeSchedules
-                    ORDER BY employee_id, shift_name
+                    SELECT 
+                        es.employee_id, 
+                        IFNULL(e.name, 'Unknown'),
+                        es.shift_name, 
+                        es.start_time, 
+                        es.end_time, 
+                        IFNULL(es.schedule_dates, es.days), 
+                        IFNULL(es.department, 'N/A'), 
+                        IFNULL(es.synced_at, es.created_at)
+                    FROM EmployeeSchedules es
+                    LEFT JOIN Enrollments e ON es.employee_id = e.employee_id
+                    ORDER BY es.employee_id, es.shift_name
                 ";
 
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {
+                    var employeeId = reader.GetString(0);
+                    var employeeName = reader.GetString(1);
+                    
                     var schedule = new ScheduleDisplayItem
                     {
-                        EmployeeId = reader.GetString(0),
-                        ShiftName = reader.GetString(1),
-                        StartTime = reader.GetString(2),
-                        EndTime = reader.GetString(3),
-                        Days = reader.GetString(4),
-                        Department = reader.GetString(5),
-                        SyncedAt = reader.GetString(6)
+                        EmployeeId = employeeId,
+                        EmployeeName = employeeName,
+                        ShiftName = reader.GetString(2),
+                        StartTime = reader.GetString(3),
+                        EndTime = reader.GetString(4),
+                        ScheduleDates = reader.GetString(5),
+                        Department = reader.GetString(6),
+                        SyncedAt = reader.GetString(7)
                     };
                     
                     result.Add(schedule);
                 }
                 
                 LogHelper.Write($"📊 Retrieved {result.Count} schedules from database");
+                
+                // Log first few employee IDs for debugging
+                if (result.Count > 0)
+                {
+                    foreach (var schedule in result.Take(3))
+                    {
+                        LogHelper.Write($"  Sample schedule: EmployeeID='{schedule.EmployeeId}', Name='{schedule.EmployeeName}', Shift='{schedule.ShiftName}'");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -1158,23 +1153,23 @@ namespace BiometricEnrollmentApp.Services
             try
             {
                 var now = TimezoneHelper.Now;
-                var today = now.DayOfWeek.ToString();
-                var yesterday = now.AddDays(-1).DayOfWeek.ToString();
+                var todayDate = now.ToString("yyyy-MM-dd");
+                var yesterdayDate = now.AddDays(-1).ToString("yyyy-MM-dd");
                 
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
                 conn.Open();
 
-                // First, check for schedules on the current day
+                // First, check for schedules on the current date
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = @"
                     SELECT shift_name, start_time, end_time
                     FROM EmployeeSchedules
-                    WHERE employee_id = $emp_id AND days LIKE '%' || $today || '%'
+                    WHERE employee_id = $emp_id AND schedule_dates LIKE '%' || $today || '%'
                     ORDER BY id DESC
                     LIMIT 1
                 ";
                 cmd.Parameters.AddWithValue("$emp_id", employeeId);
-                cmd.Parameters.AddWithValue("$today", today);
+                cmd.Parameters.AddWithValue("$today", todayDate);
 
                 using var reader = cmd.ExecuteReader();
                 if (reader.Read())
@@ -1182,7 +1177,7 @@ namespace BiometricEnrollmentApp.Services
                     var shiftName = reader.GetString(0);
                     var startTime = reader.GetString(1);
                     var endTime = reader.GetString(2);
-                    LogHelper.Write($"📅 Found schedule for {employeeId} on {today}: {shiftName} ({startTime} - {endTime})");
+                    LogHelper.Write($"📅 Found schedule for {employeeId} on {todayDate}: {shiftName} ({startTime} - {endTime})");
                     return (true, shiftName, startTime, endTime);
                 }
                 reader.Close();
@@ -1191,18 +1186,18 @@ namespace BiometricEnrollmentApp.Services
                 // This handles cases where it's past midnight and the shift started yesterday
                 if (now.Hour >= 0 && now.Hour < 12) // Check overnight shifts only in early hours (00:00-11:59)
                 {
-                    LogHelper.Write($"🌙 Checking yesterday ({yesterday}) for overnight shifts for {employeeId}");
+                    LogHelper.Write($"🌙 Checking yesterday ({yesterdayDate}) for overnight shifts for {employeeId}");
                     
                     cmd.CommandText = @"
                         SELECT shift_name, start_time, end_time
                         FROM EmployeeSchedules
-                        WHERE employee_id = $emp_id AND days LIKE '%' || $yesterday || '%'
+                        WHERE employee_id = $emp_id AND schedule_dates LIKE '%' || $yesterday || '%'
                         ORDER BY id DESC
                         LIMIT 1
                     ";
                     cmd.Parameters.Clear();
                     cmd.Parameters.AddWithValue("$emp_id", employeeId);
-                    cmd.Parameters.AddWithValue("$yesterday", yesterday);
+                    cmd.Parameters.AddWithValue("$yesterday", yesterdayDate);
 
                     using var reader2 = cmd.ExecuteReader();
                     if (reader2.Read())
@@ -1218,7 +1213,7 @@ namespace BiometricEnrollmentApp.Services
                             var currentTime = TimezoneHelper.FormatTimeDisplayShort(now);
                             if (IsCurrentTimeWithinOvernightShift(startTime, endTime, currentTime))
                             {
-                                LogHelper.Write($"🌙 Found overnight shift for {employeeId} from {yesterday}: {shiftName} ({startTime} - {endTime})");
+                                LogHelper.Write($"🌙 Found overnight shift for {employeeId} from {yesterdayDate}: {shiftName} ({startTime} - {endTime})");
                                 return (true, shiftName, startTime, endTime);
                             }
                         }
@@ -1697,18 +1692,16 @@ namespace BiometricEnrollmentApp.Services
                 {
                     var checkDate = today.AddDays(-i);
                     var checkDateStr = checkDate.ToString("yyyy-MM-dd");
-                    var checkDayOfWeek = checkDate.DayOfWeek.ToString();
                     
-                    // Find schedules for this date
+                    // Find schedules for this date (using schedule_dates column only)
                     var schedulesForDate = allSchedules.Where(s => 
-                        s.Days.Contains(checkDayOfWeek) || 
                         s.ScheduleDates.Contains(checkDateStr)
                     ).ToList();
                     
                     if (schedulesForDate.Count == 0)
                         continue;
                     
-                    LogHelper.Write($"\n📅 Checking {checkDateStr} ({checkDayOfWeek}) - {schedulesForDate.Count} scheduled");
+                    LogHelper.Write($"\n📅 Checking {checkDateStr} - {schedulesForDate.Count} scheduled");
                     
                     // Get all attendance sessions for this date
                     var sessionsForDate = new List<(long Id, string EmployeeId, string ClockIn, string ClockOut, string Status)>();
@@ -1845,18 +1838,17 @@ namespace BiometricEnrollmentApp.Services
             {
                 var now = TimezoneHelper.Now;
                 var today = now.ToString("yyyy-MM-dd");
-                var dayOfWeek = now.DayOfWeek.ToString();
                 var currentTime = TimezoneHelper.FormatTimeDisplayShort(now);
                 
                 LogHelper.Write($"🔍 ========== ABSENT & MISSED CLOCK-OUT CHECK ==========");
-                LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} ({dayOfWeek}) - Philippines time");
+                LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} - Philippines time");
                 LogHelper.Write($"🔍 Today's date: {today}");
                 
                 // CRITICAL: Only process schedules for TODAY, not future dates
                 // Get all schedules for today - THIS MUST BE CALLED EVERY TIME
                 var schedulesToday = GetTodaysSchedules();
                 
-                LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for {dayOfWeek} ({today})");
+                LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for {today}");
                 
                 // Log detailed schedule information for debugging
                 if (schedulesToday.Count > 0)
@@ -1864,7 +1856,7 @@ namespace BiometricEnrollmentApp.Services
                     LogHelper.Write($"📋 Schedule details:");
                     foreach (var sched in schedulesToday)
                     {
-                        LogHelper.Write($"   - {sched.EmployeeId}: {sched.ShiftName} ({sched.StartTime} - {sched.EndTime}) on {sched.Days}");
+                        LogHelper.Write($"   - {sched.EmployeeId}: {sched.ShiftName} ({sched.StartTime} - {sched.EndTime})");
                     }
                 }
                 
@@ -1873,9 +1865,9 @@ namespace BiometricEnrollmentApp.Services
                     LogHelper.Write("⚠️ No employees scheduled for today!");
                     LogHelper.Write("💡 Possible reasons:");
                     LogHelper.Write("   1. No schedules synced from server");
-                    LogHelper.Write("   2. No employees assigned to work on " + dayOfWeek);
+                    LogHelper.Write("   2. No employees assigned to work on " + today);
                     LogHelper.Write("   3. Schedules not published in admin panel");
-                    LogHelper.Write("   4. Day name mismatch in database (check Days column format)");
+                    LogHelper.Write("   4. Schedule dates not properly stored in schedule_dates column");
                     
                     // Check total schedules in database
                     try
@@ -1889,10 +1881,10 @@ namespace BiometricEnrollmentApp.Services
                         
                         if (totalSchedules > 0)
                         {
-                            // Show sample schedule days to debug day name mismatch
-                            cmd.CommandText = "SELECT DISTINCT days FROM EmployeeSchedules LIMIT 5";
+                            // Show sample schedule_dates to debug
+                            cmd.CommandText = "SELECT DISTINCT schedule_dates FROM EmployeeSchedules LIMIT 5";
                             using var reader = cmd.ExecuteReader();
-                            LogHelper.Write($"   📅 Sample 'days' values in database:");
+                            LogHelper.Write($"   📅 Sample 'schedule_dates' values in database:");
                             while (reader.Read())
                             {
                                 LogHelper.Write($"      - \"{reader.GetString(0)}\"");
@@ -2526,11 +2518,12 @@ namespace BiometricEnrollmentApp.Services
                         }
                     }
                     // If we're in afternoon/evening (after 12 PM) and shift ends in early morning
-                    // The shift ends tomorrow
+                    // The shift ends tomorrow - shift hasn't ended yet
                     else if (now.Hour >= 12)
                     {
                         shiftEndTime = shiftEndTime.AddDays(1);
-                        LogHelper.Write($"  🌙 Overnight shift detected - ends tomorrow at {shiftEndTime:yyyy-MM-dd HH:mm}");
+                        LogHelper.Write($"  🌙 Overnight shift detected - ends tomorrow at {shiftEndTime:yyyy-MM-dd HH:mm}, shift still active");
+                        return false; // Shift hasn't ended yet since it ends tomorrow
                     }
                     // If we're in late morning (06:00-12:00) and shift ends in early morning
                     // The shift already ended earlier today
@@ -3343,10 +3336,11 @@ namespace BiometricEnrollmentApp.Services
     public class ScheduleDisplayItem
     {
         public string EmployeeId { get; set; }
+        public string EmployeeName { get; set; }
         public string ShiftName { get; set; }
         public string StartTime { get; set; }
         public string EndTime { get; set; }
-        public string Days { get; set; }
+        public string ScheduleDates { get; set; }
         public string Department { get; set; }
         public string SyncedAt { get; set; }
     }

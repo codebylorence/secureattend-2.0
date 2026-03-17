@@ -80,13 +80,19 @@
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" 
                 Effect="{StaticResource PanelShadow}" Margin="0,0,0,24">
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Statistics and Filter -->
+                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="📊 Total Schedules:" FontWeight="SemiBold" 
                                Foreground="{StaticResource TextMainBrush}" 
                                VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -100,13 +106,42 @@
                     <TextBlock x:Name="TotalEmployeesText" Text="0" 
                                FontWeight="Bold" FontSize="16"
                                Foreground="#059669" VerticalAlignment="Center"/>
+                    
+                    <TextBlock Text="🔍 Filter:" FontWeight="SemiBold" 
+                               Foreground="{StaticResource TextMainBrush}" 
+                               VerticalAlignment="Center" Margin="24,0,8,0"/>
+                    <ComboBox x:Name="FilterComboBox" Width="150" 
+                              SelectionChanged="FilterComboBox_SelectionChanged"
+                              SelectedIndex="0">
+                        <ComboBoxItem Content="All Schedules" Tag="All"/>
+                        <ComboBoxItem Content="Today's Schedule" Tag="Today"/>
+                        <ComboBoxItem Content="Coming Schedules" Tag="Coming"/>
+                        <ComboBoxItem Content="Past Schedules" Tag="Past"/>
+                        <ComboBoxItem Content="Date Range" Tag="DateRange"/>
+                    </ComboBox>
                 </StackPanel>
 
-                <Button Grid.Column="1" x:Name="RefreshBtn" Content="🔄 Refresh" 
+                <Button Grid.Row="0" Grid.Column="1" x:Name="RefreshBtn" Content="🔄 Refresh" 
                         Click="RefreshBtn_Click" Style="{StaticResource SecondaryButton}" 
                         Margin="0,0,12,0"/>
-                <Button Grid.Column="2" x:Name="SyncBtn" Content="⬇️ Sync from Server" 
+                <Button Grid.Row="0" Grid.Column="2" x:Name="SyncBtn" Content="⬇️ Sync from Server" 
                         Click="SyncBtn_Click"/>
+                
+                <!-- Date Range Pickers -->
+                <StackPanel x:Name="DateRangePanel" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" 
+                            Orientation="Horizontal" Margin="0,12,0,0" Visibility="Collapsed">
+                    <TextBlock Text="📅 From:" FontWeight="SemiBold" 
+                               Foreground="{StaticResource TextMainBrush}" 
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <DatePicker x:Name="StartDatePicker" Width="140" 
+                                SelectedDateChanged="DatePicker_SelectedDateChanged"/>
+                    
+                    <TextBlock Text="To:" FontWeight="SemiBold" 
+                               Foreground="{StaticResource TextMainBrush}" 
+                               VerticalAlignment="Center" Margin="16,0,8,0"/>
+                    <DatePicker x:Name="EndDatePicker" Width="140" 
+                                SelectedDateChanged="DatePicker_SelectedDateChanged"/>
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -179,13 +214,14 @@
                     </DataGrid.Resources>
 
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="1.2*"/>
-                        <DataGridTextColumn Header="Shift Name" Binding="{Binding ShiftName}" Width="1.5*"/>
-                        <DataGridTextColumn Header="Start Time" Binding="{Binding StartTime}" Width="1*"/>
-                        <DataGridTextColumn Header="End Time" Binding="{Binding EndTime}" Width="1*"/>
-                        <DataGridTextColumn Header="Days" Binding="{Binding Days}" Width="2*"/>
-                        <DataGridTextColumn Header="Department" Binding="{Binding Department}" Width="1.5*"/>
-                        <DataGridTextColumn Header="Synced At" Binding="{Binding SyncedAt}" Width="1.5*"/>
+                        <DataGridTextColumn Header="Employee ID" Binding="{Binding EmployeeId}" Width="1*"/>
+                        <DataGridTextColumn Header="Employee Name" Binding="{Binding EmployeeName}" Width="1.5*"/>
+                        <DataGridTextColumn Header="Shift Name" Binding="{Binding ShiftName}" Width="1.2*"/>
+                        <DataGridTextColumn Header="Start Time" Binding="{Binding StartTime}" Width="0.8*"/>
+                        <DataGridTextColumn Header="End Time" Binding="{Binding EndTime}" Width="0.8*"/>
+                        <DataGridTextColumn Header="Schedule Dates" Binding="{Binding ScheduleDates}" Width="2.5*"/>
+                        <DataGridTextColumn Header="Department" Binding="{Binding Department}" Width="1.2*"/>
+                        <DataGridTextColumn Header="Synced At" Binding="{Binding SyncedAt}" Width="1.2*"/>
                     </DataGrid.Columns>
                 </DataGrid>
 

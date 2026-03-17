@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using BiometricEnrollmentApp.Services;
 
 namespace BiometricEnrollmentApp
@@ -17,12 +18,16 @@ namespace BiometricEnrollmentApp
         private readonly DataService _dataService;
         private readonly ApiService _apiService;
         private readonly SyncService _syncService;
+        private readonly PhotoService _photoService;
         private CancellationTokenSource? _overlayCts;
         private CancellationTokenSource? _continuousScanCts;
         private static bool _isAttendancePageActive = false;
         private System.Timers.Timer? _clockTimer;
         private System.Timers.Timer? _absentMarkingTimer;
         private System.Timers.Timer? _gridRefreshTimer;
+        
+        // Photo cache to avoid repeated file I/O
+        private readonly Dictionary<string, BitmapImage?> _photoCache = new Dictionary<string, BitmapImage?>();
         
         // Double-tap prevention: Track recent scans per employee
         private static readonly Dictionary<string, DateTime> _lastScanTimes = new Dictionary<string, DateTime>();
@@ -40,6 +45,7 @@ namespace BiometricEnrollmentApp
             _dataService = new DataService();
             _apiService = new ApiService();
             _syncService = new SyncService(_dataService, _apiService);
+            _photoService = new PhotoService();
 
             // Clear configuration cache to ensure fresh settings are loaded
             _clockOutConfirmationEnabled = null;
@@ -240,37 +246,127 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                // Try to get employee photo from server
-                var photoBase64 = await _apiService.GetEmployeePhotoAsync(employeeId);
-                
-                if (!string.IsNullOrEmpty(photoBase64))
+                // Check cache first
+                if (_photoCache.TryGetValue(employeeId, out var cachedPhoto))
                 {
-                    var photoBytes = Convert.FromBase64String(photoBase64);
-                    var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                    
-                    using (var stream = new System.IO.MemoryStream(photoBytes))
+                    if (cachedPhoto != null)
                     {
-                        bitmap.BeginInit();
-                        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                        bitmap.StreamSource = stream;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
+                        EmployeePhoto.Source = cachedPhoto;
+                        EmployeePhoto.Visibility = Visibility.Visible;
+                        DefaultUserIcon.Visibility = Visibility.Collapsed;
                     }
-                    
-                    EmployeePhoto.Source = bitmap;
-                    EmployeePhoto.Visibility = Visibility.Visible;
-                    DefaultUserIcon.Visibility = Visibility.Collapsed;
+                    else
+                    {
+                        // Cached as "no photo available"
+                        EmployeePhoto.Visibility = Visibility.Collapsed;
+                        DefaultUserIcon.Visibility = Visibility.Visible;
+                    }
+                    return;
                 }
-                else
+
+                // Load photo asynchronously to avoid blocking UI
+                await Task.Run(() =>
                 {
-                    // Keep default user icon if no photo available
-                    EmployeePhoto.Visibility = Visibility.Collapsed;
-                    DefaultUserIcon.Visibility = Visibility.Visible;
-                }
+                    try
+                    {
+                        // Try to load from local file system first (fast)
+                        var localPhoto = _photoService.LoadPhoto(employeeId);
+                        
+                        if (localPhoto != null)
+                        {
+                            // Cache and display local photo
+                            _photoCache[employeeId] = localPhoto;
+                            
+                            Dispatcher.Invoke(() =>
+                            {
+                                EmployeePhoto.Source = localPhoto;
+                                EmployeePhoto.Visibility = Visibility.Visible;
+                                DefaultUserIcon.Visibility = Visibility.Collapsed;
+                            });
+                            
+                            LogHelper.Write($"📷 Loaded local photo for {employeeId}");
+                            return;
+                        }
+
+                        // If no local photo, try server (slower, fallback)
+                        Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var photoBase64 = await _apiService.GetEmployeePhotoAsync(employeeId);
+                                
+                                if (!string.IsNullOrEmpty(photoBase64))
+                                {
+                                    var photoBytes = Convert.FromBase64String(photoBase64);
+                                    var bitmap = new BitmapImage();
+                                    
+                                    using (var stream = new System.IO.MemoryStream(photoBytes))
+                                    {
+                                        bitmap.BeginInit();
+                                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                                        bitmap.StreamSource = stream;
+                                        bitmap.EndInit();
+                                        bitmap.Freeze();
+                                    }
+                                    
+                                    // Cache and display server photo
+                                    _photoCache[employeeId] = bitmap;
+                                    
+                                    Dispatcher.Invoke(() =>
+                                    {
+                                        EmployeePhoto.Source = bitmap;
+                                        EmployeePhoto.Visibility = Visibility.Visible;
+                                        DefaultUserIcon.Visibility = Visibility.Collapsed;
+                                    });
+                                    
+                                    LogHelper.Write($"📷 Loaded server photo for {employeeId}");
+                                }
+                                else
+                                {
+                                    // Cache as "no photo"
+                                    _photoCache[employeeId] = null;
+                                    
+                                    Dispatcher.Invoke(() =>
+                                    {
+                                        EmployeePhoto.Visibility = Visibility.Collapsed;
+                                        DefaultUserIcon.Visibility = Visibility.Visible;
+                                    });
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogHelper.Write($"⚠️ Could not load server photo for {employeeId}: {ex.Message}");
+                                
+                                // Cache as "no photo"
+                                _photoCache[employeeId] = null;
+                                
+                                Dispatcher.Invoke(() =>
+                                {
+                                    EmployeePhoto.Visibility = Visibility.Collapsed;
+                                    DefaultUserIcon.Visibility = Visibility.Visible;
+                                });
+                            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Write($"⚠️ Error loading photo for {employeeId}: {ex.Message}");
+                        
+                        // Cache as "no photo"
+                        _photoCache[employeeId] = null;
+                        
+                        Dispatcher.Invoke(() =>
+                        {
+                            EmployeePhoto.Visibility = Visibility.Collapsed;
+                            DefaultUserIcon.Visibility = Visibility.Visible;
+                        });
+                    }
+                });
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"⚠️ Could not load photo for {employeeId}: {ex.Message}");
+                
                 // Keep default user icon on error
                 EmployeePhoto.Visibility = Visibility.Collapsed;
                 DefaultUserIcon.Visibility = Visibility.Visible;

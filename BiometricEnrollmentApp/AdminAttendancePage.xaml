@@ -281,14 +281,30 @@
                               SelectionMode="Single"
                               SelectionUnit="FullRow">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="0.5*"/>
-                            <DataGridTextColumn Header="Emp ID" Binding="{Binding EmployeeId}" Width="0.8*"/>
-                            <DataGridTextColumn Header="Employee Name" Binding="{Binding EmployeeName}" Width="1.5*"/>
-                            <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="1*"/>
-                            <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="0.8*"/>
-                            <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="0.8*"/>
-                            <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="0.6*"/>
-                            <DataGridTemplateColumn Header="Status" Width="1*">
+                            <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="0.4*"/>
+                            <DataGridTemplateColumn Header="Photo" Width="0.5*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Width="32" Height="32" CornerRadius="16" Background="#E2E8F0" HorizontalAlignment="Center">
+                                            <Grid>
+                                                <TextBlock Text="👤" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#94A3B8"/>
+                                                <Image x:Name="EmployeePhoto" Stretch="UniformToFill" Visibility="Collapsed">
+                                                    <Image.Clip>
+                                                        <EllipseGeometry Center="16,16" RadiusX="16" RadiusY="16"/>
+                                                    </Image.Clip>
+                                                </Image>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Emp ID" Binding="{Binding EmployeeId}" Width="0.7*"/>
+                            <DataGridTextColumn Header="Employee Name" Binding="{Binding EmployeeName}" Width="1.3*"/>
+                            <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="0.9*"/>
+                            <DataGridTextColumn Header="Clock In" Binding="{Binding ClockIn}" Width="0.7*"/>
+                            <DataGridTextColumn Header="Clock Out" Binding="{Binding ClockOut}" Width="0.7*"/>
+                            <DataGridTextColumn Header="Hours" Binding="{Binding TotalHours}" Width="0.5*"/>
+                            <DataGridTemplateColumn Header="Status" Width="0.9*">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Border Style="{StaticResource StatusBorderStyle}">

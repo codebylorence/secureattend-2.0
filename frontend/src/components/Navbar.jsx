@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSystemConfig } from "../contexts/SystemConfigContext";
+import { useSocket } from "../context/SocketContext";
 import { IoNotifications } from "react-icons/io5";
 import { FaTimes } from "react-icons/fa";
 import { MdCheckCircle, MdDelete, MdEdit } from "react-icons/md";
@@ -9,6 +10,7 @@ import ConfirmationModal from "./ConfirmationModal";
 
 export default function Navbar({ role }) {
   const { systemConfig } = useSystemConfig();
+  const { socket, connected } = useSocket();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -26,7 +28,7 @@ export default function Navbar({ role }) {
     if ((role === "teamleader" || role === "supervisor" || role === "admin" || role === "employee" || role === "warehouseadmin") && userId) {
       fetchUnreadCount();
       
-      // Poll for new notifications every 30 seconds
+      // Poll for new notifications every 30 seconds as fallback
       const interval = setInterval(() => {
         fetchUnreadCount();
       }, 30000);
@@ -34,6 +36,45 @@ export default function Navbar({ role }) {
       return () => clearInterval(interval);
     }
   }, [role, userId]);
+
+  // Socket.IO real-time notification listener
+  useEffect(() => {
+    if (socket && connected && userId) {
+      console.log(`🔔 Listening for notifications for user ${userId}`);
+      
+      // Listen for new notifications
+      socket.on(`notification:${userId}`, (notification) => {
+        console.log('🔔 New notification received:', notification);
+        
+        // Update unread count
+        fetchUnreadCount();
+        
+        // If notification panel is open, refresh the list
+        if (showNotifications) {
+          fetchNotifications();
+        }
+        
+        // Show browser notification if supported
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(notification.title, {
+            body: notification.message,
+            icon: '/favicon.ico'
+          });
+        }
+      });
+
+      return () => {
+        socket.off(`notification:${userId}`);
+      };
+    }
+  }, [socket, connected, userId, showNotifications]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   // Click outside handler for dropdown
   useEffect(() => {

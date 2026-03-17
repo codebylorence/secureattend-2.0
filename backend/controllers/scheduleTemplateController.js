@@ -9,6 +9,7 @@ import {
   removeEmployeesFromTemplate,
   getEmployeeSchedulesFromTemplates,
 } from "../services/scheduleTemplateService.js";
+import { notifyEmployees } from "../services/notificationService.js";
 
 // GET /api/templates - Returns ALL active templates
 export const getTemplates = async (req, res) => {
@@ -85,6 +86,32 @@ export const addTemplate = async (req, res) => {
     if (io) {
       io.emit('template:created', template);
     }
+
+    // Notify team leaders of the affected department
+    if (template.department) {
+      try {
+        const { notifyTeamLeaders } = await import("../services/notificationService.js");
+        const departments = [template.department];
+        const createdBy = req.body.created_by || req.user?.username || "Admin";
+        const dateInfo = template.specific_date
+          ? ` for ${template.specific_date}`
+          : template.days?.length ? ` on ${Array.isArray(template.days) ? template.days.join(", ") : template.days}` : "";
+
+        await notifyTeamLeaders(
+          departments,
+          "New Shift Template Available",
+          `A new shift template "${template.shift_name}" (${template.start_time} - ${template.end_time})${dateInfo} has been assigned to ${template.department}. Please review and assign employees.`,
+          "schedule_update",
+          template.id,
+          createdBy,
+          io
+        );
+        console.log(`📢 Notified team leaders in ${template.department} about new template`);
+      } catch (notifError) {
+        // Don't fail the request if notification fails
+        console.error("⚠️ Failed to send team leader notifications:", notifError.message);
+      }
+    }
     
     res.status(201).json(template);
   } catch (error) {
@@ -108,6 +135,31 @@ export const editTemplate = async (req, res) => {
     if (io) {
       io.emit('template:updated', template);
     }
+
+    // Notify team leaders of the affected department
+    if (template.department) {
+      try {
+        const { notifyTeamLeaders } = await import("../services/notificationService.js");
+        const departments = [template.department];
+        const updatedBy = req.body.updated_by || req.user?.username || "Admin";
+        const dateInfo = template.specific_date
+          ? ` for ${template.specific_date}`
+          : template.days?.length ? ` on ${Array.isArray(template.days) ? template.days.join(", ") : template.days}` : "";
+
+        await notifyTeamLeaders(
+          departments,
+          "Shift Template Updated",
+          `The shift template "${template.shift_name}" (${template.start_time} - ${template.end_time})${dateInfo} for ${template.department} has been updated. Please review the changes.`,
+          "schedule_update",
+          template.id,
+          updatedBy,
+          io
+        );
+        console.log(`📢 Notified team leaders in ${template.department} about updated template`);
+      } catch (notifError) {
+        console.error("⚠️ Failed to send team leader notifications:", notifError.message);
+      }
+    }
     
     res.status(200).json({ message: "Template updated successfully", template });
   } catch (error) {
@@ -121,6 +173,22 @@ export const removeTemplate = async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Fetch template details BEFORE deleting so we can use them in the notification
+    const { default: ScheduleTemplate } = await import("../models/scheduleTemplate.js");
+    const template = await ScheduleTemplate.findByPk(id);
+    
+    if (!template) {
+      return res.status(404).json({ message: "Template not found" });
+    }
+
+    // Capture details before deletion
+    const templateDept = template.department;
+    const templateName = template.shift_name;
+    const templateStart = template.start_time;
+    const templateEnd = template.end_time;
+    const templateDate = template.specific_date;
+    const templateDays = template.days;
+    
     const deleted = await deleteTemplate(id);
     
     if (!deleted) {
@@ -131,6 +199,30 @@ export const removeTemplate = async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       io.emit('template:deleted', { id });
+    }
+
+    // Notify team leaders of the affected department
+    if (templateDept) {
+      try {
+        const { notifyTeamLeaders } = await import("../services/notificationService.js");
+        const deletedBy = req.user?.username || "Admin";
+        const dateInfo = templateDate
+          ? ` for ${templateDate}`
+          : templateDays?.length ? ` on ${Array.isArray(templateDays) ? templateDays.join(", ") : templateDays}` : "";
+
+        await notifyTeamLeaders(
+          [templateDept],
+          "Shift Template Removed",
+          `The shift template "${templateName}" (${templateStart} - ${templateEnd})${dateInfo} for ${templateDept} has been removed by ${deletedBy}.`,
+          "schedule_update",
+          null,
+          deletedBy,
+          io
+        );
+        console.log(`📢 Notified team leaders in ${templateDept} about deleted template`);
+      } catch (notifError) {
+        console.error("⚠️ Failed to send team leader notifications:", notifError.message);
+      }
     }
     
     res.status(200).json({ message: "Template deleted successfully" });
@@ -189,24 +281,37 @@ export const assignEmployees = async (req, res) => {
       });
     }
     
-    console.log("📤 Assigning employees to template:", {
-      template_id,
-      employee_ids,
-      assigned_by: assigned_by || req.user?.username || "System"
-    });
+    const assignedBy = assigned_by || req.user?.username || "System";
+
+    console.log("📤 Assigning employees to template:", { template_id, employee_ids, assigned_by: assignedBy });
     
-    const template = await assignEmployeesToTemplate(
-      template_id, 
-      employee_ids, 
-      assigned_by || req.user?.username || "System"
-    );
+    const template = await assignEmployeesToTemplate(template_id, employee_ids, assignedBy);
     
     console.log("✅ Employees assigned successfully to template:", template_id);
     
-    // Emit real-time update
     const io = req.app.get('io');
     if (io) {
       io.emit('employee:assigned', { template_id, employee_ids });
+    }
+
+    // Notify each assigned employee
+    try {
+      const dateInfo = template.specific_date
+        ? ` for ${template.specific_date}`
+        : template.days?.length ? ` on ${Array.isArray(template.days) ? template.days.join(", ") : template.days}` : "";
+
+      await notifyEmployees(
+        employee_ids,
+        "New Schedule Assigned",
+        `You have been scheduled for "${template.shift_name}" (${template.start_time} - ${template.end_time})${dateInfo} by ${assignedBy}.`,
+        "schedule_update",
+        template_id,
+        assignedBy,
+        io
+      );
+      console.log(`📧 Notified ${employee_ids.length} employee(s) about schedule assignment`);
+    } catch (notifError) {
+      console.error("⚠️ Failed to send employee notifications:", notifError.message);
     }
     
     res.status(200).json({ 
@@ -235,20 +340,43 @@ export const removeEmployees = async (req, res) => {
         message: "employee_ids array is required" 
       });
     }
+
+    // Fetch template details before removing so we can use them in the notification
+    const { default: ScheduleTemplate } = await import("../models/scheduleTemplate.js");
+    const template = await ScheduleTemplate.findByPk(id);
+
+    console.log("🗑️ Removing employees from template:", { template_id: id, employee_ids });
     
-    console.log("🗑️ Removing employees from template:", {
-      template_id: id,
-      employee_ids
-    });
-    
-    const template = await removeEmployeesFromTemplate(id, employee_ids);
+    await removeEmployeesFromTemplate(id, employee_ids);
     
     console.log("✅ Employees removed successfully from template:", id);
     
-    // Emit real-time update
     const io = req.app.get('io');
     if (io) {
       io.emit('employee:removed', { template_id: id, employee_ids });
+    }
+
+    // Notify each removed employee
+    if (template) {
+      try {
+        const removedBy = req.user?.username || "System";
+        const dateInfo = template.specific_date
+          ? ` for ${template.specific_date}`
+          : template.days?.length ? ` on ${Array.isArray(template.days) ? template.days.join(", ") : template.days}` : "";
+
+        await notifyEmployees(
+          employee_ids,
+          "Schedule Removed",
+          `Your schedule for "${template.shift_name}" (${template.start_time} - ${template.end_time})${dateInfo} has been removed by ${removedBy}.`,
+          "sched_delete",
+          null,
+          removedBy,
+          io
+        );
+        console.log(`📧 Notified ${employee_ids.length} employee(s) about schedule removal`);
+      } catch (notifError) {
+        console.error("⚠️ Failed to send employee notifications:", notifError.message);
+      }
     }
     
     res.status(200).json({ 
