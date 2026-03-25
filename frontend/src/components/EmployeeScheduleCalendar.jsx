@@ -224,20 +224,18 @@ const EmployeeScheduleCalendar = () => {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 lg:p-8 font-sans w-full">
-      {schedules.length === 0 ? (
-        <div className="text-center py-12 px-4 rounded-xl border border-dashed border-gray-200 bg-gray-50">
-          <p className="text-gray-500 font-medium">
-            No schedules assigned yet. Contact your team leader.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4">
           
           {/* Controls Header */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-gray-100">
-            <h2 className="text-lg font-bold text-gray-800 tracking-tight self-start sm:self-center">
-              Calendar Schedule
-            </h2>
+            <div className="flex flex-col self-start sm:self-center">
+              <h2 className="text-lg font-bold text-gray-800 tracking-tight">
+                Calendar Schedule
+              </h2>
+              {schedules.length === 0 && (
+                <p className="text-xs text-gray-400 mt-0.5">No schedules assigned yet. Contact your team leader.</p>
+              )}
+            </div>
             
             {/* View Toggle Button */}
             <div className="flex items-center gap-1 bg-gray-100/80 rounded-xl p-1 w-full sm:w-auto overflow-hidden">
@@ -398,7 +396,6 @@ const EmployeeScheduleCalendar = () => {
             </div>
           )}
         </div>
-      )}
     </div>
   );
 };

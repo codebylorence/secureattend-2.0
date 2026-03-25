@@ -11,7 +11,7 @@ import path from 'path';
 
 export const recordAttendance = async (req, res) => {
   try {
-    const { employee_id, clock_in, clock_out, status } = req.body;
+    const { employee_id, clock_in, clock_out, status, date: explicitDate } = req.body;
 
     console.log(`📥 Attendance request: employee_id=${employee_id}, clock_in=${clock_in}, clock_out=${clock_out}, status=${status}`);
 
@@ -68,8 +68,11 @@ export const recordAttendance = async (req, res) => {
     let date;
     
     if (status === "Absent") {
-      // For absent records, use today's date in configured timezone
-      date = getCurrentDateInTimezone();
+      // For absent records, use the explicit date from biometric app if provided,
+      // otherwise fall back to today's date in configured timezone
+      date = (explicitDate && explicitDate.match(/^\d{4}-\d{2}-\d{2}$/)) 
+        ? explicitDate 
+        : getCurrentDateInTimezone();
       clockInDate = null; // Don't need clockInDate for absent records
     } else {
       // For normal records, parse the clock_in time
@@ -1129,7 +1132,7 @@ export const syncAttendanceFromBiometric = async (req, res) => {
         }
         
         // Check if record exists in web app
-        const existingRecord = await Attendance.findOne({
+        let existingRecord = await Attendance.findOne({
           where: {
             employee_id,
             date
@@ -1222,6 +1225,31 @@ export const syncAttendanceFromBiometric = async (req, res) => {
             });
           }
         } else {
+          // For Absent records, verify the employee is actually scheduled on that date
+          // This prevents ghost absent records for employees with stale/old schedules
+          if (status === 'Absent') {
+            const schedule = await EmployeeSchedule.findOne({
+              where: {
+                employee_id,
+                status: 'Active',
+                [Op.or]: [
+                  sequelize.literal(`schedule_dates::text LIKE '%${date}%'`)
+                ]
+              }
+            });
+
+            if (!schedule) {
+              results.skipped++;
+              results.details.push({
+                employee_id,
+                action: 'skipped',
+                message: `Absent record skipped - no schedule found for ${date}`
+              });
+              console.log(`⚠️ Skipped absent record for ${employee_id} on ${date} - not scheduled`);
+              continue;
+            }
+          }
+
           // Create new record
           const newRecord = await Attendance.create({
             employee_id,

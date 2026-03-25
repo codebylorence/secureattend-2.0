@@ -77,7 +77,7 @@ namespace BiometricEnrollmentApp.Services
             }
         }
 
-        public async Task<bool> SendAttendanceAsync(string employeeId, DateTime? clockIn, DateTime? clockOut = null, string status = "Present")
+        public async Task<bool> SendAttendanceAsync(string employeeId, DateTime? clockIn, DateTime? clockOut = null, string status = "Present", string? date = null)
         {
             int maxRetries = 3;
             int retryDelay = 1000; // Start with 1 second
@@ -91,7 +91,9 @@ namespace BiometricEnrollmentApp.Services
                         employee_id = employeeId,
                         clock_in = clockIn.HasValue ? TimezoneHelper.FormatForApi(clockIn.Value) : null,
                         clock_out = clockOut.HasValue ? TimezoneHelper.FormatForApi(clockOut.Value) : null,
-                        status = status
+                        status = status,
+                        // Include explicit date for absent records so backend uses the correct date
+                        date = (!clockIn.HasValue && status == "Absent") ? date : null
                     };
 
                     // Debug logging for timezone conversion

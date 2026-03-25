@@ -246,7 +246,8 @@ namespace BiometricEnrollmentApp.Services
                                     item.EmployeeId,
                                     clockIn,
                                     clockOut,
-                                    session.Value.Status
+                                    session.Value.Status,
+                                    session.Value.Date  // Pass the actual session date so backend uses correct date
                                 );
                             }
                             else
