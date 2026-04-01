@@ -303,7 +303,7 @@ function ViewOnlyScheduleModal({ shiftData, onClose, employees }) {
               <div className="text-center sm:text-left">
                 <p className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Attended</p>
                 <p className="text-lg sm:text-xl font-black text-emerald-600">
-                  {attendanceData.filter(att => ['Present', 'Late', 'Overtime'].includes(att.status)).length}
+                  {attendanceData.filter(att => ['Present', 'Late', 'Overtime', 'Missed Clock-out'].includes(att.status)).length}
                 </p>
               </div>
               <div className="w-px h-8 bg-gray-200"></div>
