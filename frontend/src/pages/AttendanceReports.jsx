@@ -965,20 +965,32 @@ export default function AttendanceReports() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <h3 className="text-lg font-semibold text-gray-800">Export Options</h3>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-              <button
-                onClick={reportType === "employee" ? generateEmployeePDF : generateAttendancePDF}
-                disabled={loading || (reportType === "attendance" && !isAdmin)}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-              >
-                <FaFilePdf />
-              </button>
-              <button
-                onClick={reportType === "employee" ? generateEmployeeExcel : generateAttendanceExcel}
-                disabled={loading || (reportType === "attendance" && !isAdmin)}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-              >
-                <FaFileExcel />
-              </button>
+              <div className="relative group w-full sm:w-auto">
+                <button
+                  onClick={reportType === "employee" ? generateEmployeePDF : generateAttendancePDF}
+                  disabled={loading || (reportType === "attendance" && !isAdmin)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                >
+                  <FaFilePdf />
+                </button>
+                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 text-xs font-medium text-white bg-gray-800 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg">
+                  Export as PDF
+                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                </span>
+              </div>
+              <div className="relative group w-full sm:w-auto">
+                <button
+                  onClick={reportType === "employee" ? generateEmployeeExcel : generateAttendanceExcel}
+                  disabled={loading || (reportType === "attendance" && !isAdmin)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                >
+                  <FaFileExcel />
+                </button>
+                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 text-xs font-medium text-white bg-gray-800 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg">
+                  Export as Excel
+                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                </span>
+              </div>
             </div>
           </div>
         </div>

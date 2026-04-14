@@ -332,6 +332,49 @@ export const updateFingerprintStatus = async (req, res) => {
   }
 };
 
+// GET /api/employees/team/:department - Get team members for a specific department
+export const getTeamMembers = async (req, res) => {
+  try {
+    const { department } = req.params;
+    const { role } = req.user; // from auth middleware
+
+    // Only teamleaders, supervisors, and admins can fetch team members
+    const allowedRoles = ["admin", "warehouseadmin", "supervisor", "teamleader"];
+    if (!allowedRoles.includes(role)) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const employees = await Employee.findAll({
+      where: {
+        department,
+        status: "Active",
+      },
+      include: [
+        {
+          model: (await import("../models/user.js")).default,
+          as: "user",
+          attributes: ["role"],
+          required: false,
+        },
+      ],
+      order: [["firstname", "ASC"]],
+    });
+
+    const result = employees.map((emp) => {
+      const data = emp.toJSON();
+      return {
+        ...data,
+        role: data.user?.role || "employee",
+      };
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching team members:", error);
+    res.status(500).json({ message: "Error fetching team members" });
+  }
+};
+
 // Test endpoint to verify user creation
 export const testUserCreation = async (req, res) => {
   try {

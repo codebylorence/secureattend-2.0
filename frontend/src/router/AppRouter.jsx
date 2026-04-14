@@ -24,11 +24,11 @@ import RegistrationStatus from "../pages/RegistrationStatus";
 import RegistrationManagement from "../pages/RegistrationManagement";
 import CheckRegistrationStatus from "../pages/CheckRegistrationStatus";
 import PositionManagement from "../pages/PositionManagementNew";
+import TeamMembers from "../pages/TeamMembers";
 import AttendanceReports from "../pages/AttendanceReports";
 import EmployeeProfile from "../pages/EmployeeProfile";
-import AdminProfile from "../pages/AdminProfile";
 
-// Component to redirect logged-in users away from login page
+import AdminProfile from "../pages/AdminProfile";
 function LoginRedirect() {
   const token = localStorage.getItem("token");
   const userStr = localStorage.getItem("user");
@@ -152,6 +152,7 @@ export default function AppRouter() {
             <Route path="/team/myschedule" element={<MySchedule />} />
             <Route path="/team/dashboard" element={<TeamDashboard />} />
             <Route path="/team/schedule" element={<TeamSchedule />} />
+            <Route path="/team/members" element={<TeamMembers />} />
             <Route path="/team/profile" element={<Profile />} />
           </Route>
         </Route>

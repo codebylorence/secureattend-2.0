@@ -47,3 +47,9 @@ export const updateUserCredentials = async (userId, credentials) => {
   const response = await api.put(`/users/${userId}/credentials`, credentials);
   return response.data;
 };
+
+// Get team members by department
+export const fetchTeamMembers = async (department) => {
+  const response = await api.get(`/employees/team/${encodeURIComponent(department)}`);
+  return response.data;
+};

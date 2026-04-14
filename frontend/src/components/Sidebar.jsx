@@ -159,6 +159,7 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
       return [
         { key: "dashboard", label: "Dashboard", icon: FaTachometerAlt, path: "/team/dashboard" },
         { key: "team-schedule", label: "Team Schedule", icon: FaCalendarCheck, path: "/team/schedule" },
+        { key: "team-members", label: "Team Members", icon: FaUsers, path: "/team/members" },
         {
           key: "personal", label: "Personal", icon: FaUser,
           submenu: [

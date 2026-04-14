@@ -651,60 +651,52 @@ export const assignOvertime = async (req, res) => {
           continue;
         }
 
-        // Check if employee is scheduled for today
-        // Get weekday in the configured timezone
-        const configPath = path.join(process.cwd(), 'config', 'system-config.json');
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        const timezone = config.timezone || 'UTC';
-        
-        const now = new Date();
-        const today = new Intl.DateTimeFormat('en-US', {
-          timeZone: timezone,
-          weekday: 'long'
-        }).format(now);
-        
-        // Check if employee has ANY schedule for today (they might have multiple schedules)
-        const todaySchedule = await EmployeeSchedule.findOne({
-          where: {
-            employee_id: empId
-          }
-          // DISABLED: ScheduleTemplate include - table dropped
-          // include: [{
-          //   model: ScheduleTemplate,
-          //   as: 'template',
-          //   required: true,
-          //   where: sequelize.literal(`JSON_CONTAINS(template.days, '"${today}"')`)
-          // }]
-        });
-
-        if (!todaySchedule) {
-          results.push({ employee_id: empId, success: false, error: "Employee is not scheduled to work today" });
-          errorCount++;
-          continue;
-        }
-
-        // Check if employee has already clocked in for their regular shift today
+        // Check if employee has already clocked in AND clocked out for their regular shift today
         const todayAttendance = await Attendance.findOne({
           where: {
             employee_id: empId,
             date: assignmentDate,
             status: {
-              [Op.in]: ["Present", "Late"] // Must have clocked in (not absent)
+              [Op.in]: ["Present", "Late"] // Must have completed regular shift
             },
             clock_in: {
-              [Op.not]: null // Must have actually clocked in
+              [Op.not]: null
+            },
+            clock_out: {
+              [Op.not]: null // Must have clocked out before overtime can be assigned
             }
           }
         });
 
         if (!todayAttendance) {
-          results.push({ employee_id: empId, success: false, error: "Employee must clock in for regular shift before overtime assignment" });
+          // Check if they clocked in but haven't clocked out yet
+          const clockedInOnly = await Attendance.findOne({
+            where: {
+              employee_id: empId,
+              date: assignmentDate,
+              status: { [Op.in]: ["Present", "Late"] },
+              clock_in: { [Op.not]: null },
+              clock_out: null
+            }
+          });
+          const errorMsg = clockedInOnly
+            ? "Employee must clock out from regular shift before overtime can be assigned"
+            : "Employee must clock in and clock out for regular shift before overtime assignment";
+          results.push({ employee_id: empId, success: false, error: errorMsg });
           errorCount++;
           continue;
         }
 
         // Check if employee already has overtime assignment for the date
-        if (todayAttendance.status === "Overtime") {
+        const existingOvertime = await Attendance.findOne({
+          where: {
+            employee_id: empId,
+            date: assignmentDate,
+            status: "Overtime"
+          }
+        });
+
+        if (existingOvertime) {
           results.push({ employee_id: empId, success: false, error: "Already has overtime assignment for this date" });
           errorCount++;
           continue;
@@ -817,8 +809,8 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     
     console.log(`📅 [OVERTIME] Fetching overtime eligible employees for ${today} (${todayWeekday}) in timezone ${timezone}`);
     
-    // Step 1: Get all employees who have clocked in today (Present or Late)
-    console.log(`🔍 [OVERTIME] Step 1: Querying attendances for date=${today}, status IN (Present, Late), clock_in NOT NULL`);
+    // Step 1: Get all employees who have clocked in AND clocked out today (Present or Late)
+    console.log(`🔍 [OVERTIME] Step 1: Querying attendances for date=${today}, status IN (Present, Late), clock_in NOT NULL, clock_out NOT NULL`);
     
     const todayAttendances = await Attendance.findAll({
       where: {
@@ -828,19 +820,22 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
         },
         clock_in: {
           [Op.not]: null
+        },
+        clock_out: {
+          [Op.not]: null
         }
       }
     });
 
-    console.log(`📊 [OVERTIME] Found ${todayAttendances.length} employees who clocked in today`);
+    console.log(`📊 [OVERTIME] Found ${todayAttendances.length} employees who clocked in and out today`);
     if (todayAttendances.length > 0) {
       todayAttendances.forEach(a => {
-        console.log(`   👤 ${a.employee_id}: ${a.status}, in: ${a.clock_in}, out: ${a.clock_out || 'not yet'}`);
+        console.log(`   👤 ${a.employee_id}: ${a.status}, in: ${a.clock_in}, out: ${a.clock_out}`);
       });
     }
 
     if (todayAttendances.length === 0) {
-      console.log(`⚠️ [OVERTIME] No employees clocked in today, returning empty array`);
+      console.log(`⚠️ [OVERTIME] No employees have completed their shift today (clocked in + out), returning empty array`);
       console.log('='.repeat(80));
       return res.status(200).json([]);
     }
