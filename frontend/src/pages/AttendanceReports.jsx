@@ -971,7 +971,6 @@ export default function AttendanceReports() {
                 className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 <FaFilePdf />
-                Generate PDF Report
               </button>
               <button
                 onClick={reportType === "employee" ? generateEmployeeExcel : generateAttendanceExcel}
@@ -979,7 +978,6 @@ export default function AttendanceReports() {
                 className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 <FaFileExcel />
-                Export to Excel
               </button>
             </div>
           </div>

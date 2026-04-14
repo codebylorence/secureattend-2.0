@@ -221,7 +221,7 @@ namespace BiometricEnrollmentApp.Services
             try
             {
                 LogHelper.Write("📥 Fetching all employees from server...");
-                var response = await _httpClient.GetAsync($"{_baseUrl}/api/employees");
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/employees/biometric");
 
                 if (response.IsSuccessStatusCode)
                 {

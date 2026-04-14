@@ -1115,6 +1115,13 @@ namespace BiometricEnrollmentApp.Services
                     var employeeId = reader.GetString(0);
                     var employeeName = reader.GetString(1);
                     
+                    // Clean up schedule_dates: remove JSON array brackets/quotes e.g. ["2026-03-31"] → 2026-03-31
+                    var rawDates = reader.GetString(5);
+                    var cleanDates = rawDates
+                        .Trim('[', ']')
+                        .Replace("\"", "")
+                        .Replace(",", ", ");
+
                     var schedule = new ScheduleDisplayItem
                     {
                         EmployeeId = employeeId,
@@ -1122,7 +1129,7 @@ namespace BiometricEnrollmentApp.Services
                         ShiftName = reader.GetString(2),
                         StartTime = reader.GetString(3),
                         EndTime = reader.GetString(4),
-                        ScheduleDates = reader.GetString(5),
+                        ScheduleDates = cleanDates,
                         Department = reader.GetString(6),
                         SyncedAt = reader.GetString(7)
                     };
