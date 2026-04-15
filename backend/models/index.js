@@ -102,8 +102,7 @@ const seedInitialData = async () => {
       { name: "Zone B", description: "Helper zone", manager: null },
       { name: "Zone C", description: "Zone C operations", manager: null },
       { name: "Zone D", description: "Zone D operations", manager: null },
-      { name: "Zone E", description: "Zone E operations", manager: null },
-      { name: "Company-wide", description: "Company-wide operations", manager: null }
+      { name: "Zone E", description: "Zone E operations", manager: null }
     ];
 
     // Check if positions already exist
