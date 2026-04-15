@@ -36,8 +36,7 @@
                 </Grid.ColumnDefinitions>
                 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="SecureAttend" FontWeight="Bold" Foreground="White" FontSize="20"/>
-                    <TextBlock Text=" | Kiosk Mode" Foreground="#94A3B8" FontSize="18" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="Kiosk Mode" Foreground="#94A3B8" FontSize="18" Margin="8,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
                 
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" Orientation="Horizontal" VerticalAlignment="Center">

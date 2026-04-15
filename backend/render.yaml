@@ -21,6 +21,21 @@ services:
       - key: FRONTEND_URL
         value: https://secureattend-2-0.vercel.app
       
+      # Email / SMTP configuration for password reset emails
+      # Set these values in the Render dashboard (Environment tab) - do NOT hardcode secrets here
+      - key: SMTP_HOST
+        sync: false  # e.g. smtp.gmail.com
+      - key: SMTP_PORT
+        sync: false  # e.g. 587
+      - key: SMTP_SECURE
+        sync: false  # false for port 587, true for port 465
+      - key: SMTP_USER
+        sync: false  # your email address
+      - key: SMTP_PASS
+        sync: false  # your app password (Gmail: generate at myaccount.google.com/apppasswords)
+      - key: SYSTEM_NAME
+        value: SecureAttend
+      
       # ALTERNATIVE: If using external MySQL instead of PostgreSQL
       # Uncomment these and remove DATABASE_URL above:
       # - key: DB_DIALECT
