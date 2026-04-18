@@ -4,7 +4,6 @@ import {
   FaPlus, 
   FaEdit, 
   FaTrash, 
-  FaSave, 
   FaTimes,
   FaBriefcase,
   FaUsers
@@ -342,8 +341,7 @@ export default function PositionManagementNew() {
                   type="submit"
                   className="w-full sm:flex-1 bg-primary text-white py-3 sm:py-2.5 px-4 rounded-xl hover:bg-primary-700 flex items-center justify-center gap-2 font-bold shadow-sm shadow-blue-200 transition-colors"
                 >
-                  <FaSave />
-                  Save Position
+                  Save
                 </button>
               </div>
             </form>

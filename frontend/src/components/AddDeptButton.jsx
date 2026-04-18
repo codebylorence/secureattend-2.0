@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FaPlus } from "react-icons/fa6";
+import { FaPlus, FaXmark} from "react-icons/fa6";
 import { addDepartment } from "../api/DepartmentApi";
 import { fetchTeamLeaders } from "../api/UserApi";
 
@@ -37,8 +37,7 @@ export default function AddDeptButton({ onDepartmentAdded }) {
 
     try {
       await addDepartment(formData);
-      setFormData({ name: "", description: "", manager: "" });
-      setShowModal(false);
+      closeAndReset();
       if (onDepartmentAdded) onDepartmentAdded();
     } catch (error) {
       console.error("Error adding department:", error);
@@ -46,48 +45,79 @@ export default function AddDeptButton({ onDepartmentAdded }) {
     }
   };
 
+  const closeAndReset = () => {
+    setShowModal(false);
+    setFormData({ name: "", description: "", manager: "" });
+  };
+
   return (
     <>
       <button
         onClick={() => setShowModal(true)}
-        className="flex items-center justify-center gap-2 bg-primary hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-md transition cursor-pointer"
+        className="flex items-center justify-center gap-2 bg-[#1E3A8A] hover:bg-blue-800 text-white font-medium px-4 py-2 rounded-md transition cursor-pointer"
       >
         <span>Add Department</span>
         <div className="bg-white rounded-full p-1">
-          <FaPlus color="#1E3A8A" />
+          <FaPlus color="#1E3A8A" size={12} />
         </div>
       </button>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h2 className="text-xl font-semibold mb-4">Add New Department</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">Department Name *</label>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-2xl relative">
+            
+            {/* Header & Close Button */}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-slate-800">Add New Department</h2>
+              <button 
+                onClick={closeAndReset}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-500 p-2 rounded-full transition-colors"
+                type="button"
+              >
+                <FaXmark size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              
+              {/* Department Name Input */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Department Name <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
+                  placeholder="e.g. Engineering"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
+                  className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20 focus:border-[#1E3A8A] transition-all placeholder:text-slate-400 font-medium text-slate-700"
                   required
                 />
               </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <input
-                  type="text"
+
+              {/* Description Textarea */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  placeholder="Briefly describe the responsibilities..."
+                  rows="4"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
+                  className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20 focus:border-[#1E3A8A] transition-all placeholder:text-slate-400 resize-none font-medium text-slate-700"
                 />
               </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">Manager</label>
+
+              {/* Manager Dropdown */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Manager
+                </label>
                 <select
                   value={formData.manager}
                   onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
-                  className="w-full border rounded px-3 py-2"
+                  className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20 focus:border-[#1E3A8A] transition-all bg-white font-medium text-slate-700 appearance-none"
                 >
                   <option value="">No Manager</option>
                   {teamLeaders.map((leader) => (
@@ -97,24 +127,24 @@ export default function AddDeptButton({ onDepartmentAdded }) {
                   ))}
                 </select>
               </div>
-              <div className="flex gap-2 justify-end">
+
+              {/* Footer Buttons */}
+              <div className="grid grid-cols-2 gap-4 mt-4">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    setFormData({ name: "", description: "", manager: "" });
-                  }}
-                  className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                  onClick={closeAndReset}
+                  className="py-3 px-4 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-200"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1E3A8A] text-white rounded hover:bg-blue-600"
+                  className="py-3 px-4 bg-[#1E3A8A] text-white font-bold rounded-xl hover:bg-blue-800 transition-colors flex items-center justify-center gap-2 shadow-md shadow-blue-900/20 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/50"
                 >
-                  Add Department
+                  Save
                 </button>
               </div>
+              
             </form>
           </div>
         </div>

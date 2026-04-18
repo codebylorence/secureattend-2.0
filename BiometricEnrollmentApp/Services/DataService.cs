@@ -2055,7 +2055,60 @@ namespace BiometricEnrollmentApp.Services
                     }
                     else if (shiftEnded && !hasClockIn)
                     {
-                        LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Shift ended but no clock-in (already handled as absent)");
+                        // For overnight shifts, the session may be stored under yesterday's date
+                        // Check yesterday's open sessions before concluding no clock-in
+                        if (isOvernightShift)
+                        {
+                            var yesterday = now.AddDays(-1).ToString("yyyy-MM-dd");
+                            (long Id, string EmployeeId, string ClockIn, string ClockOut, string Status) overnightSession = default;
+                            using (var conn = new SqliteConnection(_connString))
+                            {
+                                conn.Open();
+                                using var cmd = conn.CreateCommand();
+                                cmd.CommandText = @"
+                                    SELECT id, employee_id, IFNULL(clock_in,''), IFNULL(clock_out,''), status
+                                    FROM AttendanceSessions
+                                    WHERE employee_id = $id AND date = $yesterday AND clock_out IS NULL
+                                    ORDER BY id DESC LIMIT 1
+                                ";
+                                cmd.Parameters.AddWithValue("$id", schedule.EmployeeId);
+                                cmd.Parameters.AddWithValue("$yesterday", yesterday);
+                                using var reader = cmd.ExecuteReader();
+                                if (reader.Read())
+                                {
+                                    overnightSession = (
+                                        reader.GetInt64(0),
+                                        reader.GetString(1),
+                                        reader.GetString(2),
+                                        reader.GetString(3),
+                                        reader.GetString(4)
+                                    );
+                                }
+                            }
+
+                            if (overnightSession.EmployeeId != null && !string.IsNullOrEmpty(overnightSession.ClockIn))
+                            {
+                                LogHelper.Write($"  🌙 {schedule.EmployeeId} - Found open overnight session from {yesterday}, shift ended at {schedule.EndTime}");
+                                if (overnightSession.Status != "Missed Clock-out" && overnightSession.Status != "Absent")
+                                {
+                                    MarkSessionAsMissedClockout(overnightSession.Id, schedule.EndTime);
+                                    markedMissedClockout++;
+                                    LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked overnight session as Missed Clock-out (clocked in at {overnightSession.ClockIn}, shift ended at {schedule.EndTime})");
+                                }
+                                else
+                                {
+                                    LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Overnight session already marked as {overnightSession.Status}");
+                                }
+                            }
+                            else
+                            {
+                                LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Shift ended but no clock-in (already handled as absent)");
+                            }
+                        }
+                        else
+                        {
+                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Shift ended but no clock-in (already handled as absent)");
+                        }
                     }
                     else if (!shiftEnded && hasClockIn)
                     {
@@ -2504,39 +2557,33 @@ namespace BiometricEnrollmentApp.Services
                 var today = now.Date;
                 var shiftEndTime = today.AddHours(hours).AddMinutes(minutes);
                 
-                // CRITICAL: For early morning shifts (00:00-06:00), we need to determine if they're
+                // CRITICAL: For morning shifts (00:00-12:00), we need to determine if they're
                 // ending today or if they started yesterday and are ending today
                 // The key is: if current time is BEFORE the shift end time (same day), shift hasn't ended yet
-                if (hours >= 0 && hours < 6)
+                if (hours >= 0 && hours < 12)
                 {
-                    // If we're currently in early morning (00:00-06:00) and shift ends in early morning
-                    if (now.Hour >= 0 && now.Hour < 6)
+                    // If we're currently in morning (00:00-12:00) and shift ends in morning
+                    if (now.Hour >= 0 && now.Hour < 12)
                     {
-                        // Both current time and shift end are in early morning
+                        // Both current time and shift end are in morning hours
                         // Simple comparison: if now < shiftEndTime, shift hasn't ended
                         if (now < shiftEndTime)
                         {
-                            LogHelper.Write($"  🌅 Early morning shift still active - ends at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
+                            LogHelper.Write($"  🌅 Morning shift still active - ends at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
                             return false;
                         }
                         else
                         {
-                            LogHelper.Write($"  🌅 Early morning shift ended at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
+                            LogHelper.Write($"  🌅 Morning shift ended at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
                         }
                     }
-                    // If we're in afternoon/evening (after 12 PM) and shift ends in early morning
+                    // If we're in afternoon/evening (after 12 PM) and shift ends in morning
                     // The shift ends tomorrow - shift hasn't ended yet
                     else if (now.Hour >= 12)
                     {
                         shiftEndTime = shiftEndTime.AddDays(1);
                         LogHelper.Write($"  🌙 Overnight shift detected - ends tomorrow at {shiftEndTime:yyyy-MM-dd HH:mm}, shift still active");
                         return false; // Shift hasn't ended yet since it ends tomorrow
-                    }
-                    // If we're in late morning (06:00-12:00) and shift ends in early morning
-                    // The shift already ended earlier today
-                    else
-                    {
-                        LogHelper.Write($"  🌅 Early morning shift already ended at {shiftEndTime:HH:mm}");
                     }
                 }
                 
