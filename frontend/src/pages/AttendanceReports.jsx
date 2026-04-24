@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { FaDownload, FaFileExcel, FaFilePdf, FaSearch, FaFilter } from "react-icons/fa";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { useSystemConfig } from "../contexts/SystemConfigContext";
 import { useSocket } from "../context/SocketContext";
 import api from "../api/axiosConfig";
@@ -412,372 +413,575 @@ export default function AttendanceReports() {
     doc.save("attendance-report.pdf");
   };
 
-  const generateEmployeeExcel = () => {
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new();
-    
-    // Prepare employee data
-    const employeeData = filteredEmployees.map(employee => ({
-      "Employee ID": employee.employee_id || "",
-      "First Name": employee.firstname || "",
-      "Last Name": employee.lastname || "",
-      "Full Name": `${employee.firstname || ""} ${employee.lastname || ""}`.trim(),
-      "Department": employee.department || "N/A",
-      "Position": employee.position || "N/A",
-      "Status": employee.status || "Active",
-      "Email": employee.email || "",
-      "Phone": employee.phone || ""
+  const generateEmployeeExcel = async () => {
+    const companyName = (systemConfig.companyName || systemConfig.systemName || "TOPLIS SOLUTIONS, INC.").toUpperCase();
+    const systemName  = systemConfig.systemName || "SecureAttend";
+    const now         = new Date();
+    const dateStr     = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const timeStr     = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const deptLabel   = departmentFilter || "All Departments";
+
+    // ── Palette ──────────────────────────────────────────────────────────────
+    const DARK_GREEN  = "1E3A8A";   // header bg  (primary blue)
+    const MID_GREEN   = "2D4FA3";   // sub-header / section titles
+    const LIGHT_GREEN = "EEF2FF";   // zebra even rows
+    const WHITE       = "FFFFFF";
+    const ACTIVE_FG   = "166534";   // Active text
+    const ACTIVE_BG   = "DCFCE7";   // Active cell bg
+    const INACTIVE_FG = "991B1B";   // Inactive text
+    const INACTIVE_BG = "FEE2E2";   // Inactive cell bg
+    const BORDER_CLR  = "C7D2E8";
+    const SUMMARY_BG  = "EEF2FF";
+    const FOOTER_FG   = "6B7280";
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    const thinBorder = (color = BORDER_CLR) => ({
+      top:    { style: "thin", color: { argb: "FF" + color } },
+      bottom: { style: "thin", color: { argb: "FF" + color } },
+      left:   { style: "thin", color: { argb: "FF" + color } },
+      right:  { style: "thin", color: { argb: "FF" + color } },
+    });
+
+    const applyStyle = (cell, style) => Object.assign(cell, style);
+
+    // ── Workbook / Sheet ──────────────────────────────────────────────────────
+    const wb = new ExcelJS.Workbook();
+    wb.creator  = systemName;
+    wb.created  = now;
+    wb.modified = now;
+
+    const ws = wb.addWorksheet("Employee List", {
+      pageSetup: {
+        paperSize:   9,          // A4
+        orientation: "landscape",
+        fitToPage:   true,
+        fitToWidth:  1,
+        fitToHeight: 0,
+        margins: { left: 0.5, right: 0.5, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+      },
+      views: [{ state: "frozen", ySplit: 10 }], // freeze above data rows
+    });
+
+    // ── Column definitions ────────────────────────────────────────────────────
+    ws.columns = [
+      { key: "empId",   width: 14 },
+      { key: "fname",   width: 16 },
+      { key: "lname",   width: 16 },
+      { key: "full",    width: 24 },
+      { key: "dept",    width: 20 },
+      { key: "pos",     width: 22 },
+      { key: "status",  width: 12 },
+      { key: "email",   width: 30 },
+      { key: "phone",   width: 16 },
+    ];
+    const LAST_COL = 9; // I
+
+    // ── Row 1 – Company Name ──────────────────────────────────────────────────
+    const r1 = ws.addRow([companyName]);
+    ws.mergeCells(1, 1, 1, LAST_COL);
+    applyStyle(r1.getCell(1), {
+      value: companyName,
+      font:      { name: "Calibri", bold: true, size: 18, color: { argb: "FF" + WHITE } },
+      fill:      { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_GREEN } },
+      alignment: { horizontal: "center", vertical: "middle" },
+    });
+    r1.height = 36;
+
+    // ── Row 2 – Report Subtitle ───────────────────────────────────────────────
+    const r2 = ws.addRow(["Employee List Report"]);
+    ws.mergeCells(2, 1, 2, LAST_COL);
+    applyStyle(r2.getCell(1), {
+      value: "Employee List Report",
+      font:      { name: "Calibri", bold: true, size: 14, color: { argb: "FF" + WHITE } },
+      fill:      { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + MID_GREEN } },
+      alignment: { horizontal: "center", vertical: "middle" },
+    });
+    r2.height = 26;
+
+    // ── Row 3 – Spacer ────────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Rows 4-6 – Meta info (two-column layout) ──────────────────────────────
+    const metaStyle = (cell) => {
+      cell.font      = { name: "Calibri", size: 10 };
+      cell.alignment = { vertical: "middle" };
+    };
+    const metaLabelStyle = (cell) => {
+      cell.font      = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + MID_GREEN } };
+      cell.alignment = { vertical: "middle" };
+    };
+
+    // Row 4
+    const r4 = ws.addRow([]);
+    r4.height = 18;
+    const r4c1 = r4.getCell(1); r4c1.value = "Generated Date:";  metaLabelStyle(r4c1);
+    const r4c2 = r4.getCell(2); r4c2.value = `${dateStr}  ${timeStr}`; metaStyle(r4c2);
+    ws.mergeCells(4, 2, 4, 5);
+    const r4c6 = r4.getCell(6); r4c6.value = "Total Employees:"; metaLabelStyle(r4c6);
+    const r4c7 = r4.getCell(7); r4c7.value = filteredEmployees.length; metaStyle(r4c7);
+
+    // Row 5
+    const r5 = ws.addRow([]);
+    r5.height = 18;
+    const r5c1 = r5.getCell(1); r5c1.value = "Department Filter:"; metaLabelStyle(r5c1);
+    const r5c2 = r5.getCell(2); r5c2.value = deptLabel; metaStyle(r5c2);
+    ws.mergeCells(5, 2, 5, 5);
+
+    // ── Row 6 – Spacer ────────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Row 7 – Table Header ──────────────────────────────────────────────────
+    const HEADERS = ["Employee ID", "First Name", "Last Name", "Full Name", "Department", "Position", "Status", "Email", "Phone"];
+    const rH = ws.addRow(HEADERS);
+    rH.height = 22;
+    rH.eachCell((cell) => {
+      cell.font      = { name: "Calibri", bold: true, size: 11, color: { argb: "FF" + WHITE } };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_GREEN } };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: false };
+      cell.border    = thinBorder("2E7D52");
+    });
+
+    // ── Data Rows ─────────────────────────────────────────────────────────────
+    const employeeData = filteredEmployees.map(e => ({
+      empId:  e.employee_id || "",
+      fname:  e.firstname   || "",
+      lname:  e.lastname    || "",
+      full:   `${e.firstname || ""} ${e.lastname || ""}`.trim(),
+      dept:   e.department  || "N/A",
+      pos:    e.position    || "N/A",
+      status: e.status      || "Active",
+      email:  e.email       || "",
+      phone:  e.contact_number || e.phone || "",
     }));
 
-    // Create worksheet with proper structure
-    const ws = XLSX.utils.aoa_to_sheet([]);
-    
-    // Company Header Section (Rows 1-6)
-    const companyName = systemConfig.companyName || systemConfig.systemName || 'SecureAttend';
-    XLSX.utils.sheet_add_aoa(ws, [
-      [companyName.toUpperCase()], // Row 1: Company name
-      ["EMPLOYEE LIST REPORT"], // Row 2: Report title
-      [], // Row 3: Empty
-      [`Generated on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`], // Row 4: Generation info
-      [`Total Employees: ${filteredEmployees.length}`], // Row 5: Total count
-      departmentFilter ? [`Department Filter: ${departmentFilter}`] : ["Department Filter: All Departments"], // Row 6: Filter info
-      [], // Row 7: Empty separator
-    ], { origin: "A1" });
+    employeeData.forEach((emp, idx) => {
+      const isEven  = idx % 2 === 0;
+      const rowBg   = isEven ? LIGHT_GREEN : WHITE;
+      const dr      = ws.addRow([emp.empId, emp.fname, emp.lname, emp.full, emp.dept, emp.pos, emp.status, emp.email, emp.phone]);
+      dr.height     = 18;
 
-    // Add table headers (Row 8)
-    const headers = ["Employee ID", "First Name", "Last Name", "Full Name", "Department", "Position", "Status", "Email", "Phone"];
-    XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A8" });
+      dr.eachCell({ includeEmpty: true }, (cell, colNum) => {
+        cell.font      = { name: "Calibri", size: 10 };
+        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + rowBg } };
+        cell.border    = thinBorder();
+        cell.alignment = { vertical: "middle", horizontal: [1, 2, 3, 4, 8].includes(colNum) ? "left" : "center" };
+      });
 
-    // Add employee data starting from Row 9
-    if (employeeData.length > 0) {
-      const dataRows = employeeData.map(employee => [
-        employee["Employee ID"],
-        employee["First Name"],
-        employee["Last Name"],
-        employee["Full Name"],
-        employee["Department"],
-        employee["Position"],
-        employee["Status"],
-        employee["Email"],
-        employee["Phone"]
-      ]);
-      XLSX.utils.sheet_add_aoa(ws, dataRows, { origin: "A9" });
-    }
+      // Status cell – conditional colour
+      const statusCell = dr.getCell(7);
+      const statusVal  = (emp.status || "").toLowerCase();
+      if (statusVal === "active") {
+        statusCell.font = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + ACTIVE_FG } };
+        statusCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + ACTIVE_BG } };
+      } else if (statusVal === "inactive") {
+        statusCell.font = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + INACTIVE_FG } };
+        statusCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + INACTIVE_BG } };
+      }
+    });
 
-    // Add summary section
-    const summaryStartRow = 9 + employeeData.length + 2;
-    const statusCounts = employeeData.reduce((acc, emp) => {
-      const status = emp.Status.toLowerCase();
-      acc[status] = (acc[status] || 0) + 1;
+    // ── Spacer after data ─────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Summary Section ───────────────────────────────────────────────────────
+    const activeCount   = employeeData.filter(e => e.status.toLowerCase() === "active").length;
+    const inactiveCount = employeeData.filter(e => e.status.toLowerCase() === "inactive").length;
+
+    const deptCounts = employeeData.reduce((acc, e) => {
+      acc[e.dept] = (acc[e.dept] || 0) + 1;
       return acc;
     }, {});
 
-    const departmentCounts = employeeData.reduce((acc, emp) => {
-      const dept = emp.Department;
-      acc[dept] = (acc[dept] || 0) + 1;
-      return acc;
-    }, {});
+    const sectionHeaderStyle = (cell, label) => {
+      cell.value     = label;
+      cell.font      = { name: "Calibri", bold: true, size: 11, color: { argb: "FF" + WHITE } };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + MID_GREEN } };
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.border    = thinBorder("2E7D52");
+    };
 
-    XLSX.utils.sheet_add_aoa(ws, [
-      [], // Empty row
-      ["SUMMARY"], // Summary header
-      [`Total Employees: ${employeeData.length}`],
-      [`Active Employees: ${statusCounts.active || 0}`],
-      [`Inactive Employees: ${statusCounts.inactive || 0}`],
-      [], // Empty row
-      ["DEPARTMENT BREAKDOWN"],
-      ...Object.entries(departmentCounts).map(([dept, count]) => [`${dept}: ${count} employees`]),
-      [], // Empty row
-      [`Report generated by ${systemConfig.systemName || 'SecureAttend'} on ${new Date().toLocaleString()}`]
-    ], { origin: `A${summaryStartRow}` });
+    const summaryLabelStyle = (cell) => {
+      cell.font      = { name: "Calibri", bold: true, size: 10 };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + SUMMARY_BG } };
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.border    = thinBorder();
+    };
 
-    // Set column widths for better readability
-    const columnWidths = [
-      { wch: 12 }, // Employee ID
-      { wch: 15 }, // First Name
-      { wch: 15 }, // Last Name
-      { wch: 20 }, // Full Name
-      { wch: 15 }, // Department
-      { wch: 18 }, // Position
-      { wch: 10 }, // Status
-      { wch: 25 }, // Email
-      { wch: 15 }  // Phone
+    const summaryValueStyle = (cell) => {
+      cell.font      = { name: "Calibri", size: 10 };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + SUMMARY_BG } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border    = thinBorder();
+    };
+
+    // Summary header row
+    const sumHdrRow = ws.addRow([]);
+    sumHdrRow.height = 20;
+    const sumHdrCell = sumHdrRow.getCell(1);
+    sectionHeaderStyle(sumHdrCell, "SUMMARY");
+    ws.mergeCells(sumHdrRow.number, 1, sumHdrRow.number, 4);
+
+    // Summary data rows
+    const summaryRows = [
+      ["Total Employees",   filteredEmployees.length],
+      ["Active Employees",  activeCount],
+      ["Inactive Employees", inactiveCount],
     ];
-    ws['!cols'] = columnWidths;
+    summaryRows.forEach(([label, value]) => {
+      const sr = ws.addRow([]);
+      sr.height = 18;
+      const lc = sr.getCell(1); lc.value = label; summaryLabelStyle(lc);
+      ws.mergeCells(sr.number, 1, sr.number, 3);
+      const vc = sr.getCell(4); vc.value = value; summaryValueStyle(vc);
+    });
 
-    // Apply cell styles
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    
-    // Style company header (Row 1)
-    if (ws['A1']) {
-      ws['A1'].s = {
-        font: { bold: true, sz: 16 },
-        alignment: { horizontal: "center" }
-      };
-    }
-    
-    // Style report title (Row 2)
-    if (ws['A2']) {
-      ws['A2'].s = {
-        font: { bold: true, sz: 14 },
-        alignment: { horizontal: "center" }
-      };
-    }
+    // Spacer
+    ws.addRow([]);
 
-    // Style table headers (Row 8)
-    for (let col = 0; col < headers.length; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 7, c: col }); // Row 8 (0-indexed as 7)
-      if (ws[cellAddress]) {
-        ws[cellAddress].s = {
-          font: { bold: true, color: { rgb: "FFFFFF" } },
-          fill: { fgColor: { rgb: "1E3A8A" } }, // Blue background
-          alignment: { horizontal: "center" },
-          border: {
-            top: { style: "thin" },
-            bottom: { style: "thin" },
-            left: { style: "thin" },
-            right: { style: "thin" }
-          }
-        };
-      }
-    }
+    // Department Breakdown header
+    const deptHdrRow = ws.addRow([]);
+    deptHdrRow.height = 20;
+    const deptHdrCell = deptHdrRow.getCell(1);
+    sectionHeaderStyle(deptHdrCell, "DEPARTMENT BREAKDOWN");
+    ws.mergeCells(deptHdrRow.number, 1, deptHdrRow.number, 4);
 
-    // Style data cells with alternating row colors and borders
-    for (let row = 8; row < 8 + employeeData.length; row++) { // Data rows start from row 9 (0-indexed as 8)
-      for (let col = 0; col < headers.length; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-        if (ws[cellAddress]) {
-          ws[cellAddress].s = {
-            fill: { fgColor: { rgb: row % 2 === 0 ? "F8F9FA" : "FFFFFF" } }, // Alternating colors
-            border: {
-              top: { style: "thin", color: { rgb: "E5E7EB" } },
-              bottom: { style: "thin", color: { rgb: "E5E7EB" } },
-              left: { style: "thin", color: { rgb: "E5E7EB" } },
-              right: { style: "thin", color: { rgb: "E5E7EB" } }
-            },
-            alignment: { horizontal: [1, 2, 3, 7].includes(col) ? "left" : "center" } // Left align names and email
-          };
-          
-          // Special formatting for status column
-          if (col === 6 && ws[cellAddress].v) { // Status column
-            const status = ws[cellAddress].v.toLowerCase();
-            let statusColor = "000000"; // Default black
-            if (status === "active") statusColor = "059669"; // Green
-            else if (status === "inactive") statusColor = "6B7280"; // Gray
-            
-            ws[cellAddress].s.font = { color: { rgb: statusColor }, bold: true };
-          }
-        }
-      }
-    }
+    // Dept column sub-headers
+    const deptColHdr = ws.addRow([]);
+    deptColHdr.height = 18;
+    ["Department", "", "", "Employees"].forEach((h, i) => {
+      const c = deptColHdr.getCell(i + 1);
+      c.value     = h;
+      c.font      = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + WHITE } };
+      c.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_GREEN } };
+      c.alignment = { horizontal: i === 3 ? "center" : "left", vertical: "middle" };
+      c.border    = thinBorder("2E7D52");
+    });
+    ws.mergeCells(deptColHdr.number, 1, deptColHdr.number, 3);
 
-    // Style summary section
-    const summaryRow = summaryStartRow + 1; // "SUMMARY" row
-    const summaryCell = XLSX.utils.encode_cell({ r: summaryRow, c: 0 });
-    if (ws[summaryCell]) {
-      ws[summaryCell].s = {
-        font: { bold: true, sz: 12 },
-        fill: { fgColor: { rgb: "F3F4F6" } }
-      };
-    }
+    Object.entries(deptCounts)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([dept, count], idx) => {
+        const dr = ws.addRow([]);
+        dr.height = 18;
+        const isEven = idx % 2 === 0;
+        const bg = isEven ? SUMMARY_BG : WHITE;
 
-    // Merge cells for headers
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }, // Company name
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }, // Report title
-      { s: { r: 3, c: 0 }, e: { r: 3, c: 8 } }, // Generated on
-      { s: { r: 4, c: 0 }, e: { r: 4, c: 8 } }, // Total employees
-      { s: { r: 5, c: 0 }, e: { r: 5, c: 8 } }  // Department filter
-    ];
+        const dc = dr.getCell(1);
+        dc.value     = dept;
+        dc.font      = { name: "Calibri", size: 10 };
+        dc.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + bg } };
+        dc.alignment = { horizontal: "left", vertical: "middle" };
+        dc.border    = thinBorder();
+        ws.mergeCells(dr.number, 1, dr.number, 3);
 
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Employee List");
-    
-    // Generate filename with timestamp
-    const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
-    const filename = `${(systemConfig.companyName || 'Company').replace(/\s+/g, '-')}-Employee-List-${timestamp}.xlsx`;
-    
-    // Save the file
-    XLSX.writeFile(wb, filename);
+        const cc = dr.getCell(4);
+        cc.value     = count;
+        cc.font      = { name: "Calibri", size: 10 };
+        cc.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + bg } };
+        cc.alignment = { horizontal: "center", vertical: "middle" };
+        cc.border    = thinBorder();
+      });
+
+    // ── Spacer ────────────────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Footer ────────────────────────────────────────────────────────────────
+    const footerRow = ws.addRow([`Report generated by ${systemName}  •  ${dateStr} at ${timeStr}`]);
+    ws.mergeCells(footerRow.number, 1, footerRow.number, LAST_COL);
+    const footerCell = footerRow.getCell(1);
+    footerCell.font      = { name: "Calibri", italic: true, size: 9, color: { argb: "FF" + FOOTER_FG } };
+    footerCell.alignment = { horizontal: "center", vertical: "middle" };
+    footerRow.height     = 16;
+
+    // ── Print area & page setup ───────────────────────────────────────────────
+    ws.headerFooter.oddFooter = `&C&"Calibri,Italic"&9Report generated by ${systemName}  •  Page &P of &N`;
+
+    // ── Save ──────────────────────────────────────────────────────────────────
+    const timestamp = now.toISOString().slice(0, 10);
+    const filename  = `${(systemConfig.companyName || "Company").replace(/\s+/g, "-")}-Employee-List-${timestamp}.xlsx`;
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob   = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement("a");
+    a.href       = url;
+    a.download   = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const generateAttendanceExcel = () => {
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new();
-    
-    // Prepare attendance data
-    const attendanceData = filteredAttendance.map(record => ({
-      "Employee ID": record.employee?.employee_id || "",
-      "Employee Name": `${record.employee?.firstname || ""} ${record.employee?.lastname || ""}`.trim(),
-      "Department": record.employee?.department || "N/A",
-      "Date": new Date(record.date).toLocaleDateString(),
-      "Clock In": formatTime(record.clock_in),
-      "Clock Out": formatTime(record.clock_out),
-      "Status": record.status || "N/A",
-      "Hours Worked": record.total_hours ? parseFloat(record.total_hours).toFixed(2) : "N/A"
-    }));
+  const generateAttendanceExcel = async () => {
+    const companyName  = (systemConfig.companyName || systemConfig.systemName || "TOPLIS SOLUTIONS, INC.").toUpperCase();
+    const systemName   = systemConfig.systemName || "SecureAttend";
+    const now          = new Date();
+    const dateStr      = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const timeStr      = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const periodLabel  = dateFilter.startDate && dateFilter.endDate
+      ? `${dateFilter.startDate}  →  ${dateFilter.endDate}`
+      : "All Records";
 
-    // Create worksheet with proper structure
-    const ws = XLSX.utils.aoa_to_sheet([]);
-    
-    // Company Header Section (Rows 1-6)
-    const companyName = systemConfig.companyName || systemConfig.systemName || 'SecureAttend';
-    XLSX.utils.sheet_add_aoa(ws, [
-      [companyName.toUpperCase()], // Row 1: Company name
-      ["ATTENDANCE REPORT"], // Row 2: Report title
-      [], // Row 3: Empty
-      [`Generated on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`], // Row 4: Generation info
-      dateFilter.startDate && dateFilter.endDate ? [`Report Period: ${dateFilter.startDate} to ${dateFilter.endDate}`] : ["Report Period: All Records"], // Row 5: Period
-      [`Total Records: ${filteredAttendance.length}`], // Row 6: Total count
-      [], // Row 7: Empty separator
-    ], { origin: "A1" });
+    // ── Palette ──────────────────────────────────────────────────────────────
+    const DARK_BLUE   = "1E3A8A";
+    const MID_BLUE    = "2D4FA3";
+    const LIGHT_BLUE  = "EEF2FF";
+    const WHITE       = "FFFFFF";
+    const BORDER_CLR  = "C7D2E8";
+    const SUMMARY_BG  = "EEF2FF";
+    const FOOTER_FG   = "6B7280";
 
-    // Add table headers (Row 8)
-    const headers = ["Employee ID", "Employee Name", "Department", "Date", "Clock In", "Clock Out", "Status", "Hours Worked"];
-    XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A8" });
+    // Status colours
+    const STATUS_STYLES = {
+      "Present":          { fg: "166534", bg: "DCFCE7" },   // green
+      "Absent":           { fg: "991B1B", bg: "FEE2E2" },   // red
+      "Late":             { fg: "92400E", bg: "FEF3C7" },   // orange/amber
+      "Overtime":         { fg: "1E3A8A", bg: "DBEAFE" },   // blue
+      "Missed Clock-out": { fg: "854D0E", bg: "FEF9C3" },   // yellow
+    };
 
-    // Add attendance data starting from Row 9
-    if (attendanceData.length > 0) {
-      const dataRows = attendanceData.map(record => [
-        record["Employee ID"],
-        record["Employee Name"],
-        record["Department"],
-        record["Date"],
-        record["Clock In"],
-        record["Clock Out"],
-        record["Status"],
-        record["Hours Worked"]
-      ]);
-      XLSX.utils.sheet_add_aoa(ws, dataRows, { origin: "A9" });
-    }
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    const thinBorder = (color = BORDER_CLR) => ({
+      top:    { style: "thin", color: { argb: "FF" + color } },
+      bottom: { style: "thin", color: { argb: "FF" + color } },
+      left:   { style: "thin", color: { argb: "FF" + color } },
+      right:  { style: "thin", color: { argb: "FF" + color } },
+    });
 
-    // Calculate total hours if available
-    const totalHours = filteredAttendance.reduce((sum, record) => {
-      const hours = parseFloat(record.total_hours) || 0;
-      return sum + hours;
-    }, 0);
+    const fmt24 = (timeString) => {
+      if (!timeString || timeString === "N/A") return "-";
+      try {
+        const d = new Date(timeString);
+        if (isNaN(d.getTime())) return "-";
+        return d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+      } catch { return "-"; }
+    };
 
-    // Add summary section
-    const summaryStartRow = 9 + attendanceData.length + 2;
-    XLSX.utils.sheet_add_aoa(ws, [
-      [], // Empty row
-      ["SUMMARY"], // Summary header
-      [`Total Attendance Records: ${filteredAttendance.length}`],
-      [`Total Hours Worked: ${totalHours.toFixed(2)} hours`],
-      [`Average Hours per Record: ${attendanceData.length > 0 ? (totalHours / attendanceData.length).toFixed(2) : '0.00'} hours`],
-      [], // Empty row
-      [`Report generated by ${systemConfig.systemName || 'SecureAttend'} on ${new Date().toLocaleString()}`]
-    ], { origin: `A${summaryStartRow}` });
+    // ── Workbook / Sheet ──────────────────────────────────────────────────────
+    const wb = new ExcelJS.Workbook();
+    wb.creator  = systemName;
+    wb.created  = now;
+    wb.modified = now;
 
-    // Set column widths for better readability
-    const columnWidths = [
-      { wch: 12 }, // Employee ID
-      { wch: 20 }, // Employee Name
-      { wch: 15 }, // Department
-      { wch: 12 }, // Date
-      { wch: 10 }, // Clock In
-      { wch: 10 }, // Clock Out
-      { wch: 12 }, // Status
-      { wch: 12 }  // Hours Worked
-    ];
-    ws['!cols'] = columnWidths;
+    const ws = wb.addWorksheet("Attendance Report", {
+      pageSetup: {
+        paperSize:   9,
+        orientation: "landscape",
+        fitToPage:   true,
+        fitToWidth:  1,
+        fitToHeight: 0,
+        margins: { left: 0.5, right: 0.5, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+      },
+      views: [{ state: "frozen", ySplit: 9 }],
+    });
 
-    // Apply cell styles (basic formatting)
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    
-    // Style company header (Row 1)
-    if (ws['A1']) {
-      ws['A1'].s = {
-        font: { bold: true, sz: 16 },
-        alignment: { horizontal: "center" }
-      };
-    }
-    
-    // Style report title (Row 2)
-    if (ws['A2']) {
-      ws['A2'].s = {
-        font: { bold: true, sz: 14 },
-        alignment: { horizontal: "center" }
-      };
-    }
+    const LAST_COL = 8; // H
 
-    // Style table headers (Row 8)
-    for (let col = 0; col < headers.length; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 7, c: col }); // Row 8 (0-indexed as 7)
-      if (ws[cellAddress]) {
-        ws[cellAddress].s = {
-          font: { bold: true, color: { rgb: "FFFFFF" } },
-          fill: { fgColor: { rgb: "1E3A8A" } }, // Blue background
-          alignment: { horizontal: "center" },
-          border: {
-            top: { style: "thin" },
-            bottom: { style: "thin" },
-            left: { style: "thin" },
-            right: { style: "thin" }
-          }
-        };
-      }
-    }
-
-    // Style data cells with alternating row colors and borders
-    for (let row = 8; row < 8 + attendanceData.length; row++) { // Data rows start from row 9 (0-indexed as 8)
-      for (let col = 0; col < headers.length; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-        if (ws[cellAddress]) {
-          ws[cellAddress].s = {
-            fill: { fgColor: { rgb: row % 2 === 0 ? "F8F9FA" : "FFFFFF" } }, // Alternating colors
-            border: {
-              top: { style: "thin", color: { rgb: "E5E7EB" } },
-              bottom: { style: "thin", color: { rgb: "E5E7EB" } },
-              left: { style: "thin", color: { rgb: "E5E7EB" } },
-              right: { style: "thin", color: { rgb: "E5E7EB" } }
-            },
-            alignment: { horizontal: col === 1 ? "left" : "center" } // Left align names, center others
-          };
-          
-          // Special formatting for status column
-          if (col === 6 && ws[cellAddress].v) { // Status column
-            const status = ws[cellAddress].v;
-            let statusColor = "000000"; // Default black
-            if (status === "Present") statusColor = "059669"; // Green
-            else if (status === "Late") statusColor = "D97706"; // Orange
-            else if (status === "Absent") statusColor = "DC2626"; // Red
-            else if (status === "Overtime") statusColor = "7C3AED"; // Purple
-            
-            ws[cellAddress].s.font = { color: { rgb: statusColor }, bold: true };
-          }
-        }
-      }
-    }
-
-    // Style summary section
-    const summaryRow = summaryStartRow + 1; // "SUMMARY" row
-    const summaryCell = XLSX.utils.encode_cell({ r: summaryRow, c: 0 });
-    if (ws[summaryCell]) {
-      ws[summaryCell].s = {
-        font: { bold: true, sz: 12 },
-        fill: { fgColor: { rgb: "F3F4F6" } }
-      };
-    }
-
-    // Merge cells for headers
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }, // Company name
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } }, // Report title
-      { s: { r: 3, c: 0 }, e: { r: 3, c: 7 } }, // Generated on
-      { s: { r: 4, c: 0 }, e: { r: 4, c: 7 } }, // Report period
-      { s: { r: 5, c: 0 }, e: { r: 5, c: 7 } }  // Total records
+    // ── Column widths ─────────────────────────────────────────────────────────
+    ws.columns = [
+      { key: "empId",   width: 14 },
+      { key: "name",    width: 22 },
+      { key: "dept",    width: 20 },
+      { key: "date",    width: 14 },
+      { key: "clockIn", width: 12 },
+      { key: "clockOut",width: 12 },
+      { key: "status",  width: 18 },
+      { key: "hours",   width: 14 },
     ];
 
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Attendance Report");
-    
-    // Generate filename with timestamp
-    const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
-    const filename = `${(systemConfig.companyName || 'Company').replace(/\s+/g, '-')}-Attendance-Report-${timestamp}.xlsx`;
-    
-    // Save the file
-    XLSX.writeFile(wb, filename);
+    // ── Row 1 – Company Name ──────────────────────────────────────────────────
+    const r1 = ws.addRow([companyName]);
+    ws.mergeCells(1, 1, 1, LAST_COL);
+    const r1c1 = r1.getCell(1);
+    r1c1.value     = companyName;
+    r1c1.font      = { name: "Calibri", bold: true, size: 18, color: { argb: "FF" + WHITE } };
+    r1c1.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_BLUE } };
+    r1c1.alignment = { horizontal: "center", vertical: "middle" };
+    r1.height      = 36;
+
+    // ── Row 2 – Report Subtitle ───────────────────────────────────────────────
+    const r2 = ws.addRow(["Attendance Report"]);
+    ws.mergeCells(2, 1, 2, LAST_COL);
+    const r2c1 = r2.getCell(1);
+    r2c1.value     = "Attendance Report";
+    r2c1.font      = { name: "Calibri", bold: true, size: 14, color: { argb: "FF" + WHITE } };
+    r2c1.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + MID_BLUE } };
+    r2c1.alignment = { horizontal: "center", vertical: "middle" };
+    r2.height      = 26;
+
+    // ── Row 3 – Spacer ────────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Meta helpers ──────────────────────────────────────────────────────────
+    const metaLabel = (cell, text) => {
+      cell.value     = text;
+      cell.font      = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + MID_BLUE } };
+      cell.alignment = { vertical: "middle" };
+    };
+    const metaValue = (cell, text) => {
+      cell.value     = text;
+      cell.font      = { name: "Calibri", size: 10 };
+      cell.alignment = { vertical: "middle" };
+    };
+
+    // ── Row 4 – Generated Date + Total Records ────────────────────────────────
+    const r4 = ws.addRow([]); r4.height = 18;
+    metaLabel(r4.getCell(1), "Generated Date:");
+    metaValue(r4.getCell(2), `${dateStr}  ${timeStr}`);
+    ws.mergeCells(4, 2, 4, 4);
+    metaLabel(r4.getCell(5), "Total Records:");
+    metaValue(r4.getCell(6), filteredAttendance.length);
+
+    // ── Row 5 – Report Period ─────────────────────────────────────────────────
+    const r5 = ws.addRow([]); r5.height = 18;
+    metaLabel(r5.getCell(1), "Report Period:");
+    metaValue(r5.getCell(2), periodLabel);
+    ws.mergeCells(5, 2, 5, 4);
+
+    // ── Row 6 – Spacer ────────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Row 7 – Table Header ──────────────────────────────────────────────────
+    const HEADERS = ["Employee ID", "Employee Name", "Department", "Date", "Clock In", "Clock Out", "Status", "Hours Worked"];
+    const rH = ws.addRow(HEADERS);
+    rH.height = 22;
+    rH.eachCell((cell) => {
+      cell.font      = { name: "Calibri", bold: true, size: 11, color: { argb: "FF" + WHITE } };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_BLUE } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border    = thinBorder(MID_BLUE);
+    });
+
+    // ── Data Rows ─────────────────────────────────────────────────────────────
+    const totalHours = filteredAttendance.reduce((sum, r) => sum + (parseFloat(r.total_hours) || 0), 0);
+
+    filteredAttendance.forEach((record, idx) => {
+      const isEven  = idx % 2 === 0;
+      const rowBg   = isEven ? LIGHT_BLUE : WHITE;
+
+      const empId   = record.employee?.employee_id || "-";
+      const name    = `${record.employee?.firstname || ""} ${record.employee?.lastname || ""}`.trim() || "-";
+      const dept    = record.employee?.department || "-";
+      const date    = record.date ? new Date(record.date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" }) : "-";
+      const clockIn = fmt24(record.clock_in);
+      const clockOut= fmt24(record.clock_out);
+      const status  = record.status || "-";
+      const hours   = record.total_hours ? parseFloat(record.total_hours).toFixed(2) : "-";
+
+      const dr = ws.addRow([empId, name, dept, date, clockIn, clockOut, status, hours]);
+      dr.height = 18;
+
+      dr.eachCell({ includeEmpty: true }, (cell, colNum) => {
+        cell.font      = { name: "Calibri", size: 10 };
+        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + rowBg } };
+        cell.border    = thinBorder();
+        // Left-align name & dept; center everything else
+        cell.alignment = { vertical: "middle", horizontal: [2, 3].includes(colNum) ? "left" : "center" };
+      });
+
+      // Status conditional formatting
+      const statusCell = dr.getCell(7);
+      const style = STATUS_STYLES[status];
+      if (style) {
+        statusCell.font = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + style.fg } };
+        statusCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + style.bg } };
+      }
+    });
+
+    // ── Spacer ────────────────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Summary Section ───────────────────────────────────────────────────────
+    const avgHours = filteredAttendance.length > 0
+      ? (totalHours / filteredAttendance.length).toFixed(2)
+      : "0.00";
+
+    const sectionHdr = (row, label, colSpan) => {
+      const cell = row.getCell(1);
+      cell.value     = label;
+      cell.font      = { name: "Calibri", bold: true, size: 11, color: { argb: "FF" + WHITE } };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + MID_BLUE } };
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.border    = thinBorder(MID_BLUE);
+      ws.mergeCells(row.number, 1, row.number, colSpan);
+      row.height = 20;
+    };
+
+    const summaryLbl = (cell, text) => {
+      cell.value     = text;
+      cell.font      = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + MID_BLUE } };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + SUMMARY_BG } };
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.border    = thinBorder();
+    };
+
+    const summaryVal = (cell, val) => {
+      cell.value     = val;
+      cell.font      = { name: "Calibri", bold: true, size: 10 };
+      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + SUMMARY_BG } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border    = thinBorder();
+    };
+
+    // Summary header
+    const sumHdrRow = ws.addRow([]);
+    sectionHdr(sumHdrRow, "SUMMARY", 4);
+
+    // Summary rows
+    [
+      ["Total Attendance Records", filteredAttendance.length],
+      ["Total Hours Worked",       `${totalHours.toFixed(2)} hrs`],
+      ["Average Hours per Record", `${avgHours} hrs`],
+    ].forEach(([label, value]) => {
+      const sr = ws.addRow([]); sr.height = 18;
+      summaryLbl(sr.getCell(1), label);
+      ws.mergeCells(sr.number, 1, sr.number, 3);
+      summaryVal(sr.getCell(4), value);
+    });
+
+    // ── Spacer ────────────────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Status Legend ─────────────────────────────────────────────────────────
+    const legHdrRow = ws.addRow([]);
+    sectionHdr(legHdrRow, "STATUS LEGEND", 4);
+
+    Object.entries(STATUS_STYLES).forEach(([label, style], idx) => {
+      const lr = ws.addRow([]); lr.height = 17;
+      const isEven = idx % 2 === 0;
+      const bg = isEven ? SUMMARY_BG : WHITE;
+
+      const lc = lr.getCell(1);
+      lc.value     = label;
+      lc.font      = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + style.fg } };
+      lc.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + style.bg } };
+      lc.alignment = { horizontal: "left", vertical: "middle" };
+      lc.border    = thinBorder();
+      ws.mergeCells(lr.number, 1, lr.number, 4);
+    });
+
+    // ── Spacer ────────────────────────────────────────────────────────────────
+    ws.addRow([]);
+
+    // ── Footer ────────────────────────────────────────────────────────────────
+    const footerRow = ws.addRow([`Report generated by ${systemName}  •  ${dateStr} at ${timeStr}`]);
+    ws.mergeCells(footerRow.number, 1, footerRow.number, LAST_COL);
+    const fc = footerRow.getCell(1);
+    fc.font      = { name: "Calibri", italic: true, size: 9, color: { argb: "FF" + FOOTER_FG } };
+    fc.alignment = { horizontal: "center", vertical: "middle" };
+    footerRow.height = 16;
+
+    ws.headerFooter.oddFooter = `&C&"Calibri,Italic"&9Report generated by ${systemName}  •  Page &P of &N`;
+
+    // ── Save ──────────────────────────────────────────────────────────────────
+    const timestamp = now.toISOString().slice(0, 10);
+    const filename  = `${(systemConfig.companyName || "Company").replace(/\s+/g, "-")}-Attendance-Report-${timestamp}.xlsx`;
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob   = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement("a");
+    a.href       = url;
+    a.download   = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const renderPagination = (totalPages) => {
@@ -1002,7 +1206,7 @@ export default function AttendanceReports() {
         {loading && (
           <div className="absolute top-4 right-4 z-10">
             <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-semibold shadow-sm">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-blue-800 rounded-full animate-pulse"></div>
               Updating...
             </div>
           </div>
@@ -1010,8 +1214,8 @@ export default function AttendanceReports() {
         
         {loading ? (
           <div className="p-12 text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-500 font-medium">Loading report data...</p>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 mx-auto" style={{ borderColor: '#1E3A8A' }}></div>
+            <p className="mt-4 font-medium" style={{ color: '#1E3A8A' }}>Loading report data...</p>
           </div>
         ) : (
           <div className="p-4 sm:p-0"> {/* Padding on mobile for breathing room around the table */}

@@ -6,7 +6,8 @@ import {
   FaTrash, 
   FaTimes,
   FaBriefcase,
-  FaUsers
+  FaUsers,
+  FaSave
 } from 'react-icons/fa';
 import ConfirmationModal from '../components/ConfirmationModal';
 import api from '../api/axiosConfig';
@@ -362,7 +363,6 @@ export default function PositionManagementNew() {
           <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <FaEdit className="text-blue-500" />
                 Edit Position
               </h3>
               <button onClick={closeModals} className="text-gray-400 hover:text-gray-600 p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors">
@@ -410,8 +410,7 @@ export default function PositionManagementNew() {
                   type="submit"
                   className="w-full sm:flex-1 bg-blue-600 text-white py-3 sm:py-2.5 px-4 rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2 font-bold shadow-sm shadow-blue-200 transition-colors"
                 >
-                  <FaSave />
-                  Save Changes
+                  Save
                 </button>
               </div>
             </form>

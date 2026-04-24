@@ -26,7 +26,6 @@ export default function AddDeptButton({ onDepartmentAdded }) {
       console.error("Error loading team leaders:", error);
     }
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -120,12 +119,38 @@ export default function AddDeptButton({ onDepartmentAdded }) {
                   className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20 focus:border-[#1E3A8A] transition-all bg-white font-medium text-slate-700 appearance-none"
                 >
                   <option value="">No Manager</option>
-                  {teamLeaders.map((leader) => (
-                    <option key={leader.id} value={`${leader.employee?.firstname || ''} ${leader.employee?.lastname || ''}`.trim() || leader.username}>
-                      {`${leader.employee?.firstname || ''} ${leader.employee?.lastname || ''}`.trim() || leader.username}
-                    </option>
-                  ))}
+                  {teamLeaders.map((leader) => {
+                    const leaderFullName = `${leader.employee?.firstname || ''} ${leader.employee?.lastname || ''}`.trim() || leader.username;
+                    const leaderDept = leader.employee?.department;
+                    const isAssignedElsewhere = leaderDept && leaderDept !== "No Department";
+
+                    return (
+                      <option
+                        key={leader.id}
+                        value={leaderFullName}
+                        disabled={isAssignedElsewhere}
+                      >
+                        {leaderFullName}
+                        {isAssignedElsewhere
+                          ? ` — assigned to ${leaderDept}`
+                          : ""}
+                      </option>
+                    );
+                  })}
                 </select>
+                {/* Warning when a taken leader is somehow selected */}
+                {formData.manager && (() => {
+                  const selected = teamLeaders.find((l) => {
+                    const n = `${l.employee?.firstname || ''} ${l.employee?.lastname || ''}`.trim() || l.username;
+                    return n === formData.manager;
+                  });
+                  const dept = selected?.employee?.department;
+                  return dept && dept !== "No Department" ? (
+                    <p className="mt-1.5 text-xs text-amber-600 font-medium">
+                      ⚠ This team leader is already assigned to <strong>{dept}</strong>. Remove their assignment there first.
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               {/* Footer Buttons */}

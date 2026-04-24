@@ -92,6 +92,16 @@ export const addDepartment = async (req, res) => {
       return res.status(400).json({ error: "Department name is required" });
     }
 
+    // Check if the selected manager is already assigned to another department
+    if (manager && manager !== "") {
+      const existing = await Department.findOne({ where: { manager } });
+      if (existing) {
+        return res.status(400).json({
+          error: `This team leader is already assigned as manager of "${existing.name}". Remove their assignment there before assigning them here.`
+        });
+      }
+    }
+
     const department = await Department.create({
       name,
       description,
@@ -120,6 +130,19 @@ export const updateDepartment = async (req, res) => {
 
     const oldName = department.name;
     const oldManager = department.manager;
+
+    // If a new manager is being assigned, check they aren't already managing another department
+    if (manager && manager !== "" && manager !== oldManager) {
+      const allDepartments = await Department.findAll({
+        where: { manager }
+      });
+      const conflictDept = allDepartments.find(d => d.id !== parseInt(id));
+      if (conflictDept) {
+        return res.status(400).json({
+          error: `This team leader is already assigned as manager of "${conflictDept.name}". Remove their assignment there before assigning them here.`
+        });
+      }
+    }
 
     await department.update({
       name: name || department.name,

@@ -1,19 +1,22 @@
 import { useState, useEffect } from "react";
-import { FaEdit, FaEye } from "react-icons/fa";
+import { FaEdit, FaEye, FaSave } from "react-icons/fa";
 import { MdManageAccounts, MdDelete, MdClose } from "react-icons/md";
 import { fetchDepartments, deleteDepartment, updateDepartment } from "../api/DepartmentApi";
 import { fetchTeamLeaders } from "../api/UserApi";
 import { fetchEmployees } from "../api/EmployeeApi";
 import ConfirmationModal from "./ConfirmationModal";
 import teamLeaderEventManager from "../utils/teamLeaderEvents";
+import { toast } from "react-toastify";
 
 export default function ManageDepartment({ supervisorView = false, refreshTrigger, searchTerm = "" }) {
   const [departments, setDepartments] = useState([]);
   const [filteredDepartments, setFilteredDepartments] = useState([]);
   const [teamLeaders, setTeamLeaders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingDept, setEditingDept] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", manager: "" });
+  const [editSaving, setEditSaving] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [departmentMembers, setDepartmentMembers] = useState([]);
@@ -96,28 +99,38 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
   };
 
   const handleEdit = (dept) => {
-    setEditingId(dept.id);
+    setEditingDept(dept);
     setEditForm({
       name: dept.name,
       description: dept.description || "",
       manager: dept.manager || ""
     });
+    setEditModalOpen(true);
   };
 
-  const handleCancelEdit = () => {
-    setEditingId(null);
+  const handleCloseEditModal = () => {
+    setEditModalOpen(false);
+    setEditingDept(null);
     setEditForm({ name: "", description: "", manager: "" });
   };
 
-  const handleSaveEdit = async (id) => {
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editForm.name.trim()) {
+      toast.error("Department name is required");
+      return;
+    }
+    setEditSaving(true);
     try {
-      await updateDepartment(id, editForm);
-      setEditingId(null);
-      setEditForm({ name: "", description: "", manager: "" });
+      await updateDepartment(editingDept.id, editForm);
+      handleCloseEditModal();
       loadDepartments();
+      toast.success("Department updated successfully!");
     } catch (error) {
       console.error("Error updating department:", error);
-      alert(error.response?.data?.error || "Failed to update department");
+      toast.error(error.response?.data?.error || "Failed to update department");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -423,113 +436,42 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                     return paginatedDepartments.map((dept) => (
                     <tr key={dept.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {editingId === dept.id ? (
-                          <input
-                            type="text"
-                            value={editForm.name}
-                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                            className="border rounded px-2 py-1 w-full text-sm"
-                          />
-                        ) : (
-                          <div className="text-sm font-medium text-gray-900">{dept.name}</div>
-                        )}
+                        <div className="text-sm font-medium text-gray-900">{dept.name}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {editingId === dept.id ? (
-                          <input
-                            type="text"
-                            value={editForm.description}
-                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                            className="border rounded px-2 py-1 w-full text-sm"
-                          />
-                        ) : (
-                          <div className="text-sm text-gray-900">{dept.description || "-"}</div>
-                        )}
+                        <div className="text-sm text-gray-900">{dept.description || "-"}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{dept.employeeCount}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {editingId === dept.id ? (
-                          <select
-                            value={editForm.manager}
-                            onChange={(e) => setEditForm({ ...editForm, manager: e.target.value })}
-                            className="border rounded px-2 py-1 w-full text-sm"
-                          >
-                            <option value="">No Manager</option>
-                            {teamLeaders.length === 0 ? (
-                              <option disabled>No team leaders available</option>
-                            ) : (
-                              teamLeaders.map((leader) => {
-                                // Get leader's full name (handle both firstname/lastname and fullname formats)
-                                const leaderFullName = (() => {
-                                  if (leader.employee?.firstname && leader.employee?.lastname) {
-                                    return `${leader.employee.firstname} ${leader.employee.lastname}`;
-                                  }
-                                  if (leader.employee?.firstname && leader.employee.firstname.trim()) {
-                                    return leader.employee.firstname;
-                                  }
-                                  return leader.username;
-                                })();
-                                
-                                return (
-                                  <option key={leader.id} value={leaderFullName}>
-                                    {leaderFullName}
-                                    {leader.employee?.employee_id && ` (${leader.employee.employee_id})`}
-                                    {leader.employee?.department && leader.employee.department !== dept.name && ` - ${leader.employee.department}`}
-                                  </option>
-                                );
-                              })
-                            )}
-                          </select>
-                        ) : (
-                          <div className="text-sm text-gray-900">{dept.manager || "-"}</div>
-                        )}
+                        <div className="text-sm text-gray-900">{dept.manager || "-"}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2">
                           {!supervisorView ? (
                             // Admin view - full actions
-                            editingId === dept.id ? (
-                              <>
-                                <button
-                                  onClick={() => handleSaveEdit(dept.id)}
-                                  className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
-                                  title="Save changes"
-                                >
-                                  <FaEdit size={12} />
-                                </button>
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="w-7 h-7 rounded-md bg-gray-500 hover:bg-gray-600 text-white flex items-center justify-center transition-colors"
-                                  title="Cancel"
-                                >
-                                  <MdClose size={14} />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleViewMembers(dept)}
-                                  className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
-                                  title="View Members"
-                                >
-                                  <FaEye size={12} />
-                                </button>
-                                <button
-                                  onClick={() => handleEdit(dept)}
-                                  className="w-7 h-7 rounded-md bg-blue-600 hover:bg-primary-600 text-white flex items-center justify-center transition-colors"
-                                  title="Edit"
-                                >
-                                  <FaEdit size={12} />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(dept.id, dept.name, dept.employeeCount)}
-                                  className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
-                                  title="Delete"
-                                >
-                                  <MdDelete size={14} />
-                                </button>
-                              </>
-                            )
+                            <>
+                              <button
+                                onClick={() => handleViewMembers(dept)}
+                                className="w-7 h-7 rounded-md bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors"
+                                title="View Members"
+                              >
+                                <FaEye size={12} />
+                              </button>
+                              <button
+                                onClick={() => handleEdit(dept)}
+                                className="w-7 h-7 rounded-md bg-blue-600 hover:bg-primary-600 text-white flex items-center justify-center transition-colors"
+                                title="Edit"
+                              >
+                                <FaEdit size={12} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(dept.id, dept.name, dept.employeeCount)}
+                                className="w-7 h-7 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                                title="Delete"
+                              >
+                                <MdDelete size={14} />
+                              </button>
+                            </>
                           ) : (
                             // Supervisor view - view only
                             <button
@@ -623,6 +565,139 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
           )}
         </div>
       </div>
+
+      {/* Edit Department Modal */}
+      {editModalOpen && editingDept && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) handleCloseEditModal(); }}
+        >
+          <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                Edit Department
+              </h3>
+              <button
+                onClick={handleCloseEditModal}
+                className="text-gray-400 hover:text-gray-600 p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <MdClose size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-5">
+              {/* Department Name */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Department Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                  className="w-full px-4 py-3 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-3 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white resize-none"
+                />
+              </div>
+
+              {/* Manager / Team Leader */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Team Leader
+                </label>
+                <select
+                  value={editForm.manager}
+                  onChange={(e) => setEditForm({ ...editForm, manager: e.target.value })}
+                  className="w-full px-4 py-3 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white"
+                >
+                  <option value="">No Manager</option>
+                  {teamLeaders.map((leader) => {
+                    const leaderFullName = (() => {
+                      if (leader.employee?.firstname && leader.employee?.lastname) {
+                        return `${leader.employee.firstname} ${leader.employee.lastname}`;
+                      }
+                      if (leader.employee?.firstname?.trim()) {
+                        return leader.employee.firstname;
+                      }
+                      return leader.username;
+                    })();
+
+                    // A leader is "taken" if they have a department that is NOT the current dept being edited
+                    const leaderDept = leader.employee?.department;
+                    const isAssignedElsewhere =
+                      leaderDept &&
+                      leaderDept !== "No Department" &&
+                      leaderDept !== editingDept.name;
+
+                    return (
+                      <option
+                        key={leader.id}
+                        value={leaderFullName}
+                        disabled={isAssignedElsewhere}
+                      >
+                        {leaderFullName}
+                        {leader.employee?.employee_id ? ` (${leader.employee.employee_id})` : ""}
+                        {isAssignedElsewhere
+                          ? ` — assigned to ${leaderDept}`
+                          : leaderDept && leaderDept !== "No Department"
+                          ? ` — ${leaderDept}`
+                          : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+                {/* Helper text when a leader is already assigned elsewhere */}
+                {editForm.manager && (() => {
+                  const selected = teamLeaders.find((l) => {
+                    const n = l.employee?.firstname && l.employee?.lastname
+                      ? `${l.employee.firstname} ${l.employee.lastname}`
+                      : l.employee?.firstname || l.username;
+                    return n === editForm.manager;
+                  });
+                  const dept = selected?.employee?.department;
+                  return dept && dept !== "No Department" && dept !== editingDept.name ? (
+                    <p className="mt-1.5 text-xs text-amber-600 font-medium">
+                      ⚠ This team leader is already assigned to <strong>{dept}</strong>. Remove their assignment there first.
+                    </p>
+                  ) : null;
+                })()}
+              </div>
+
+              {/* Buttons */}
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseEditModal}
+                  className="w-full sm:flex-1 bg-white border border-gray-200 text-gray-700 py-3 sm:py-2.5 px-4 rounded-xl hover:bg-gray-50 font-bold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="w-full sm:flex-1 bg-blue-600 text-white py-3 sm:py-2.5 px-4 rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2 font-bold shadow-sm shadow-blue-200 transition-colors disabled:opacity-60"
+                >
+                  {editSaving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <ConfirmationModal
