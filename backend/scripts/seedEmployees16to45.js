@@ -1,17 +1,15 @@
 /**
  * Seed script: Insert employees TSI00016 – TSI00045 into the deployed app
- * Run:  node scripts/seedEmployees16to45.js
+ * Run from the backend folder:  node scripts/seedEmployees16to45.js
  *
- * Set ADMIN_USER / ADMIN_PASS env vars, or edit the defaults below.
+ * POST /api/employees requires no auth token.
+ * Duplicate employee_id → Sequelize unique constraint → 500 with message containing "already"
  */
 
 import fetch from "node-fetch";
 
-const BASE_URL    = "https://secureattend-2-0.onrender.com/api";
-const ADMIN_USER  = process.env.ADMIN_USER  || "admin";
-const ADMIN_PASS  = process.env.ADMIN_PASS  || "admin123";
+const BASE_URL = "https://secureattend-2-0.onrender.com/api";
 
-// ── Employee data from the screenshots ───────────────────────────────────────
 const employees = [
   { employee_id: "TSI00016", firstname: "Richard",  lastname: "Flores",    email: "richard.flores@company.com",    contact_number: "09171234506", position: "Helper",               department: "Zone B", status: "Active" },
   { employee_id: "TSI00017", firstname: "Michael",  lastname: "Ramos",     email: "michael.ramos@company.com",     contact_number: "09171234507", position: "Picker",               department: "Zone C", status: "Active" },
@@ -45,56 +43,38 @@ const employees = [
   { employee_id: "TSI00045", firstname: "Jerome",   lastname: "Chua",      email: "jerome.chua@company.com",       contact_number: "09171234535", position: "Picker",               department: "Zone C", status: "Active" },
 ];
 
-// ── Step 1: Login and get token ───────────────────────────────────────────────
-async function getToken() {
-  console.log(`🔐 Logging in as "${ADMIN_USER}" …`);
-  const res  = await fetch(`${BASE_URL}/auth/login`, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
-  });
-  const body = await res.json();
-  if (!res.ok || !body.token) {
-    throw new Error(`Login failed (${res.status}): ${JSON.stringify(body)}`);
-  }
-  console.log("✅ Login successful\n");
-  return body.token;
-}
-
-// ── Step 2: Insert employees ──────────────────────────────────────────────────
 async function seed() {
-  const token = await getToken();
-
   let created = 0;
   let skipped = 0;
   let failed  = 0;
+
+  console.log(`� Seeding ${employees.length} employees to ${BASE_URL}\n`);
 
   for (const emp of employees) {
     try {
       const res  = await fetch(`${BASE_URL}/employees`, {
         method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify(emp),
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(emp),
       });
 
-      const body = await res.json();
+      const text = await res.text();
+      let body;
+      try { body = JSON.parse(text); } catch { body = { raw: text }; }
 
       if (res.status === 201) {
         console.log(`✅ Created   ${emp.employee_id}  ${emp.firstname} ${emp.lastname}`);
         created++;
-      } else if (
-        res.status === 500 &&
-        (body?.message?.toLowerCase().includes("already") ||
-         body?.error?.toLowerCase?.()?.includes("already"))
-      ) {
-        console.log(`⏭  Skipped   ${emp.employee_id}  (already exists)`);
-        skipped++;
       } else {
-        console.warn(`⚠️  Failed    ${emp.employee_id}  →  ${JSON.stringify(body)}`);
-        failed++;
+        // Check if it's a duplicate (unique constraint error)
+        const msg = (body?.message || body?.error || "").toLowerCase();
+        if (msg.includes("already") || msg.includes("unique") || msg.includes("duplicate")) {
+          console.log(`⏭  Skipped   ${emp.employee_id}  (already exists)`);
+          skipped++;
+        } else {
+          console.warn(`⚠️  Failed    ${emp.employee_id}  [${res.status}]  ${JSON.stringify(body)}`);
+          failed++;
+        }
       }
     } catch (err) {
       console.error(`❌ Error     ${emp.employee_id}  →  ${err.message}`);
