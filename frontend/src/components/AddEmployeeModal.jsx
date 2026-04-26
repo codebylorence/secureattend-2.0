@@ -93,6 +93,21 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
            positionName.toLowerCase().includes('teamleader');
   };
 
+  const getRoleFromPosition = (positionName) => {
+    const p = positionName.toLowerCase();
+    if (p.includes('admin') && !p.includes('warehouse')) return 'admin';
+    if (p.includes('warehouse admin') || p.includes('warehouse manager') || p.includes('inventory manager')) return 'warehouseadmin';
+    if (p.includes('supervisor') || p.includes('manager')) return 'supervisor';
+    if (p.includes('team leader') || p.includes('lead')) return 'teamleader';
+    return 'employee';
+  };
+
+  const isCompanyWideRole = (positionName) => {
+    if (!positionName) return false;
+    const role = getRoleFromPosition(positionName);
+    return role === 'admin' || role === 'supervisor' || role === 'warehouseadmin';
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'employee_id') {
@@ -102,6 +117,15 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
       }
       if (formattedValue.length > 8) formattedValue = formattedValue.substring(0, 8);
       setFormData({ ...formData, [name]: formattedValue });
+    } else if (name === 'position') {
+      const updated = { ...formData, position: value };
+      if (isCompanyWideRole(value)) {
+        updated.department = 'Company-wide';
+      } else if (formData.department === 'Company-wide') {
+        // Reset department if switching away from a company-wide role
+        updated.department = 'No Department';
+      }
+      setFormData(updated);
     } else {
       setFormData({ ...formData, [name]: value });
     }
@@ -224,12 +248,23 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
                 <label className={labelClass}>Department</label>
                 <div className="relative">
                   <MdBusiness className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <select name="department" value={formData.department} onChange={handleChange} className={`${inputClass} appearance-none`}>
+                  <select
+                    name="department"
+                    value={formData.department}
+                    onChange={handleChange}
+                    disabled={isCompanyWideRole(formData.position)}
+                    className={`${inputClass} appearance-none`}
+                  >
                     <option value="No Department">No Department</option>
+                    <option value="Company-wide">Company-wide</option>
                     {getAvailableDepartments().map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                   </select>
                 </div>
-                {isTeamLeaderPosition(formData.position) && (
+                {isCompanyWideRole(formData.position) ? (
+                  <p className="text-[10px] font-medium text-emerald-600 mt-1.5 flex items-center gap-1">
+                    <MdInfo size={12} /> Auto-set to Company-wide for this role
+                  </p>
+                ) : isTeamLeaderPosition(formData.position) && (
                   <p className="text-[10px] font-medium text-amber-600 mt-1.5 flex items-center gap-1">
                     <MdInfo size={12} /> Showing available team leader slots
                   </p>

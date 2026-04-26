@@ -77,8 +77,37 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
     }
   };
 
+  const getRoleFromPosition = (position) => {
+    const positionLower = position.toLowerCase();
+    if (positionLower.includes('admin') && !positionLower.includes('warehouse')) {
+      return 'admin';
+    } else if (positionLower.includes('warehouse admin') ||
+               positionLower.includes('warehouse manager') ||
+               positionLower.includes('inventory manager')) {
+      return 'warehouseadmin';
+    } else if (positionLower.includes('supervisor') || positionLower.includes('manager')) {
+      return 'supervisor';
+    } else if (positionLower.includes('team leader') || positionLower.includes('lead')) {
+      return 'teamleader';
+    } else {
+      return 'employee';
+    }
+  };
+
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    if (name === 'position') {
+      const role = getRoleFromPosition(value);
+      const updated = { ...formData, position: value };
+      // Auto-set department to "Company-wide" for admin, supervisor, and warehouseadmin roles
+      if (role === 'admin' || role === 'supervisor' || role === 'warehouseadmin') {
+        updated.department = 'Company-wide';
+      }
+      setFormData(updated);
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -214,15 +243,19 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
                   value={formData.department}
                   onChange={handleChange}
                   required
-                  disabled={loading}
+                  disabled={loading || ['admin', 'supervisor', 'warehouseadmin'].includes(getRoleFromPosition(formData.position))}
                   className={`${inputClass} appearance-none`}
                 >
                   <option value="">{loading ? 'Loading...' : 'Select'}</option>
+                  <option value="Company-wide">Company-wide</option>
                   {departments.map((dept) => (
                     <option key={dept.id} value={dept.name}>{dept.name}</option>
                   ))}
                 </select>
               </div>
+              {['admin', 'supervisor', 'warehouseadmin'].includes(getRoleFromPosition(formData.position)) && (
+                <p className="text-[11px] text-blue-500 mt-1 ml-1">Auto-set to Company-wide for this role</p>
+              )}
             </div>
 
             {/* Position */}

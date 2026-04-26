@@ -1010,10 +1010,12 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                             <button
                               type="button"
                               onClick={() => {
-                                const allZoneNames = availableDepartments.map(dept => dept.name);
+                                const enabledZoneNames = availableDepartments
+                                  .filter(dept => employees.some(emp => emp.department === dept.name && emp.position === 'Team Leader'))
+                                  .map(dept => dept.name);
                                 setFormData(prev => ({
                                   ...prev,
-                                  departments: [...new Set([...prev.departments, ...allZoneNames])]
+                                  departments: [...new Set([...prev.departments, ...enabledZoneNames])]
                                 }));
                               }}
                               className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
@@ -1045,13 +1047,12 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                             {availableDepartments.map(dept => {
                               const isSelected = formData.departments.includes(dept.name);
                               
-                              // Check if zone has team leader and if team leader has fingerprint
+                              // Disable zone if it has no team leader assigned
                               const teamLeader = employees.find(emp => 
                                 emp.department === dept.name && emp.position === 'Team Leader'
                               );
                               const hasTeamLeader = !!teamLeader;
-                              const hasTeamLeaderFingerprint = teamLeader ? fingerprintStatus[teamLeader.employee_id] : false;
-                              const isDisabled = !hasTeamLeader || !hasTeamLeaderFingerprint;
+                              const isDisabled = !hasTeamLeader;
                               
                               return (
                                 <label 
@@ -1063,7 +1064,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                                         ? 'border-blue-500 bg-blue-50/30 cursor-pointer' 
                                         : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50 cursor-pointer'
                                   }`}
-                                  title={isDisabled ? (!hasTeamLeader ? 'No team leader assigned' : 'Team leader no biometric') : ''}
+                                  title={isDisabled ? 'No team leader assigned to this zone' : ''}
                                 >
                                   <input
                                     type="checkbox"
@@ -1080,7 +1081,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                                     </span>
                                     {isDisabled && (
                                       <div className="text-xs text-red-500 mt-1">
-                                        {!hasTeamLeader ? 'No team leader assigned' : 'Team leader no biometric'}
+                                        No team leader assigned
                                       </div>
                                     )}
                                   </div>
