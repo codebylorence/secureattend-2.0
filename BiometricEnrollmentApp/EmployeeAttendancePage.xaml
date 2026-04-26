@@ -96,11 +96,11 @@
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
                                     
-                                    <TextBlock x:Name="StatusIcon" Grid.Row="0" Text="✅" FontSize="32" HorizontalAlignment="Left" Margin="0,0,0,8" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="StatusIcon" Grid.Row="0" Text="✅" FontSize="32" HorizontalAlignment="Left" Margin="0,0,0,8" Visibility="Visible"/>
                                     
                                     <TextBlock x:Name="StatusMessage" Grid.Row="1" Text="Successfully Clocked In" FontSize="20" FontWeight="Bold" Foreground="#1E3A8A" TextWrapping="Wrap" TextAlignment="Left" Margin="0,0,0,4"/>
                                     
-                                    <TextBlock x:Name="StatusDetails" Grid.Row="2" Text="Enjoy your shift!" FontSize="14" Foreground="#3B82F6" TextAlignment="Left" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="StatusDetails" Grid.Row="2" Text="Enjoy your shift!" FontSize="14" Foreground="#3B82F6" TextAlignment="Left" TextWrapping="Wrap" Visibility="Visible"/>
                                 </Grid>
                             </Border>
                             

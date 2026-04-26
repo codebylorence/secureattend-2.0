@@ -531,17 +531,17 @@ namespace BiometricEnrollmentApp
         {
             return status switch
             {
-                "Present" => ("#4CAF50", "✅", "ON-TIME CLOCK-IN", $"Successfully clocked in at {timeStr}\nStatus: Present"),
-                "Late" => ("#FF9800", "⚠️", "LATE CLOCK-IN", $"Clocked in late at {timeStr}\nStatus: Late Arrival"),
-                "Clock-out" => ("#2196F3", "🏁", "CLOCK-OUT COMPLETED", $"Successfully clocked out at {timeStr}\nShift ended"),
-                "Clock-out Denied" => ("#FF5722", "🚫", "CLOCK-OUT DENIED", "Shift has ended\nClock-out not allowed"),
-                "Overtime" => ("#9C27B0", "⏰", "OVERTIME CLOCK-OUT", $"Clocked out during overtime at {timeStr}\nOvertime hours recorded"),
-                "Missed Clock-out" => ("#FFC107", "⚠️", "MISSED CLOCK-OUT", $"Late clock-out at {timeStr}\nBeyond scheduled shift time"),
-                "DoubleTap" => ("#FF5722", "🚫", "SCAN TOO SOON", "Please wait before scanning again\nCooldown period active"),
-                "Cancelled" => ("#9E9E9E", "❌", "CLOCK-OUT CANCELLED", "Action cancelled by user\nNo changes made"),
-                "Not Scheduled" => ("#FF5722", "📅", "NOT SCHEDULED", $"Employee {employeeId} not scheduled today\nContact supervisor"),
-                "Outside Hours" => ("#FF5722", "🕐", "OUTSIDE SHIFT HOURS", "Not within scheduled work time\nCheck your schedule"),
-                _ => ("#4CAF50", "✅", "ATTENDANCE RECORDED", $"Action completed at {timeStr}\nStatus: {status}")
+                "Present"          => ("#4CAF50", "✅", $"Successfully clocked in at {timeStr}", "Status: Present"),
+                "Late"             => ("#FF9800", "⏰", $"Clocked in late at {timeStr}", "Status: Late Arrival"),
+                "Clock-out"        => ("#2196F3", "👋", $"Successfully clocked out at {timeStr}", "Shift ended"),
+                "Clock-out Denied" => ("#FF5722", "🚫", "Shift has ended", "Clock-out not allowed"),
+                "Overtime"         => ("#9C27B0", "⭐", $"Clocked out during overtime at {timeStr}", "Overtime hours recorded"),
+                "Missed Clock-out" => ("#FFC107", "⚠️", $"Late clock-out at {timeStr}", "Beyond scheduled shift time"),
+                "DoubleTap"        => ("#FF5722", "⏳", "Please wait before scanning again", "Cooldown period active"),
+                "Cancelled"        => ("#9E9E9E", "❌", "Clock-out cancelled", "No changes made"),
+                "Not Scheduled"    => ("#FF5722", "📅", $"Not scheduled today", $"Employee {employeeId} — contact supervisor"),
+                "Outside Hours"    => ("#FF5722", "🕐", "Outside shift hours", "Not within scheduled work time"),
+                _                  => ("#4CAF50", "✅", $"Action completed at {timeStr}", $"Status: {status}")
             };
         }
 
