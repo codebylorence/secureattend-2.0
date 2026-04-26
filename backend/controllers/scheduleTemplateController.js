@@ -65,6 +65,41 @@ export const getTemplate = async (req, res) => {
 // POST /api/templates
 export const addTemplate = async (req, res) => {
   try {
+    const { department, shift_name, start_time, end_time, specific_date } = req.body;
+
+    // Validate required fields
+    if (!department || !shift_name || !start_time || !end_time || !specific_date) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Import Employee model
+    const { default: Employee } = await import("../models/employee.js");
+
+    // Skip team leader check for Role-Based (supervisor/admin) schedules
+    if (department !== 'Role-Based') {
+      // Check if department has a team leader
+      const teamLeader = await Employee.findOne({
+        where: {
+          department: department,
+          position: 'Team Leader',
+          status: 'Active'
+        }
+      });
+
+      if (!teamLeader) {
+        return res.status(400).json({ 
+          error: `Cannot schedule ${department}: No active team leader assigned to this zone` 
+        });
+      }
+
+      // Check if team leader has biometric enrollment
+      if (!teamLeader.has_fingerprint) {
+        return res.status(400).json({ 
+          error: `Cannot schedule ${department}: Team leader ${teamLeader.firstname} ${teamLeader.lastname} has no biometric enrollment` 
+        });
+      }
+    }
+
     console.log("📝 Creating template with data:", {
       department: req.body.department,
       shift_name: req.body.shift_name,

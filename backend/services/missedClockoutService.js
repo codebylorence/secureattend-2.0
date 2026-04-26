@@ -69,7 +69,7 @@ export async function markMissedClockouts() {
           employee_id: session.employee_id,
           status: 'Active',
           [Op.or]: [
-            sequelize.literal(`schedule_dates::text LIKE '%${today}%'`)
+            sequelize.literal(`schedule_dates LIKE '%${today}%'`)
           ]
         }
       });

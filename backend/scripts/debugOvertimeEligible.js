@@ -93,7 +93,7 @@ async function debugOvertimeEligible() {
           [Op.in]: clockedInEmployeeIds
         },
         [Op.or]: [
-          sequelize.literal(`schedule_dates::text LIKE '%${today}%'`)
+          sequelize.literal(`schedule_dates LIKE '%${today}%'`)
         ]
       }
     });

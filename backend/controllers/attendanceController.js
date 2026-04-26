@@ -1228,7 +1228,7 @@ export const syncAttendanceFromBiometric = async (req, res) => {
                 employee_id,
                 status: 'Active',
                 [Op.or]: [
-                  sequelize.literal(`schedule_dates::text LIKE '%${date}%'`)
+                  sequelize.literal(`schedule_dates LIKE '%${date}%'`)
                 ]
               }
             });

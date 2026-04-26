@@ -180,16 +180,25 @@ export const assignScheduleToEmployee = async (scheduleData) => {
     throw new Error("employee_id is required");
   }
   
-  // Validate that employee has fingerprint enrolled before scheduling
-  console.log("🔍 Checking fingerprint status before scheduling...");
-  const hasFingerprint = await checkEmployeeFingerprintStatus(employee_id);
-  
-  if (!hasFingerprint) {
-    console.log(`❌ Cannot schedule employee ${employee_id}: No fingerprint enrolled`);
-    throw new Error(`Cannot schedule employee ${employee_id}. Employee must have fingerprint enrolled in the biometric system before being scheduled.`);
+  // Check if employee is a non-biometric role (supervisor, team leader, warehouse admin)
+  // These roles don't use the biometric scanner, so skip fingerprint check
+  const employeeRecord = await Employee.findOne({ where: { employee_id } });
+  const nonBiometricPositions = ["Supervisor", "Team Leader", "Warehouse Admin", "Warehouse Manager", "Inventory Manager"];
+  const isBiometricExempt = employeeRecord && nonBiometricPositions.includes(employeeRecord.position);
+
+  if (!isBiometricExempt) {
+    // Validate that employee has fingerprint enrolled before scheduling
+    console.log("🔍 Checking fingerprint status before scheduling...");
+    const hasFingerprint = await checkEmployeeFingerprintStatus(employee_id);
+    
+    if (!hasFingerprint) {
+      console.log(`❌ Cannot schedule employee ${employee_id}: No fingerprint enrolled`);
+      throw new Error(`Cannot schedule employee ${employee_id}. Employee must have fingerprint enrolled in the biometric system before being scheduled.`);
+    }
+    console.log(`✅ Employee ${employee_id} has fingerprint enrolled, proceeding with scheduling...`);
+  } else {
+    console.log(`✅ Employee ${employee_id} is a ${employeeRecord.position} — skipping fingerprint check.`);
   }
-  
-  console.log(`✅ Employee ${employee_id} has fingerprint enrolled, proceeding with scheduling...`);
   
   // Validate required schedule fields for direct scheduling
   if (!shift_name || !start_time || !end_time) {
