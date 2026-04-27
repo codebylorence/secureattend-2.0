@@ -15,6 +15,8 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [fingerprintStatus, setFingerprintStatus] = useState({});
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Handle row click to navigate to employee profile
   const handleRowClick = (employeeId, event) => {
@@ -104,6 +106,7 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
     });
 
     setFilteredEmployees(filtered);
+    setCurrentPage(1);
   }, [employees, zoneFilter, statusFilter, searchTerm]);
 
   return (
@@ -143,101 +146,155 @@ const EmployeeList = forwardRef(({ supervisorView = false, zoneFilter = "All Zon
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Employee ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Department
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Position
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                {!supervisorView && (
+        <>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
+                    Employee ID
                   </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredEmployees.map((emp) => (
-                <tr 
-                  key={emp.id} 
-                  className="hover:bg-primary-50 cursor-pointer transition-colors duration-200 hover:shadow-sm"
-                  onClick={(e) => handleRowClick(emp.employee_id, e)}
-                  title="Click to view employee profile"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {emp.employee_id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {(() => {
-                        // Try firstname + lastname first
-                        if (emp.firstname && emp.lastname) {
-                          return `${emp.firstname} ${emp.lastname}`;
-                        }
-                        // Try fullname
-                        if (emp.fullname && emp.fullname.trim()) {
-                          return emp.fullname;
-                        }
-                        // Try just firstname if lastname is missing
-                        if (emp.firstname && emp.firstname.trim()) {
-                          return emp.firstname;
-                        }
-                        // Fallback
-                        return `Employee ${emp.employee_id}`;
-                      })()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {emp.department === 'Company-wide' ? (
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                        Company-wide
-                      </span>
-                    ) : (
-                      emp.department
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {emp.position}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${emp.status === 'Active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                      }`}>
-                      {emp.status}
-                    </span>
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Department
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Position
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
                   {!supervisorView && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium action-cell">
-                      <EmpAction
-                        id={emp.id}
-                        employee={{
-                          ...emp,
-                          has_fingerprint: fingerprintStatus[emp.employee_id] || false
-                        }}
-                        onDeleted={loadEmployees}
-                        onUpdated={loadEmployees}
-                      />
-                    </td>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredEmployees
+                  .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                  .map((emp) => (
+                  <tr 
+                    key={emp.id} 
+                    className="hover:bg-primary-50 cursor-pointer transition-colors duration-200 hover:shadow-sm"
+                    onClick={(e) => handleRowClick(emp.employee_id, e)}
+                    title="Click to view employee profile"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {emp.employee_id}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {(() => {
+                          if (emp.firstname && emp.lastname) return `${emp.firstname} ${emp.lastname}`;
+                          if (emp.fullname && emp.fullname.trim()) return emp.fullname;
+                          if (emp.firstname && emp.firstname.trim()) return emp.firstname;
+                          return `Employee ${emp.employee_id}`;
+                        })()}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {emp.department === 'Company-wide' ? (
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          Company-wide
+                        </span>
+                      ) : (
+                        emp.department
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {emp.position}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        emp.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {emp.status}
+                      </span>
+                    </td>
+                    {!supervisorView && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium action-cell">
+                        <EmpAction
+                          id={emp.id}
+                          employee={{
+                            ...emp,
+                            has_fingerprint: fingerprintStatus[emp.employee_id] || false
+                          }}
+                          onDeleted={loadEmployees}
+                          onUpdated={loadEmployees}
+                        />
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {filteredEmployees.length > itemsPerPage && (
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">Show</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+                <span className="text-sm text-gray-700">
+                  of {filteredEmployees.length} employees
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                {(() => {
+                  const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
+                  return Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                    .map((p, idx, arr) => (
+                      <>
+                        {idx > 0 && arr[idx - 1] !== p - 1 && (
+                          <span key={`e-${p}`} className="px-2 py-1 text-sm text-gray-400">…</span>
+                        )}
+                        <button
+                          key={p}
+                          onClick={() => setCurrentPage(p)}
+                          className={`px-3 py-1 text-sm border rounded ${
+                            currentPage === p
+                              ? 'bg-primary text-white border-primary'
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      </>
+                    ));
+                })()}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(p + 1, Math.ceil(filteredEmployees.length / itemsPerPage)))}
+                  disabled={currentPage === Math.ceil(filteredEmployees.length / itemsPerPage)}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
