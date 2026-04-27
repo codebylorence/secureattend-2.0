@@ -7,6 +7,39 @@ import Employee from "./employee.js";
 import PasswordReset from "./passwordReset.js";
 import "./notification.js"; // Import notification model for sync
 
+// Idempotent column migrations — runs on every startup, safe to repeat
+const runColumnMigrations = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  const { DataTypes } = await import("sequelize");
+
+  const addColumnIfMissing = async (table, column, definition) => {
+    try {
+      const tableDesc = await queryInterface.describeTable(table);
+      if (!tableDesc[column]) {
+        await queryInterface.addColumn(table, column, definition);
+        console.log(`✅ Migration: added column ${table}.${column}`);
+      }
+    } catch (err) {
+      console.error(`❌ Migration error for ${table}.${column}:`, err.message);
+    }
+  };
+
+  // Archive columns for Attendances
+  await addColumnIfMissing("Attendances", "is_archived", {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  });
+  await addColumnIfMissing("Attendances", "archived_at", {
+    type: DataTypes.DATE,
+    allowNull: true,
+  });
+  await addColumnIfMissing("Attendances", "archived_by", {
+    type: DataTypes.STRING,
+    allowNull: true,
+  });
+};
+
 const syncDatabase = async () => {
   try {
     await sequelize.authenticate();
@@ -36,6 +69,9 @@ const syncDatabase = async () => {
       // Subsequent runs: Don't alter, just use existing tables
       console.log("✅ Tables already synchronized");
     }
+
+    // Run incremental column migrations (idempotent — safe to run every startup)
+    await runColumnMigrations();
 
     //  Create default admin account if not existing
     await createDefaultAdmin();
