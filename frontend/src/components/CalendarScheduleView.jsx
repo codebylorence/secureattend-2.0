@@ -56,6 +56,14 @@ const getShiftColor = (shiftName) => {
   return '#6b7280'; // Default gray
 };
 
+// Convert hex color to rgba with given opacity (for past events)
+const hexToRgba = (hex, opacity) => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
 // ==========================================
 // View-Only Schedule Modal (for past dates with attendance)
 // ==========================================
@@ -2137,9 +2145,9 @@ export default function CalendarScheduleView() {
           title: `${startTime} - ${endTime} ${shiftName}`,
           start: `${date}T${startTime}`,
           end: `${date}T${endTime}`,
-          backgroundColor: isPastDate ? '#9ca3af' : backgroundColor,
-          borderColor: isPastDate ? '#6b7280' : backgroundColor,
-          textColor: "white",
+          backgroundColor: isPastDate ? hexToRgba(backgroundColor, 0.35) : backgroundColor,
+          borderColor: isPastDate ? hexToRgba(backgroundColor, 0.5) : backgroundColor,
+          textColor: isPastDate ? hexToRgba('#ffffff', 0.75) : "white",
           classNames: isPastDate ? ['past-event'] : [],
           extendedProps: {
             shiftData: shiftData, zoneCount: shiftData.zones.length, totalAssigned: totalAssigned, shiftName: shiftName, startTime: shiftData.start_time, endTime: shiftData.end_time, specificDate: date, isPast: isPastDate
