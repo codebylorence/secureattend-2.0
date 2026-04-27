@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaUsers, FaSearch, FaBuilding } from "react-icons/fa";
 import { fetchTeamMembers } from "../api/EmployeeApi";
+import { useNavigate } from "react-router-dom";
 
 const avatarColors = [
   "bg-blue-500", "bg-violet-500", "bg-emerald-500",
@@ -20,6 +21,7 @@ export default function TeamMembers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [department, setDepartment] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -151,7 +153,12 @@ export default function TeamMembers() {
                   const fullName = `${member.firstname || ""} ${member.lastname || ""}`.trim() || member.employee_id;
                   const isActive = member.status === "Active";
                   return (
-                    <tr key={member.employee_id} className="hover:bg-gray-50/60 transition-colors">
+                    <tr
+                      key={member.employee_id}
+                      onClick={() => navigate(`/team/members/${member.employee_id}`)}
+                      className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                      title={`View ${fullName}'s profile`}
+                    >
                       {/* Employee */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
@@ -166,7 +173,7 @@ export default function TeamMembers() {
                               {getInitials(member.firstname, member.lastname)}
                             </div>
                           )}
-                          <span className="font-medium text-gray-800">{fullName}</span>
+                          <span className="font-medium text-gray-800 group-hover:text-blue-600 transition-colors">{fullName}</span>
                         </div>
                       </td>
                       {/* ID */}

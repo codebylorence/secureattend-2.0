@@ -153,6 +153,7 @@ export default function AppRouter() {
             <Route path="/team/dashboard" element={<TeamDashboard />} />
             <Route path="/team/schedule" element={<TeamSchedule />} />
             <Route path="/team/members" element={<TeamMembers />} />
+            <Route path="/team/members/:employeeId" element={<EmployeeProfile />} />
             <Route path="/team/profile" element={<Profile />} />
           </Route>
         </Route>
