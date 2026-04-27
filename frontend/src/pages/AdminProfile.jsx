@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FaUser, FaLock, FaEdit, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaUser, FaLock, FaEdit, FaEye, FaEyeSlash, FaEnvelope } from "react-icons/fa";
 import { updateUserCredentials } from "../api/EmployeeApi";
 import { toast } from 'react-toastify';
 import { MdClose } from "react-icons/md";
@@ -12,6 +12,7 @@ export default function AdminProfile() {
     firstname: "",
     lastname: "",
     username: "",
+    email: "",
     currentPassword: "",
     newPassword: "",
     confirmPassword: ""
@@ -51,6 +52,7 @@ export default function AdminProfile() {
       firstname: firstname,
       lastname: lastname,
       username: user?.username || "",
+      email: user?.employee?.email || "",
       currentPassword: "",
       newPassword: "",
       confirmPassword: ""
@@ -81,9 +83,10 @@ export default function AdminProfile() {
     const hasFirstnameChange = formData.firstname.trim() !== currentFirstname;
     const hasLastnameChange = formData.lastname.trim() !== currentLastname;
     const hasUsernameChange = formData.username !== user?.username;
+    const hasEmailChange = formData.email.trim() !== (user?.employee?.email || "");
     const hasPasswordChange = formData.newPassword.trim() !== "";
     
-    if (!hasFirstnameChange && !hasLastnameChange && !hasUsernameChange && !hasPasswordChange) {
+    if (!hasFirstnameChange && !hasLastnameChange && !hasUsernameChange && !hasEmailChange && !hasPasswordChange) {
       toast.info("No changes made.");
       return;
     }
@@ -115,6 +118,7 @@ export default function AdminProfile() {
       if (hasFirstnameChange) updateData.firstname = formData.firstname.trim();
       if (hasLastnameChange) updateData.lastname = formData.lastname.trim();
       if (hasUsernameChange) updateData.username = formData.username;
+      if (hasEmailChange) updateData.email = formData.email.trim();
       if (hasPasswordChange) updateData.password = formData.newPassword;
       if (hasPasswordChange || hasUsernameChange) updateData.currentPassword = formData.currentPassword;
 
@@ -124,7 +128,10 @@ export default function AdminProfile() {
         ...user, 
         ...(hasUsernameChange && { username: formData.username }),
         ...(hasFirstnameChange && { firstname: formData.firstname.trim() }),
-        ...(hasLastnameChange && { lastname: formData.lastname.trim() })
+        ...(hasLastnameChange && { lastname: formData.lastname.trim() }),
+        ...(hasEmailChange && { 
+          employee: { ...user.employee, email: formData.email.trim() }
+        })
       };
       setUser(updatedUser);
       localStorage.setItem("user", JSON.stringify(updatedUser));
@@ -187,7 +194,7 @@ export default function AdminProfile() {
         </div>
 
         {/* Display Fields */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">First Name</p>
             <p className="text-sm font-bold text-gray-900">{displayFirstName}</p>
@@ -201,6 +208,11 @@ export default function AdminProfile() {
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Username</p>
             <p className="text-sm font-bold text-gray-900">{user?.username || "Not Set"}</p>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Email Address</p>
+            <p className="text-sm font-bold text-gray-900">{user?.employee?.email || "Not Set"}</p>
           </div>
         </div>
 
@@ -244,6 +256,16 @@ export default function AdminProfile() {
                 <input
                   type="text" name="username"
                   value={formData.username} onChange={handleChange}
+                  className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Email Address</label>
+                <input
+                  type="email" name="email"
+                  value={formData.email} onChange={handleChange}
+                  placeholder="admin@company.com"
                   className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
               </div>

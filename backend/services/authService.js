@@ -90,7 +90,7 @@ export const verifyLogin = async (username, password) => {
   }
 };
 
-export const changeUserCredentials = async (id, username, password, currentPassword = null, firstname = null, lastname = null) => {
+export const changeUserCredentials = async (id, username, password, currentPassword = null, firstname = null, lastname = null, email = null) => {
   const user = await User.findByPk(id, {
     include: [{ model: Employee, as: "employee" }]
   });
@@ -133,6 +133,11 @@ export const changeUserCredentials = async (id, username, password, currentPassw
   // Only update if there are changes
   if (Object.keys(updateData).length > 0) {
     await user.update(updateData);
+  }
+
+  // Update email on linked employee record if provided
+  if (email !== null && user.employee) {
+    await user.employee.update({ email });
   }
 
   return { message: "Profile updated successfully" };

@@ -22,10 +22,10 @@ export const updateCredentials = async (req, res) => {
   try {
     console.log("🔍 updateCredentials called for user ID:", req.params.id);
     
-    const { username, password, currentPassword, firstname, lastname } = req.body;
+    const { username, password, currentPassword, firstname, lastname, email } = req.body;
     const { id } = req.params;
 
-    const result = await changeUserCredentials(id, username, password, currentPassword, firstname, lastname);
+    const result = await changeUserCredentials(id, username, password, currentPassword, firstname, lastname, email);
     console.log("✅ Credentials updated successfully for user:", id);
     res.json(result);
   } catch (error) {
