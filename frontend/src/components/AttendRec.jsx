@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
-import { FaClock, FaEdit } from "react-icons/fa";
-import { getAttendances } from "../api/AttendanceApi";
+import { FaClock, FaEdit, FaTrash } from "react-icons/fa";
+import { MdDelete } from "react-icons/md";
+import { getAttendances, deleteAttendance } from "../api/AttendanceApi";
 import { formatDateTime24 } from "../utils/timeFormat";
 import OvertimeHoursModal from "./OvertimeHoursModal";
+import ConfirmationModal from "./ConfirmationModal";
+import { toast } from "react-toastify";
 
 export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", startDate = "", endDate = "" }) {
   const [attendances, setAttendances] = useState([]);
@@ -11,6 +14,11 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [overtimeHoursModal, setOvertimeHoursModal] = useState({ isOpen: false, attendance: null });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, attendance: null });
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
     fetchData();
@@ -90,6 +98,23 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
         : att
     ));
     setOvertimeHoursModal({ isOpen: false, attendance: null });
+  };
+
+  const handleDelete = async () => {
+    const attendance = deleteModal.attendance;
+    if (!attendance) return;
+    setDeleteLoading(true);
+    try {
+      await deleteAttendance(attendance.id);
+      setAttendances(prev => prev.filter(att => att.id !== attendance.id));
+      toast.success("Attendance record deleted.");
+      setDeleteModal({ isOpen: false, attendance: null });
+    } catch (error) {
+      console.error("Error deleting attendance:", error);
+      toast.error("Failed to delete attendance record.");
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
 
@@ -189,18 +214,26 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                           })()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {attendance.status === 'Overtime' && attendance.clock_out ? (
-                            <button
-                              onClick={() => handleEditOvertimeHours(attendance)}
-                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-[#1E3A8A] rounded hover:bg-[#2546b3]"
-                              title="Edit overtime hours"
-                            >
-                              <FaEdit className="w-3 h-3 mr-1" />
-                              Edit Hours
-                            </button>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {attendance.status === 'Overtime' && attendance.clock_out && (
+                              <button
+                                onClick={() => handleEditOvertimeHours(attendance)}
+                                className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-all shadow-sm shadow-blue-100"
+                                title="Edit overtime hours"
+                              >
+                                <FaEdit size={12} />
+                              </button>
+                            )}
+                            {isAdmin && (
+                              <button
+                                onClick={() => setDeleteModal({ isOpen: true, attendance })}
+                                className="w-7 h-7 rounded-lg bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center transition-all shadow-sm shadow-rose-100"
+                                title="Delete record"
+                              >
+                                <MdDelete size={16} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ));
@@ -290,6 +323,25 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
         onClose={() => setOvertimeHoursModal({ isOpen: false, attendance: null })}
         attendance={overtimeHoursModal.attendance}
         onUpdate={handleOvertimeHoursUpdate}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, attendance: null })}
+        onConfirm={handleDelete}
+        title="Delete Attendance Record"
+        message="Are you sure you want to delete this attendance record? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleteLoading}
+        itemDetails={deleteModal.attendance ? {
+          "Employee": deleteModal.attendance.employee_name || deleteModal.attendance.employee_id,
+          "Date": formatDate(deleteModal.attendance.date),
+          "Status": deleteModal.attendance.status,
+          "Department": deleteModal.attendance.department || "—"
+        } : null}
       />
     </>
   );

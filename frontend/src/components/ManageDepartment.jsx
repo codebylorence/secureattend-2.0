@@ -651,11 +651,6 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                       >
                         {leaderFullName}
                         {leader.employee?.employee_id ? ` (${leader.employee.employee_id})` : ""}
-                        {isAssignedElsewhere
-                          ? ` — assigned to ${leaderDept}`
-                          : leaderDept && leaderDept !== "No Department"
-                          ? ` — ${leaderDept}`
-                          : ""}
                       </option>
                     );
                   })}

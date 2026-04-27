@@ -5,6 +5,10 @@ import {
   getTodayAttendances,
   createTestAttendance,
   clearTestAttendance,
+  deleteAttendanceRecord,
+  getArchivedAttendances,
+  restoreAttendanceRecord,
+  permanentlyDeleteAttendanceRecord,
   assignOvertime,
   removeOvertime,
   getOvertimeAssignments,
@@ -32,8 +36,12 @@ router.get("/health", (req, res) => {
 router.post("/", recordAttendance);
 router.get("/", authenticateToken, requireAttendanceAccess, getAttendances);
 router.get("/today", authenticateToken, requireAttendanceAccess, getTodayAttendances);
-router.post("/test", authenticateToken, requireAdmin, createTestAttendance); // Test endpoint - admin only
-router.delete("/test", authenticateToken, requireAdmin, clearTestAttendance); // Clear test data - admin only
+router.post("/test", authenticateToken, requireAdmin, createTestAttendance);
+router.delete("/test", authenticateToken, requireAdmin, clearTestAttendance);
+router.get("/archived", authenticateToken, requireAdmin, getArchivedAttendances);
+router.put("/:id/restore", authenticateToken, requireAdmin, restoreAttendanceRecord);
+router.delete("/:id/permanent", authenticateToken, requireAdmin, permanentlyDeleteAttendanceRecord);
+router.delete("/:id", authenticateToken, requireAdmin, deleteAttendanceRecord);
 
 // Biometric sync endpoint - no auth required (called by biometric app)
 router.post("/sync-from-biometric", syncAttendanceFromBiometric);

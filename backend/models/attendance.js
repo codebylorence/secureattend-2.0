@@ -37,6 +37,19 @@ const Attendance = sequelize.define("Attendance", {
     allowNull: true,
     comment: "Number of overtime hours assigned to this employee for this date"
   },
+  is_archived: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
+  archived_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  archived_by: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 });
 
 export default Attendance;

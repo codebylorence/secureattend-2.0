@@ -242,7 +242,6 @@
                     <StackPanel Grid.Row="1" VerticalAlignment="Bottom">
                         <Separator Background="#E2E8F0" Margin="0,0,0,16"/>
                         <Button x:Name="RefreshBtn" Content="Refresh Data" Click="RefreshBtn_Click" Margin="0,0,0,8"/>
-                        <Button x:Name="ExportBtn" Content="Export CSV" Click="ExportBtn_Click" Background="#10B981" Foreground="White" BorderThickness="0"/>
                     </StackPanel>
                 </Grid>
             </Border>

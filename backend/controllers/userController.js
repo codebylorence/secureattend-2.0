@@ -45,7 +45,8 @@ export const getUserProfile = async (req, res) => {
 // 👥 GET TEAM LEADERS
 export const getTeamLeaders = async (req, res) => {
   try {
-    const teamLeaders = await User.findAll({
+    // Get team leaders from Users table (have accounts)
+    const teamLeaderUsers = await User.findAll({
       where: { role: "teamleader" },
       attributes: ["id", "username"],
       include: [
@@ -57,7 +58,35 @@ export const getTeamLeaders = async (req, res) => {
       ],
     });
 
-    res.status(200).json(teamLeaders);
+    // Also get employees with position "Team Leader" who may not have a user account
+    const teamLeaderEmployees = await Employee.findAll({
+      where: { position: "Team Leader", status: "Active" },
+    });
+
+    // Build a set of employee IDs already covered by user accounts
+    const coveredEmployeeIds = new Set(
+      teamLeaderUsers
+        .filter(u => u.employee)
+        .map(u => u.employee.employee_id)
+    );
+
+    // Add employees without user accounts as synthetic entries
+    const syntheticLeaders = teamLeaderEmployees
+      .filter(emp => !coveredEmployeeIds.has(emp.employee_id))
+      .map(emp => ({
+        id: `emp_${emp.id}`, // synthetic id so frontend can distinguish
+        username: emp.employee_id,
+        employee: {
+          employee_id: emp.employee_id,
+          firstname: emp.firstname,
+          lastname: emp.lastname,
+          department: emp.department,
+        },
+      }));
+
+    const result = [...teamLeaderUsers, ...syntheticLeaders];
+
+    res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching team leaders:", error);
     res.status(500).json({ error: "Failed to fetch team leaders" });

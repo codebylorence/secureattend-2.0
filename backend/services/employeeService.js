@@ -187,28 +187,40 @@ export const updateEmployee = async (id, updates) => {
   // If position changed, update the associated user role (but not password)
   if (positionChanged) {
     try {
+      let newRole = "employee"; // Default role
+      
+      // Determine new role based on position
+      if (updates.position === "Team Leader") {
+        newRole = "teamleader";
+      } else if (updates.position === "Supervisor") {
+        newRole = "supervisor";
+      } else if (updates.position === "Warehouse Admin" || 
+                 updates.position === "Warehouse Manager" ||
+                 updates.position === "Inventory Manager") {
+        newRole = "warehouseadmin";
+      }
+
       const user = await User.findOne({ where: { employeeId: id } });
       
       if (user) {
-        let newRole = "employee"; // Default role
-        
-        // Determine new role based on position
-        if (updates.position === "Team Leader") {
-          newRole = "teamleader";
-        } else if (updates.position === "Supervisor") {
-          newRole = "supervisor";
-        } else if (updates.position === "Warehouse Admin" || 
-                   updates.position === "Warehouse Manager" ||
-                   updates.position === "Inventory Manager") {
-          newRole = "warehouseadmin";
-        }
-        
-        // Update user role only (keep existing password)
         await user.update({ role: newRole });
         console.log(`✅ Updated user role for ${employee.employee_id}: ${user.role} → ${newRole}`);
+      } else {
+        // No user account exists — create one so the role is properly assigned
+        console.log(`⚠️ No user account found for employee ${employee.employee_id} (DB id: ${id}). Creating one with role: ${newRole}`);
+        const defaultPassword = await bcrypt.hash(employee.employee_id, 10); // default password = employee_id
+        await User.create({
+          username: employee.employee_id,
+          password: defaultPassword,
+          role: newRole,
+          employeeId: id,
+          firstname: employee.firstname,
+          lastname: employee.lastname,
+        });
+        console.log(`✅ Created user account for ${employee.employee_id} with role: ${newRole}`);
       }
     } catch (error) {
-      console.error(`❌ Failed to update user role for ${employee.employee_id}:`, error);
+      console.error(`❌ Failed to update/create user role for ${employee.employee_id}:`, error);
       // Don't throw error - employee update should still succeed
     }
   }

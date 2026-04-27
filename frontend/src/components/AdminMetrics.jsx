@@ -174,8 +174,13 @@ export default function AdminMetrics() {
         att.status === "Overtime"
       ).length;
 
-      // Calculate total employees who clocked in today (Present + Late + Overtime)
-      const totalClockedIn = present + late + overtime;
+      // Count missed clock-out employees (they clocked in but forgot to clock out)
+      const missedClockout = filteredAttendances.filter(att =>
+        att.status === "Missed Clock-out"
+      ).length;
+
+      // Calculate total employees who clocked in today (Present + Late + Overtime + Missed Clock-out)
+      const totalClockedIn = present + late + overtime + missedClockout;
 
       // Count absent - only count actual "Absent" status records
       // Stale records are automatically cleaned up when schedules are assigned

@@ -376,7 +376,7 @@ export const getAttendances = async (req, res) => {
   try {
     const { date, employee_id, start_date, end_date } = req.query;
     
-    let whereClause = {};
+    let whereClause = { is_archived: false };
     
     // If user is an employee, they can only see their own attendance
     if (req.user.role === 'employee') {
@@ -476,6 +476,99 @@ export const clearTestAttendance = async (req, res) => {
   }
 };
 
+export const deleteAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`🗑️ Archive request for attendance record ID: ${id}`);
+
+    const record = await Attendance.findByPk(id);
+    if (!record) {
+      return res.status(404).json({ error: "Attendance record not found" });
+    }
+
+    // Soft delete — move to archive
+    const archivedBy = req.user?.username || req.user?.id || "admin";
+    await record.update({
+      is_archived: true,
+      archived_at: new Date(),
+      archived_by: archivedBy,
+    });
+
+    console.log(`✅ Archived attendance record ID: ${id} by ${archivedBy}`);
+    res.status(200).json({ message: "Attendance record archived successfully" });
+  } catch (error) {
+    console.error("❌ Error archiving attendance record:", error);
+    res.status(500).json({ error: "Failed to archive attendance record" });
+  }
+};
+
+export const getArchivedAttendances = async (req, res) => {
+  try {
+    const records = await Attendance.findAll({
+      where: { is_archived: true },
+      include: [
+        {
+          model: Employee,
+          as: 'employee',
+          attributes: ['employee_id', 'firstname', 'lastname', 'department', 'position'],
+          required: false,
+        }
+      ],
+      order: [['archived_at', 'DESC']],
+    });
+
+    const formatted = records.map(record => {
+      const data = record.toJSON();
+      const emp = data.employee;
+      let employeeName = data.employee_id;
+      if (emp?.firstname && emp?.lastname) employeeName = `${emp.firstname} ${emp.lastname}`;
+      else if (emp?.firstname) employeeName = emp.firstname;
+      return {
+        ...data,
+        employee_name: employeeName,
+        department: emp?.department || 'N/A',
+        position: emp?.position || 'N/A',
+      };
+    });
+
+    res.status(200).json(formatted);
+  } catch (error) {
+    console.error("❌ Error fetching archived attendances:", error);
+    res.status(500).json({ error: "Failed to fetch archived records" });
+  }
+};
+
+export const restoreAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const record = await Attendance.findByPk(id);
+    if (!record) return res.status(404).json({ error: "Record not found" });
+    if (!record.is_archived) return res.status(400).json({ error: "Record is not archived" });
+
+    await record.update({ is_archived: false, archived_at: null, archived_by: null });
+    console.log(`✅ Restored attendance record ID: ${id}`);
+    res.status(200).json({ message: "Attendance record restored successfully" });
+  } catch (error) {
+    console.error("❌ Error restoring attendance record:", error);
+    res.status(500).json({ error: "Failed to restore attendance record" });
+  }
+};
+
+export const permanentlyDeleteAttendanceRecord = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const record = await Attendance.findByPk(id);
+    if (!record) return res.status(404).json({ error: "Record not found" });
+
+    await record.destroy();
+    console.log(`✅ Permanently deleted attendance record ID: ${id}`);
+    res.status(200).json({ message: "Attendance record permanently deleted" });
+  } catch (error) {
+    console.error("❌ Error permanently deleting attendance record:", error);
+    res.status(500).json({ error: "Failed to permanently delete attendance record" });
+  }
+};
+
 export const createTestAttendance = async (req, res) => {
   try {
     // Use timezone-aware date
@@ -542,7 +635,7 @@ export const getTodayAttendances = async (req, res) => {
     
     console.log(`📅 Fetching today's attendances for date: ${today}`);
     
-    let whereClause = { date: today };
+    let whereClause = { date: today, is_archived: false };
     
     // If user is an employee, they can only see their own attendance
     if (req.user.role === 'employee') {
@@ -651,38 +744,22 @@ export const assignOvertime = async (req, res) => {
           continue;
         }
 
-        // Check if employee has already clocked in AND clocked out for their regular shift today
+        // Check if employee has clocked in today (with or without clock out)
         const todayAttendance = await Attendance.findOne({
           where: {
             employee_id: empId,
             date: assignmentDate,
             status: {
-              [Op.in]: ["Present", "Late"] // Must have completed regular shift
+              [Op.in]: ["Present", "Late"]
             },
             clock_in: {
               [Op.not]: null
-            },
-            clock_out: {
-              [Op.not]: null // Must have clocked out before overtime can be assigned
             }
           }
         });
 
         if (!todayAttendance) {
-          // Check if they clocked in but haven't clocked out yet
-          const clockedInOnly = await Attendance.findOne({
-            where: {
-              employee_id: empId,
-              date: assignmentDate,
-              status: { [Op.in]: ["Present", "Late"] },
-              clock_in: { [Op.not]: null },
-              clock_out: null
-            }
-          });
-          const errorMsg = clockedInOnly
-            ? "Employee must clock out from regular shift before overtime can be assigned"
-            : "Employee must clock in and clock out for regular shift before overtime assignment";
-          results.push({ employee_id: empId, success: false, error: errorMsg });
+          results.push({ employee_id: empId, success: false, error: "Employee must clock in for their regular shift before overtime can be assigned" });
           errorCount++;
           continue;
         }
@@ -809,8 +886,8 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     
     console.log(`📅 [OVERTIME] Fetching overtime eligible employees for ${today} (${todayWeekday}) in timezone ${timezone}`);
     
-    // Step 1: Get all employees who have clocked in AND clocked out today (Present or Late)
-    console.log(`🔍 [OVERTIME] Step 1: Querying attendances for date=${today}, status IN (Present, Late), clock_in NOT NULL, clock_out NOT NULL`);
+    // Step 1: Get all employees who have clocked in today (Present or Late), with or without clock out
+    console.log(`🔍 [OVERTIME] Step 1: Querying attendances for date=${today}, status IN (Present, Late), clock_in NOT NULL`);
     
     const todayAttendances = await Attendance.findAll({
       where: {
@@ -820,22 +897,19 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
         },
         clock_in: {
           [Op.not]: null
-        },
-        clock_out: {
-          [Op.not]: null
         }
       }
     });
 
-    console.log(`📊 [OVERTIME] Found ${todayAttendances.length} employees who clocked in and out today`);
+    console.log(`📊 [OVERTIME] Found ${todayAttendances.length} employees who clocked in today`);
     if (todayAttendances.length > 0) {
       todayAttendances.forEach(a => {
-        console.log(`   👤 ${a.employee_id}: ${a.status}, in: ${a.clock_in}, out: ${a.clock_out}`);
+        console.log(`   👤 ${a.employee_id}: ${a.status}, in: ${a.clock_in}, out: ${a.clock_out || 'not yet'}`);
       });
     }
 
     if (todayAttendances.length === 0) {
-      console.log(`⚠️ [OVERTIME] No employees have completed their shift today (clocked in + out), returning empty array`);
+      console.log(`⚠️ [OVERTIME] No employees have clocked in today, returning empty array`);
       console.log('='.repeat(80));
       return res.status(200).json([]);
     }
@@ -843,7 +917,6 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     // Step 2: Get employee IDs who clocked in
     const clockedInEmployeeIds = todayAttendances.map(att => att.employee_id);
     console.log(`📋 [OVERTIME] Step 2: Clocked in employee IDs (${clockedInEmployeeIds.length}):`, clockedInEmployeeIds);
-
     // Step 3: Check if already has overtime status
     console.log(`🔍 [OVERTIME] Step 3: Checking for existing overtime records...`);
     const employeesWithoutOvertime = [];

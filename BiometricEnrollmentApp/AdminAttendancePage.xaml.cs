@@ -63,19 +63,6 @@ namespace BiometricEnrollmentApp
             RefreshAttendanceData();
         }
 
-        private void ExportBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // TODO: Implement export functionality
-                MessageBox.Show("Export functionality will be implemented here.", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Export error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
         private void RefreshAttendanceData()
         {
             RefreshAttendanceData(null, null);
