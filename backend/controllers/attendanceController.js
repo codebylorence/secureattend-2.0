@@ -487,7 +487,15 @@ export const deleteAttendanceRecord = async (req, res) => {
     }
 
     // Soft delete — move to archive
-    const archivedBy = req.user?.username || req.user?.id || "admin";
+    // Look up the actual username from the database for a readable audit trail
+    let archivedBy = "admin";
+    try {
+      const { default: User } = await import("../models/user.js");
+      const user = await User.findByPk(req.user?.id, { attributes: ["username"] });
+      archivedBy = user?.username || req.user?.username || String(req.user?.id) || "admin";
+    } catch {
+      archivedBy = req.user?.username || String(req.user?.id) || "admin";
+    }
     await record.update({
       is_archived: true,
       archived_at: new Date(),

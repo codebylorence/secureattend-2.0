@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FaArchive, FaSearch, FaTrashAlt, FaUndo } from "react-icons/fa";
+import { FaArchive, FaSearch } from "react-icons/fa";
 import { MdDelete, MdRestoreFromTrash } from "react-icons/md";
 import {
   getArchivedAttendances,
@@ -53,8 +53,7 @@ export default function AttendanceArchive() {
           r.employee_name?.toLowerCase().includes(q) ||
           r.employee_id?.toLowerCase().includes(q) ||
           r.department?.toLowerCase().includes(q) ||
-          r.status?.toLowerCase().includes(q) ||
-          r.archived_by?.toLowerCase().includes(q)
+          r.status?.toLowerCase().includes(q)
       )
     );
     setCurrentPage(1);
@@ -118,7 +117,6 @@ export default function AttendanceArchive() {
           Date: formatDate(record.date),
           Status: record.status,
           Department: record.department || "—",
-          "Archived by": record.archived_by || "—",
           "Archived at": record.archived_at
             ? new Date(record.archived_at).toLocaleString()
             : "—",
@@ -170,7 +168,6 @@ export default function AttendanceArchive() {
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Clock Out</th>
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Department</th>
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Archived By</th>
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Archived At</th>
                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
               </tr>
@@ -179,7 +176,7 @@ export default function AttendanceArchive() {
               {loading ? (
                 [...Array(5)].map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {[...Array(9)].map((__, j) => (
+                    {[...Array(8)].map((__, j) => (
                       <td key={j} className="px-5 py-4">
                         <div className="h-3 bg-gray-100 rounded w-20" />
                       </td>
@@ -188,7 +185,7 @@ export default function AttendanceArchive() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-16 text-center">
+                  <td colSpan={8} className="px-5 py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-gray-400">
                       <FaArchive size={28} className="text-gray-200" />
                       <p className="font-medium text-gray-500">
@@ -227,9 +224,6 @@ export default function AttendanceArchive() {
                         <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${statusClass}`}>
                           {record.status}
                         </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-gray-500 text-xs whitespace-nowrap">
-                        {record.archived_by || "—"}
                       </td>
                       <td className="px-5 py-3.5 text-gray-500 text-xs whitespace-nowrap">
                         {record.archived_at
