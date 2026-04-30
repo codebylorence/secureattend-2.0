@@ -7,7 +7,7 @@ import OvertimeHoursModal from "./OvertimeHoursModal";
 import ConfirmationModal from "./ConfirmationModal";
 import { toast } from "react-toastify";
 
-export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", startDate = "", endDate = "" }) {
+export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", startDate = "", endDate = "", statusFilter = "", shiftFilter = "" }) {
   const [attendances, setAttendances] = useState([]);
   const [filteredAttendances, setFilteredAttendances] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,9 +62,19 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
       );
     }
 
+    // Apply status filter
+    if (statusFilter) {
+      filtered = filtered.filter(attendance => attendance.status === statusFilter);
+    }
+
+    // Apply shift filter
+    if (shiftFilter) {
+      filtered = filtered.filter(attendance => attendance.shift_name === shiftFilter);
+    }
+
     setFilteredAttendances(filtered);
     setCurrentPage(1); // Reset to first page when filtering
-  }, [attendances, zoneFilter, searchTerm, startDate, endDate]);
+  }, [attendances, zoneFilter, searchTerm, startDate, endDate, statusFilter, shiftFilter]);
 
   const fetchData = async () => {
     try {
@@ -140,6 +150,7 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shift</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock In</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock Out</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
@@ -151,11 +162,11 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="px-6 py-4 text-center text-gray-500">Loading...</td>
+                    <td colSpan="9" className="px-6 py-4 text-center text-gray-500">Loading...</td>
                   </tr>
                 ) : filteredAttendances.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
+                    <td colSpan="9" className="px-6 py-4 text-center text-gray-500">
                       {zoneFilter !== "All Zone" || searchTerm || startDate || endDate 
                         ? "No attendance records match your filters" 
                         : "No attendance records found"
@@ -169,8 +180,28 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                     const paginatedAttendances = filteredAttendances.slice(startIndex, endIndex);
                     return paginatedAttendances.map((attendance) => (
                       <tr key={attendance.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(attendance.date)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div>{formatDate(attendance.date)}</div>
+                          {attendance.holiday_name && (
+                            <div className={`text-[10px] font-semibold mt-0.5 px-1.5 py-0.5 rounded inline-block ${
+                              attendance.holiday_type === 'Regular Holiday'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              🎌 {attendance.holiday_name}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{attendance.employee_name || attendance.employee_id}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {attendance.shift_name && attendance.shift_name !== '—' ? (
+                            <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                              {attendance.shift_name}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_in)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_out)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

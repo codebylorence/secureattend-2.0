@@ -167,6 +167,42 @@ export const notifySupervisors = async (
 };
 
 /**
+ * Send notification to ALL users (every role) — used for company-wide announcements like holidays
+ */
+export const notifyAllUsers = async (title, message, type, relatedId = null, sentBy = "system", io = null) => {
+  try {
+    const users = await User.findAll({ attributes: ["id"] });
+    console.log(`📢 Notifying all ${users.length} user(s): ${title}`);
+
+    const notifications = await Promise.all(
+      users.map((user) =>
+        Notification.create({
+          user_id: user.id,
+          title,
+          message,
+          type,
+          related_id: relatedId,
+          created_by: sentBy,
+          is_read: false,
+        })
+      )
+    );
+
+    if (io && notifications.length > 0) {
+      users.forEach((user, index) => {
+        io.emit(`notification:${user.id}`, notifications[index]);
+      });
+      console.log(`📡 Emitted ${notifications.length} holiday notification(s) via Socket.IO`);
+    }
+
+    return notifications;
+  } catch (error) {
+    console.error("❌ Error in notifyAllUsers:", error);
+    throw error;
+  }
+};
+
+/**
  * Send notification to all admins
  */
 export const notifyAdmins = async (

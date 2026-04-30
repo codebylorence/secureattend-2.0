@@ -622,6 +622,14 @@ namespace BiometricEnrollmentApp.Services
                 else
                 {
                     // Regular shift (not overnight)
+                    // If current time is past midnight (00:00-05:59) but shift end was in the evening,
+                    // the shift has ended on the previous day — deny clock-out
+                    if (currentTime.Hours < 6 && endTime.Hours >= 18)
+                    {
+                        message = $"Clock-out not allowed. Shift ended at {scheduleCheck.EndTime} (it is now past midnight)";
+                        return false;
+                    }
+                    
                     // Check if current time is before shift end + grace period
                     if (currentTime <= endTimeWithGrace)
                     {
@@ -697,7 +705,8 @@ namespace BiometricEnrollmentApp.Services
                 if (isMissedClockout)
                 {
                     finalStatus = "Missed Clock-out";
-                    LogHelper.Write($"⚠️ Marking session {sessionId} as 'Missed Clock-out' for employee {employeeId}");
+                    total = 0; // Do not record hours for missed clock-out
+                    LogHelper.Write($"⚠️ Marking session {sessionId} as 'Missed Clock-out' for employee {employeeId} — hours cleared");
                 }
 
                 cmd.CommandText = @"
@@ -3159,9 +3168,6 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                // Calculate hours worked from clock-in to shift end
-                double hoursWorked = CalculateHoursToShiftEnd(sessionId, shiftEndTime);
-
                 using var conn = new SqliteConnection(_connString);
                 conn.Open();
 
@@ -3181,14 +3187,13 @@ namespace BiometricEnrollmentApp.Services
                 }
                 reader.Close();
 
-                // Update session status
+                // Update session status — do NOT record hours for missed clock-out
                 cmd.CommandText = @"
                     UPDATE AttendanceSessions
-                    SET status = 'Missed Clock-out', total_hours = $hours
+                    SET status = 'Missed Clock-out', total_hours = 0
                     WHERE id = $id
                 ";
                 cmd.Parameters.Clear();
-                cmd.Parameters.AddWithValue("$hours", hoursWorked);
                 cmd.Parameters.AddWithValue("$id", sessionId);
 
                 cmd.ExecuteNonQuery();
@@ -3196,8 +3201,8 @@ namespace BiometricEnrollmentApp.Services
                 // Add to sync queue if we have employee ID
                 if (!string.IsNullOrEmpty(employeeId) && !string.IsNullOrEmpty(date))
                 {
-                    AddToSyncQueue(employeeId, sessionId, "missed_clockout", $"{{\"date\":\"{date}\",\"status\":\"Missed Clock-out\",\"hours\":{hoursWorked}}}");
-                    LogHelper.Write($"✅ Marked session {sessionId} as Missed Clock-out for {employeeId} on {date}");
+                    AddToSyncQueue(employeeId, sessionId, "missed_clockout", $"{{\"date\":\"{date}\",\"status\":\"Missed Clock-out\",\"hours\":0}}");
+                    LogHelper.Write($"✅ Marked session {sessionId} as Missed Clock-out for {employeeId} on {date} — hours cleared");
                 }
             }
             catch (Exception ex)

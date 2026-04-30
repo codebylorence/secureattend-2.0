@@ -28,6 +28,7 @@ import TeamMembers from "../pages/TeamMembers";
 import AttendanceReports from "../pages/AttendanceReports";
 import EmployeeProfile from "../pages/EmployeeProfile";
 import AttendanceArchive from "../pages/AttendanceArchive";
+import HolidayManagement from "../pages/HolidayManagement";
 
 import AdminProfile from "../pages/AdminProfile";
 function LoginRedirect() {
@@ -112,6 +113,7 @@ export default function AppRouter() {
             {/* Admin-only routes */}
             <Route element={<PrivateRoute allowedRole="admin" />}>
               <Route path="/admin/attendance-archive" element={<AttendanceArchive />} />
+              <Route path="/admin/holidays" element={<HolidayManagement />} />
             </Route>
             
             {/* HR Admin-only routes */}

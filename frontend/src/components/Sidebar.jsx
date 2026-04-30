@@ -19,7 +19,8 @@ import {
   FaTimes,
   FaSignOutAlt,
   FaUserCircle,
-  FaArchive
+  FaArchive,
+  FaUmbrellaBeach
 } from "react-icons/fa";
 
 // --- UI Helper: Custom Tooltip for Collapsed State ---
@@ -124,6 +125,7 @@ export default function Sidebar({ role = "admin", isCollapsed, onToggle }) {
         ...(role === "admin" || role === "supervisor" ? [{ key: "reports", label: "Reports", icon: FaChartBar, path: "/admin/attendance-reports" }] : []),
         ...(role === "admin" ? [
           { key: "archive", label: "Archive", icon: FaArchive, path: "/admin/attendance-archive" },
+          { key: "holidays", label: "Holidays", icon: FaUmbrellaBeach, path: "/admin/holidays" },
           { key: "positions", label: "Positions", icon: FaBriefcase, path: "/admin/positions" },
           { key: "registrations", label: "Registrations", icon: FaUserPlus, path: "/admin/registrations" },
           { key: "settings", label: "Settings", icon: FaCog, path: "/admin/settings" }

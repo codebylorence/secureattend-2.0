@@ -91,13 +91,6 @@ export const addTemplate = async (req, res) => {
           error: `Cannot schedule ${department}: No active team leader assigned to this zone` 
         });
       }
-
-      // Check if team leader has biometric enrollment
-      if (!teamLeader.has_fingerprint) {
-        return res.status(400).json({ 
-          error: `Cannot schedule ${department}: Team leader ${teamLeader.firstname} ${teamLeader.lastname} has no biometric enrollment` 
-        });
-      }
     }
 
     console.log("📝 Creating template with data:", {

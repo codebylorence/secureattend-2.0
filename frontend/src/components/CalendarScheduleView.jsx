@@ -17,6 +17,7 @@ import {
 } from "../api/ShiftTemplateApi";
 import { fetchDepartments } from "../api/DepartmentApi";
 import { fetchEmployees, getFingerprintStatus } from "../api/EmployeeApi";
+import { getHolidays } from "../api/HolidayApi";
 import { confirmAction } from "../utils/confirmToast.jsx";
 import { formatTime24Short } from "../utils/timeFormat";
 
@@ -773,15 +774,6 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
               continue;
             }
             
-            if (!fingerprintStatus[teamLeader.employee_id]) {
-              results.push({ 
-                success: false, 
-                department, 
-                error: 'Team leader no biometric' 
-              });
-              continue;
-            }
-            
             const existingTemplates = await getTemplates();
             const existingZoneShift = existingTemplates.find(template => 
               template.specific_date === dateStr &&
@@ -1019,7 +1011,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                               type="button"
                               onClick={() => {
                                 const enabledZoneNames = availableDepartments
-                                  .filter(dept => employees.some(emp => emp.department === dept.name && emp.position === 'Team Leader'))
+                                  .filter(dept => dept.manager && dept.manager !== 'No Manager' && dept.manager.trim() !== '')
                                   .map(dept => dept.name);
                                 setFormData(prev => ({
                                   ...prev,
@@ -1055,12 +1047,9 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                             {availableDepartments.map(dept => {
                               const isSelected = formData.departments.includes(dept.name);
                               
-                              // Disable zone if it has no team leader assigned
-                              const teamLeader = employees.find(emp => 
-                                emp.department === dept.name && emp.position === 'Team Leader'
-                              );
-                              const hasTeamLeader = !!teamLeader;
-                              const isDisabled = !hasTeamLeader;
+                              // Disable zone if the department has no manager assigned
+                              const hasManager = dept.manager && dept.manager !== 'No Manager' && dept.manager.trim() !== '';
+                              const isDisabled = !hasManager;
                               
                               return (
                                 <label 
@@ -1994,6 +1983,8 @@ export default function CalendarScheduleView() {
   const [editingShiftIndex, setEditingShiftIndex] = useState(null);
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState([]);
+  // Holiday map: "YYYY-MM-DD" -> { name, type }
+  const [holidayMap, setHolidayMap] = useState({});
 
   // Get user role
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -2005,6 +1996,7 @@ export default function CalendarScheduleView() {
     fetchDepartmentsData();
     fetchShiftTemplatesData();
     fetchEmployeesData();
+    fetchHolidaysData();
   }, []);
 
   useEffect(() => {
@@ -2096,6 +2088,24 @@ export default function CalendarScheduleView() {
     }
   };
 
+  const fetchHolidaysData = async () => {
+    try {
+      // Fetch current year + next year to cover calendar navigation
+      const currentYear = new Date().getFullYear();
+      const [thisYear, nextYear] = await Promise.all([
+        getHolidays(currentYear),
+        getHolidays(currentYear + 1),
+      ]);
+      const map = {};
+      [...thisYear, ...nextYear].forEach(h => {
+        map[h.date] = h;
+      });
+      setHolidayMap(map);
+    } catch {
+      // Non-critical — calendar still works without holidays
+    }
+  };
+
   const generateCalendarEvents = useCallback(() => {
     const events = [];
     const shiftsByDate = {};
@@ -2167,6 +2177,16 @@ export default function CalendarScheduleView() {
     if (clickedDate < today) {
       toast.warning("Cannot schedule on past dates");
       return;
+    }
+
+    // Warn if the date is a holiday (but still allow scheduling)
+    const dateStr = info.dateStr || (() => {
+      const d = info.date;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const holiday = holidayMap[dateStr];
+    if (holiday) {
+      toast.info(`📅 Note: ${dateStr} is a ${holiday.type} — "${holiday.name}"`);
     }
     
     setSelectedDate(clickedDate);
@@ -2297,6 +2317,7 @@ export default function CalendarScheduleView() {
         <div className="w-full overflow-x-auto custom-scrollbar pb-2">
           <div className="min-w-[800px]">
             <FullCalendar
+              key={Object.keys(holidayMap).length}
               plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
               initialView="dayGridMonth"
               headerToolbar={{
@@ -2342,7 +2363,46 @@ export default function CalendarScheduleView() {
                 const cellDate = new Date(info.date);
                 if (cellDate < today) {
                   info.el.classList.add('fc-day-past');
-                  // Allow clicking on past dates to view schedules
+                }
+
+                // Inject holiday label if this date is a holiday
+                // Use local date string to avoid UTC offset shifting the date
+                const d = info.date;
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                const holiday = holidayMap[dateStr];
+                if (holiday) {
+                  // Color the cell background
+                  info.el.style.backgroundColor =
+                    holiday.type === 'Regular Holiday' ? '#fef2f2' : '#fffbeb';
+
+                  // Add a small label at the top of the cell
+                  const label = document.createElement('div');
+                  label.style.cssText = `
+                    font-size: 9px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    padding: 1px 5px;
+                    border-radius: 3px;
+                    margin: 2px 4px 0;
+                    display: inline-block;
+                    background: ${holiday.type === 'Regular Holiday' ? '#fee2e2' : '#fef3c7'};
+                    color: ${holiday.type === 'Regular Holiday' ? '#b91c1c' : '#92400e'};
+                    max-width: calc(100% - 8px);
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                  `;
+                  label.title = `${holiday.type}: ${holiday.name}`;
+                  label.textContent = `🎌 ${holiday.name}`;
+
+                  // Insert after the day number
+                  const dayTop = info.el.querySelector('.fc-daygrid-day-top');
+                  if (dayTop) {
+                    dayTop.insertAdjacentElement('afterend', label);
+                  } else {
+                    info.el.prepend(label);
+                  }
                 }
               }}
             />

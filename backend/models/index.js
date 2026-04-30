@@ -38,6 +38,38 @@ const runColumnMigrations = async () => {
     type: DataTypes.STRING,
     allowNull: true,
   });
+
+  // Holidays table (created if not exists)
+  try {
+    await sequelize.query(`
+      CREATE TABLE IF NOT EXISTS Holidays (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        date DATE NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        type ENUM('Regular Holiday','Special Non-Working Day') NOT NULL DEFAULT 'Regular Holiday',
+        createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    console.log("✅ Migration: Holidays table ready");
+  } catch (err) {
+    // PostgreSQL syntax
+    try {
+      await sequelize.query(`
+        CREATE TABLE IF NOT EXISTS "Holidays" (
+          id SERIAL PRIMARY KEY,
+          date DATE NOT NULL UNIQUE,
+          name VARCHAR(255) NOT NULL,
+          type VARCHAR(50) NOT NULL DEFAULT 'Regular Holiday',
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      console.log("✅ Migration: Holidays table ready (PostgreSQL)");
+    } catch (pgErr) {
+      console.error("❌ Migration error for Holidays table:", pgErr.message);
+    }
+  }
 };
 
 const syncDatabase = async () => {

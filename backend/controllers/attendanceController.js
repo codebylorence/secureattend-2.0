@@ -417,19 +417,60 @@ export const getAttendances = async (req, res) => {
           model: Employee,
           as: 'employee',
           attributes: ['employee_id', 'firstname', 'lastname', 'email', 'department', 'position'],
-          required: false // LEFT JOIN to include attendances even if employee is deleted
+          required: false
         }
       ],
       order: [['date', 'DESC'], ['clock_in', 'DESC']]
     });
 
-    // Format the response to include employee information at the top level
+    // Fetch shift names via a single raw JOIN query:
+    // Match attendance (employee_id + date) to employee_schedules where schedule_dates contains the date
+    const attendanceIds = attendances.map(a => a.id);
+    let shiftMap = {}; // attendance.id -> shift_name
+
+    if (attendances.length > 0) {
+      try {
+        // Build a list of (employee_id, date) pairs and query in one shot
+        const dialect = sequelize.getDialect();
+        const isPostgres = dialect === 'postgres';
+
+        // Use raw query to join Attendances with schedule_templates
+        // Schedules are stored in schedule_templates with assigned_employees JSON
+        const templateTable = isPostgres ? '"ScheduleTemplates"' : 'schedule_templates';
+        const attendancesTable = isPostgres ? '"Attendances"' : '`Attendances`';
+        const empMatch = isPostgres
+          ? `st.assigned_employees::text LIKE '%' || a.employee_id || '%'`
+          : `st.assigned_employees LIKE CONCAT('%', a.employee_id, '%')`;
+
+        const rows = await sequelize.query(`
+          SELECT a.id AS attendance_id,
+                 st.shift_name
+          FROM ${attendancesTable} a
+          LEFT JOIN ${templateTable} st
+            ON st.specific_date = a.date
+            AND ${empMatch}
+          WHERE a.id IN (:ids)
+        `, {
+          replacements: { ids: attendances.map(a => a.id) },
+          type: sequelize.QueryTypes.SELECT,
+        });
+
+        for (const row of rows) {
+          if (row.shift_name) {
+            shiftMap[row.attendance_id] = row.shift_name;
+          }
+        }
+      } catch (shiftErr) {
+        console.error('⚠️ Shift lookup failed (non-critical):', shiftErr.message);
+      }
+    }
+
+    // Format the response
     const formattedAttendances = attendances.map(attendance => {
       const attendanceData = attendance.toJSON();
       const employee = attendanceData.employee;
-      
-      // Get employee name (handle both formats)
-      let employeeName = attendanceData.employee_id; // Default to employee_id
+
+      let employeeName = attendanceData.employee_id;
       if (employee) {
         if (employee.firstname && employee.lastname) {
           employeeName = `${employee.firstname} ${employee.lastname}`;
@@ -443,12 +484,30 @@ export const getAttendances = async (req, res) => {
         employee_name: employeeName,
         employee_email: employee?.email || `${attendanceData.employee_id}@company.com`,
         department: employee?.department || 'N/A',
-        position: employee?.position || 'N/A'
+        position: employee?.position || 'N/A',
+        shift_name: shiftMap[attendanceData.id] || '—',
       };
     });
 
-    res.status(200).json(formattedAttendances);
-  } catch (error) {
+    // Enrich with holiday info for each unique date
+    try {
+      const { getHolidayMapForRange } = await import('../services/holidayService.js');
+      const dates = [...new Set(formattedAttendances.map(a => a.date))].sort();
+      if (dates.length > 0) {
+        const holidayMap = await getHolidayMapForRange(dates[0], dates[dates.length - 1]);
+        formattedAttendances.forEach(a => {
+          const h = holidayMap.get(a.date);
+          if (h) {
+            a.holiday_name = h.name;
+            a.holiday_type = h.type;
+          }
+        });
+      }
+    } catch (hErr) {
+      console.error('⚠️ Holiday enrichment failed (non-critical):', hErr.message);
+    }
+
+    res.status(200).json(formattedAttendances);  } catch (error) {
     console.error("❌ Error fetching attendances:", error);
     res.status(500).json({ error: "Failed to fetch attendances" });
   }

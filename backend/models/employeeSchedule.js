@@ -43,6 +43,23 @@ const EmployeeSchedule = sequelize.define("EmployeeSchedule", {
     allowNull: true,
     comment: "Employee ID of who assigned this (team leader or admin)"
   },
+  shift_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: "Name of the shift (e.g. Opening, Closing, Graveyard)"
+  },
+  start_time: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  end_time: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  department: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   status: {
     type: DataTypes.ENUM("Active", "Inactive"),
     defaultValue: "Active",
