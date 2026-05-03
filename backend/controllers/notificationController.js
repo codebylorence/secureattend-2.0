@@ -3,8 +3,34 @@ import {
   getUnreadCount,
   markAsRead as markAsReadService,
   markAllAsRead as markAllAsReadService,
-  deleteNotification
+  deleteNotification,
+  notifyAdmins,
 } from "../services/notificationService.js";
+
+// POST /api/notifications/report-generated
+export const notifyReportGenerated = async (req, res) => {
+  try {
+    const { reportType, generatedBy, details } = req.body;
+    const io = req.app.get("io");
+
+    const REPORT_LABELS = {
+      employee:   "Employee List",
+      attendance: "Attendance Report",
+      dtr:        "Daily Time Record (DTR)",
+    };
+
+    const label = REPORT_LABELS[reportType] || reportType;
+    const title = `📊 Report Generated: ${label}`;
+    const message = `${generatedBy} generated a ${label} report.${details ? ` ${details}` : ""}`;
+
+    await notifyAdmins(title, message, "general", null, generatedBy, io);
+
+    res.status(200).json({ message: "Admin notified" });
+  } catch (error) {
+    console.error("❌ Error sending report notification:", error);
+    res.status(500).json({ message: "Failed to notify admin" });
+  }
+};
 
 // GET /api/notifications/user/:userId
 export const getNotifications = async (req, res) => {

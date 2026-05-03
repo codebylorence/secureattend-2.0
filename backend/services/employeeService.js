@@ -30,6 +30,29 @@ export const createEmployee = async (employeeData) => {
     console.log("❌ Invalid Employee ID format:", employeeData.employee_id);
     throw new Error("Employee ID must be in format TSI00123 (TSI followed by 5 digits)");
   }
+
+  // ── One Team Leader per Zone rule ──────────────────────────────
+  const isTeamLeaderPosition = (pos) =>
+    pos && (pos.toLowerCase().includes('team leader') || pos.toLowerCase().includes('teamleader'));
+
+  if (isTeamLeaderPosition(employeeData.position)) {
+    const dept = employeeData.department;
+    if (dept && dept !== 'No Department' && dept !== 'Company-wide') {
+      const existing = await Employee.findOne({
+        where: {
+          department: dept,
+          position: 'Team Leader',
+          status: 'Active',
+        },
+      });
+      if (existing) {
+        throw new Error(
+          `Zone "${dept}" already has a Team Leader (${existing.firstname} ${existing.lastname}). Only one Team Leader is allowed per zone.`
+        );
+      }
+    }
+  }
+  // ──────────────────────────────────────────────────────────────
   
   // Handle both old and new data formats
   const processedData = { ...employeeData };
@@ -178,6 +201,33 @@ export const removeEmployee = async (id) => {
 export const updateEmployee = async (id, updates) => {
   const employee = await Employee.findByPk(id);
   if (!employee) return null;
+
+  // ── One Team Leader per Zone rule ──────────────────────────────
+  const isTeamLeaderPosition = (pos) =>
+    pos && (pos.toLowerCase().includes('team leader') || pos.toLowerCase().includes('teamleader'));
+
+  const newPosition = updates.position ?? employee.position;
+  const newDepartment = updates.department ?? employee.department;
+
+  if (isTeamLeaderPosition(newPosition)) {
+    const dept = newDepartment;
+    if (dept && dept !== 'No Department' && dept !== 'Company-wide') {
+      const existing = await Employee.findOne({
+        where: {
+          department: dept,
+          position: 'Team Leader',
+          status: 'Active',
+          id: { [Op.ne]: id }, // exclude the employee being edited
+        },
+      });
+      if (existing) {
+        throw new Error(
+          `Zone "${dept}" already has a Team Leader (${existing.firstname} ${existing.lastname}). Only one Team Leader is allowed per zone.`
+        );
+      }
+    }
+  }
+  // ──────────────────────────────────────────────────────────────
 
   // Check if position is being updated
   const positionChanged = updates.position && updates.position !== employee.position;

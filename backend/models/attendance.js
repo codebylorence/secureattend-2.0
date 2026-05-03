@@ -50,6 +50,12 @@ const Attendance = sequelize.define("Attendance", {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  is_permanently_deleted: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+    comment: "Tombstone flag - prevents biometric sync from recreating this record"
+  },
 });
 
 export default Attendance;

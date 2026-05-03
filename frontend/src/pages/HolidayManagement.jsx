@@ -104,6 +104,7 @@ export default function HolidayManagement() {
       month: "long", day: "numeric", year: "numeric",
     });
   };
+  
 
   const inputClass =
     "w-full px-3 py-2 text-sm border border-gray-200 bg-gray-50 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all";
@@ -113,15 +114,9 @@ export default function HolidayManagement() {
     <div className="w-full font-sans pt-15 sm:pt-10">
       {/* Header */}
       <div className="border-b-2 border-gray-200 pb-2 mb-6 pt-3 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-[21px] font-semibold text-gray-800 flex items-center gap-2">
-            <FaCalendarAlt className="text-red-500" />
-            Holiday Management
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Manage public holidays and special non-working days.
-          </p>
-        </div>
+      <div className=" border-gray-200 pt-3">
+        <h1 className="text-heading text-[21px] font-semibold">Holiday Management</h1>
+      </div>
         <div className="flex items-center gap-3">
           {/* Year selector */}
           <select

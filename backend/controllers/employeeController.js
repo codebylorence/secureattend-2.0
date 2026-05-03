@@ -344,10 +344,14 @@ export const getTeamMembers = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
+    const { Op } = await import("sequelize");
+
     const employees = await Employee.findAll({
       where: {
         department,
         status: "Active",
+        // Exclude team leaders — they manage the team, they are not assignable members
+        position: { [Op.notIn]: ["Team Leader"] },
       },
       include: [
         {

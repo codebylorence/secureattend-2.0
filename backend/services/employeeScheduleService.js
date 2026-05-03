@@ -209,6 +209,28 @@ export const assignScheduleToEmployee = async (scheduleData) => {
     throw new Error("days array is required and must not be empty");
   }
 
+  // For management roles, enforce 1 shift per day limit
+  if (isBiometricExempt) {
+    const existingSchedules = await EmployeeSchedule.findAll({
+      where: { employee_id, status: 'Active' }
+    });
+
+    const conflictingDates = [];
+    for (const schedule of existingSchedules) {
+      const existingDates = Array.isArray(schedule.days) ? schedule.days : [];
+      for (const date of days) {
+        if (existingDates.includes(date)) {
+          conflictingDates.push({ date, shift: schedule.shift_name });
+        }
+      }
+    }
+
+    if (conflictingDates.length > 0) {
+      const conflicts = conflictingDates.map(c => `${c.date} (${c.shift})`).join(', ');
+      throw new Error(`Management role employees can only have 1 shift per day. Conflicting dates: ${conflicts}`);
+    }
+  }
+
   console.log("✅ Validation passed, creating schedule...");
 
   // Create schedule with direct fields (no template needed)

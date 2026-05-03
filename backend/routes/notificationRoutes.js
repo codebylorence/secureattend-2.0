@@ -5,10 +5,14 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   removeNotification,
-  clearAllNotifications
+  clearAllNotifications,
+  notifyReportGenerated,
 } from "../controllers/notificationController.js";
 
 const router = express.Router();
+
+// POST /api/notifications/report-generated - Notify admins when a report is generated
+router.post("/report-generated", notifyReportGenerated);
 
 // GET /api/notifications/user/:userId - Get all notifications for a user
 router.get("/user/:userId", getNotifications);

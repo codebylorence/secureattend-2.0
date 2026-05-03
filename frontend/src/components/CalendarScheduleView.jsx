@@ -349,7 +349,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
     shift_name: "",
     start_time: "",
     end_time: "",
-    member_limit: 1
+    zoneLimits: {}   // { "Zone A": 5, "Zone B": 8, ... }
   });
   const [loading, setLoading] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
@@ -461,7 +461,19 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
   if (reassignShiftData) {
     existingAssignedZones = reassignShiftData.existingZones?.map(zone => zone.department) || [];
     existingAssignedRoles = reassignShiftData.existingRoles?.length > 0 ? ['Role-Based'] : [];
-    availableDepartments = departments.filter(dept => dept.name !== 'Role-Based');
+
+    // Zones already assigned to OTHER shifts on the same date must not appear
+    const zonesOnOtherShifts = daySchedules
+      .filter(schedule =>
+        schedule.department !== 'Role-Based' &&
+        schedule.shift_name !== reassignShiftData.shift_name
+      )
+      .map(schedule => schedule.department);
+
+    availableDepartments = departments.filter(dept =>
+      dept.name !== 'Role-Based' &&
+      !zonesOnOtherShifts.includes(dept.name)
+    );
   } else {
     scheduledDepts = daySchedules.map(schedule => schedule.department);
     availableDepartments = departments.filter(dept => 
@@ -647,10 +659,17 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
           
           for (const department of zoneDepartments) {
             try {
-              // Check if team leader exists and has fingerprint enrolled
-              const teamLeader = employees.find(emp => 
-                emp.department === department && emp.position === 'Team Leader'
-              );
+              // Find the assigned manager for this department, then locate their employee record
+              const deptRecord = departments.find(d => d.name === department);
+              const assignedManagerName = deptRecord?.manager;
+              const teamLeader = assignedManagerName
+                ? employees.find(emp => {
+                    const fullName = emp.firstname && emp.lastname
+                      ? `${emp.firstname} ${emp.lastname}`
+                      : emp.firstname || '';
+                    return fullName === assignedManagerName && emp.position === 'Team Leader';
+                  })
+                : employees.find(emp => emp.department === department && emp.position === 'Team Leader');
               
               if (!teamLeader) {
                 results.push({ 
@@ -690,11 +709,23 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                 end_time: formData.end_time,
                 department: department,
                 specific_date: dateStr,
-                member_limit: formData.member_limit,
+                member_limit: formData.zoneLimits[department] ?? null,
                 created_by: "admin"
               };
               
-              await createTemplate(templateData);
+              const newTemplate = await createTemplate(templateData);
+
+              // Auto-assign the department's team leader to the newly created template
+              try {
+                await assignEmployees({
+                  template_id: newTemplate.id,
+                  employee_ids: [teamLeader.employee_id],
+                  assigned_by: 'admin'
+                });
+              } catch (assignErr) {
+                console.warn(`⚠️ Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
+              }
+
               results.push({ success: true, action: 'added', item: department });
             } catch (error) {
               results.push({ success: false, action: 'added', item: department, error: error.message });
@@ -760,10 +791,17 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
         
         for (const department of zoneDepartments) {
           try {
-            // Check if team leader exists and has fingerprint enrolled
-            const teamLeader = employees.find(emp => 
-              emp.department === department && emp.position === 'Team Leader'
-            );
+            // Find the assigned manager for this department, then locate their employee record
+            const deptRecord = departments.find(d => d.name === department);
+            const assignedManagerName = deptRecord?.manager;
+            const teamLeader = assignedManagerName
+              ? employees.find(emp => {
+                  const fullName = emp.firstname && emp.lastname
+                    ? `${emp.firstname} ${emp.lastname}`
+                    : emp.firstname || '';
+                  return fullName === assignedManagerName && emp.position === 'Team Leader';
+                })
+              : employees.find(emp => emp.department === department && emp.position === 'Team Leader');
             
             if (!teamLeader) {
               results.push({ 
@@ -792,11 +830,25 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
               end_time: formData.end_time,
               department: department,
               specific_date: dateStr,
-              member_limit: formData.member_limit,
+              member_limit: formData.zoneLimits[department] ?? null,
               created_by: "admin"
             };
             
             const result = await createTemplate(templateData);
+
+            // Auto-assign the department's team leader to the newly created template
+            if (teamLeader) {
+              try {
+                await assignEmployees({
+                  template_id: result.id,
+                  employee_ids: [teamLeader.employee_id],
+                  assigned_by: 'admin'
+                });
+              } catch (assignErr) {
+                console.warn(`⚠️ Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
+              }
+            }
+
             results.push({ success: true, department, result });
           } catch (error) {
             results.push({ success: false, department, error: error.message });
@@ -1043,46 +1095,73 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                             {reassignShiftData ? "No additional zones available." : "All departments scheduled."}
                           </div>
                         ) : (
-                          <div className="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar pr-1">
+                          <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
                             {availableDepartments.map(dept => {
                               const isSelected = formData.departments.includes(dept.name);
-                              
-                              // Disable zone if the department has no manager assigned
                               const hasManager = dept.manager && dept.manager !== 'No Manager' && dept.manager.trim() !== '';
                               const isDisabled = !hasManager;
-                              
+                              const zoneLimit = formData.zoneLimits[dept.name] ?? '';
+
                               return (
-                                <label 
-                                  key={dept.id} 
+                                <div
+                                  key={dept.id}
                                   className={`flex items-center gap-3 p-3 border-2 rounded-lg transition-all ${
-                                    isDisabled 
-                                      ? 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed' 
-                                      : isSelected 
-                                        ? 'border-blue-500 bg-blue-50/30 cursor-pointer' 
-                                        : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50 cursor-pointer'
+                                    isDisabled
+                                      ? 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed'
+                                      : isSelected
+                                        ? 'border-blue-500 bg-blue-50/30'
+                                        : 'border-gray-100 hover:border-blue-200 hover:bg-gray-50'
                                   }`}
                                   title={isDisabled ? 'No team leader assigned to this zone' : ''}
                                 >
+                                  {/* Checkbox */}
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={() => handleDepartmentToggle(dept.name)}
                                     disabled={isDisabled}
-                                    className="text-blue-600 focus:ring-blue-500 w-4 h-4 rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="text-blue-600 focus:ring-blue-500 w-4 h-4 rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                                   />
-                                  <div className="flex-1">
+
+                                  {/* Zone name */}
+                                  <div className="flex-1 min-w-0">
                                     <span className={`text-sm font-semibold ${
                                       isDisabled ? 'text-gray-400' : isSelected ? 'text-blue-900' : 'text-gray-700'
                                     }`}>
                                       {dept.name}
                                     </span>
                                     {isDisabled && (
-                                      <div className="text-xs text-red-500 mt-1">
-                                        No team leader assigned
-                                      </div>
+                                      <div className="text-xs text-red-500 mt-0.5">No team leader assigned</div>
                                     )}
                                   </div>
-                                </label>
+
+                                  {/* Per-zone limit input — only visible when zone is selected */}
+                                  {isSelected && (
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                                        Limit
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={zoneLimit}
+                                        onClick={e => e.stopPropagation()}
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          setFormData(prev => ({
+                                            ...prev,
+                                            zoneLimits: {
+                                              ...prev.zoneLimits,
+                                              [dept.name]: val === '' ? undefined : Math.max(1, parseInt(val) || 1)
+                                            }
+                                          }));
+                                        }}
+                                        className="w-16 text-sm text-center border border-blue-200 bg-white rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold text-blue-900"
+                                        placeholder="—"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>

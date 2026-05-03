@@ -315,8 +315,8 @@ namespace BiometricEnrollmentApp.Services
                 var payload = new AttendancePayload
                 {
                     employee_id = employeeId,
-                    clock_in = clockIn?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    clock_out = clockOut?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                    clock_in = clockIn.HasValue ? TimezoneHelper.ToUtc(clockIn.Value).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : null,
+                    clock_out = clockOut.HasValue ? TimezoneHelper.ToUtc(clockOut.Value).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : null,
                     status = status
                 };
 
@@ -412,8 +412,8 @@ namespace BiometricEnrollmentApp.Services
                     {
                         employee_id = session.EmployeeId,
                         date = session.Date,
-                        clock_in = clockIn?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                        clock_out = clockOut?.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                        clock_in = clockIn.HasValue ? TimezoneHelper.ToUtc(clockIn.Value).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : null,
+                        clock_out = clockOut.HasValue ? TimezoneHelper.ToUtc(clockOut.Value).ToString("yyyy-MM-ddTHH:mm:ss.fffZ") : null,
                         status = session.Status,
                         total_hours = session.TotalHours,
                         overtime_hours = (object?)null // Will be calculated by server if needed

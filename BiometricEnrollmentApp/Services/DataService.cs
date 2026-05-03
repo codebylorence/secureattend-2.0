@@ -1961,10 +1961,11 @@ namespace BiometricEnrollmentApp.Services
                     bool hasSession = employeeSession.EmployeeId != null;
                     bool hasClockIn = hasSession && !string.IsNullOrEmpty(employeeSession.ClockIn);
                     
-                    // ABSENT MARKING: Mark absent if shift started + grace period passed AND no clock-in
-                    if (shiftStartedWithGrace && !hasClockIn)
+                    // ABSENT MARKING: Mark absent only after shift has ENDED (end of day)
+                    // This ensures we don't mark absent prematurely during the shift
+                    if (shiftEnded && !hasClockIn)
                     {
-                        LogHelper.Write($"  ✅ {schedule.EmployeeId} - Shift started + grace period passed, no clock-in, checking if should mark absent...");
+                        LogHelper.Write($"  ✅ {schedule.EmployeeId} - Shift ended, no clock-in, checking if should mark absent...");
                         
                         if (!hasSession)
                         {

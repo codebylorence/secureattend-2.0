@@ -195,11 +195,14 @@ export default function TeamSchedule() {
       console.log("👥 Fetching team members for department:", userDepartment);
       
       const allEmployees = await fetchEmployees();
-      // Filter employees from the same department and only active employees
+      // Filter employees from the same department and only active employees.
+      // Exclude ALL team leaders (including the logged-in user) so that a team
+      // leader from the same department (e.g. the department manager) does not
+      // appear in another team leader's assignable member list.
       const teamMembers = allEmployees.filter(
         (emp) => emp.department === userDepartment && 
-                 emp.employee_id !== user.employee?.employee_id &&
-                 emp.status === 'Active' // Only include active employees for scheduling
+                 emp.status === 'Active' &&
+                 emp.position !== 'Team Leader' // Exclude all team leaders, not just self
       );
       
       console.log(`👥 Found ${teamMembers.length} active team members (filtered from ${allEmployees.length} total employees)`);

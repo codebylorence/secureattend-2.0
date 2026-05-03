@@ -256,7 +256,9 @@ export default function AddEmployeeModal({ isOpen, onClose, onAdded }) {
                     className={`${inputClass} appearance-none`}
                   >
                     <option value="No Department">No Department</option>
-                    <option value="Company-wide">Company-wide</option>
+                    {isCompanyWideRole(formData.position) && (
+                      <option value="Company-wide">Company-wide</option>
+                    )}
                     {getAvailableDepartments().map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                   </select>
                 </div>

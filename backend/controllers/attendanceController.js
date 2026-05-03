@@ -627,8 +627,11 @@ export const permanentlyDeleteAttendanceRecord = async (req, res) => {
     const record = await Attendance.findByPk(id);
     if (!record) return res.status(404).json({ error: "Record not found" });
 
-    await record.destroy();
-    console.log(`✅ Permanently deleted attendance record ID: ${id}`);
+    // Use tombstone instead of hard delete to prevent biometric sync from recreating the record
+    record.is_permanently_deleted = true;
+    record.is_archived = true;
+    await record.save();
+    console.log(`✅ Permanently deleted attendance record ID: ${id} (tombstone)`);
     res.status(200).json({ message: "Attendance record permanently deleted" });
   } catch (error) {
     console.error("❌ Error permanently deleting attendance record:", error);
@@ -1273,6 +1276,17 @@ export const syncAttendanceFromBiometric = async (req, res) => {
             date
           }
         });
+
+        // Skip if this record was permanently deleted (tombstone) - don't recreate it
+        if (existingRecord && existingRecord.is_permanently_deleted) {
+          results.skipped++;
+          results.details.push({
+            employee_id,
+            action: 'skipped',
+            message: 'Record was permanently deleted - sync blocked'
+          });
+          continue;
+        }
         
         // If syncing a Present/Late/Overtime record, delete any Absent record first
         if (existingRecord && existingRecord.status === 'Absent' && 
@@ -1286,23 +1300,35 @@ export const syncAttendanceFromBiometric = async (req, res) => {
         if (existingRecord) {
           // Update existing record if biometric app has more recent data
           let updated = false;
-          
-          // Update clock_in if biometric has it and web app doesn't
-          if (clock_in && !existingRecord.clock_in) {
-            existingRecord.clock_in = new Date(clock_in);
-            updated = true;
+
+          // Update clock_in if biometric has it and web app doesn't, or value differs
+          if (clock_in) {
+            const incomingClockIn = new Date(clock_in).getTime();
+            const existingClockIn = existingRecord.clock_in ? new Date(existingRecord.clock_in).getTime() : null;
+            if (!existingClockIn || incomingClockIn !== existingClockIn) {
+              existingRecord.clock_in = new Date(clock_in);
+              updated = true;
+            }
           }
           
-          // Update clock_out if biometric has it and web app doesn't
-          if (clock_out && !existingRecord.clock_out) {
-            existingRecord.clock_out = new Date(clock_out);
-            updated = true;
+          // Update clock_out if biometric has it and web app doesn't, or value differs
+          if (clock_out) {
+            const incomingClockOut = new Date(clock_out).getTime();
+            const existingClockOut = existingRecord.clock_out ? new Date(existingRecord.clock_out).getTime() : null;
+            if (!existingClockOut || incomingClockOut !== existingClockOut) {
+              existingRecord.clock_out = new Date(clock_out);
+              updated = true;
+            }
           }
           
-          // Update total_hours if provided
+          // Update total_hours only if value actually changed (round to 6dp to avoid float precision mismatch)
           if (total_hours !== undefined && total_hours !== null) {
-            existingRecord.total_hours = parseFloat(total_hours);
-            updated = true;
+            const newTotalHours = Math.round(parseFloat(total_hours) * 1000000) / 1000000;
+            const existingTotalHours = existingRecord.total_hours !== null ? Math.round(parseFloat(existingRecord.total_hours) * 1000000) / 1000000 : null;
+            if (existingTotalHours !== newTotalHours) {
+              existingRecord.total_hours = newTotalHours;
+              updated = true;
+            }
           }
           
           // Update status with smart logic:
@@ -1331,15 +1357,21 @@ export const syncAttendanceFromBiometric = async (req, res) => {
           const newPriority = statusPriority[status] || 0;
           
           if (canUpgradeToMissedClockout || canUpgradeToOvertime || newPriority > currentPriority) {
-            existingRecord.status = status;
-            updated = true;
-            console.log(`📊 Status updated: ${existingRecord.status} → ${status} for ${employee_id}`);
+            if (existingRecord.status !== status) {
+              console.log(`📊 Status updated: ${existingRecord.status} → ${status} for ${employee_id}`);
+              existingRecord.status = status;
+              updated = true;
+            }
           }
           
-          // Update overtime_hours if provided
+          // Update overtime_hours only if value actually changed (round to 6dp to avoid float precision mismatch)
           if (overtime_hours !== undefined && overtime_hours !== null) {
-            existingRecord.overtime_hours = parseFloat(overtime_hours);
-            updated = true;
+            const newOvertimeHours = Math.round(parseFloat(overtime_hours) * 1000000) / 1000000;
+            const existingOvertimeHours = existingRecord.overtime_hours !== null ? Math.round(parseFloat(existingRecord.overtime_hours) * 1000000) / 1000000 : null;
+            if (existingOvertimeHours !== newOvertimeHours) {
+              existingRecord.overtime_hours = newOvertimeHours;
+              updated = true;
+            }
           }
           
           if (updated) {
@@ -1360,31 +1392,6 @@ export const syncAttendanceFromBiometric = async (req, res) => {
             });
           }
         } else {
-          // For Absent records, verify the employee is actually scheduled on that date
-          // This prevents ghost absent records for employees with stale/old schedules
-          if (status === 'Absent') {
-            const schedule = await EmployeeSchedule.findOne({
-              where: {
-                employee_id,
-                status: 'Active',
-                [Op.or]: [
-                  sequelize.literal(`schedule_dates LIKE '%${date}%'`)
-                ]
-              }
-            });
-
-            if (!schedule) {
-              results.skipped++;
-              results.details.push({
-                employee_id,
-                action: 'skipped',
-                message: `Absent record skipped - no schedule found for ${date}`
-              });
-              console.log(`⚠️ Skipped absent record for ${employee_id} on ${date} - not scheduled`);
-              continue;
-            }
-          }
-
           // Create new record
           const newRecord = await Attendance.create({
             employee_id,

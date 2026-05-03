@@ -77,14 +77,28 @@ export const addTemplate = async (req, res) => {
 
     // Skip team leader check for Role-Based (supervisor/admin) schedules
     if (department !== 'Role-Based') {
-      // Check if department has a team leader
-      const teamLeader = await Employee.findOne({
-        where: {
-          department: department,
-          position: 'Team Leader',
-          status: 'Active'
-        }
-      });
+      // Check against the department's assigned manager (not just any team leader in the dept)
+      const { default: Department } = await import("../models/department.js");
+      const dept = await Department.findOne({ where: { name: department } });
+      const assignedManagerName = dept?.manager;
+
+      let teamLeader = null;
+      if (assignedManagerName) {
+        // Find the specific assigned manager by name
+        const nameParts = assignedManagerName.trim().split(' ');
+        const firstname = nameParts[0];
+        const lastname = nameParts.slice(1).join(' ');
+        teamLeader = await Employee.findOne({
+          where: { firstname, lastname, position: 'Team Leader', status: 'Active' }
+        });
+      }
+
+      // Fallback: any active team leader in the department
+      if (!teamLeader) {
+        teamLeader = await Employee.findOne({
+          where: { department, position: 'Team Leader', status: 'Active' }
+        });
+      }
 
       if (!teamLeader) {
         return res.status(400).json({ 

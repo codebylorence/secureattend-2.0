@@ -188,73 +188,6 @@ export const createTemplate = async (templateData) => {
   // Create the template first
   const template = await ScheduleTemplate.create(processedData);
   
-  // Auto-assign team leader for zone-based templates (those with a department that's not Role-Based)
-  if (template.department && template.department !== 'Role-Based') {
-    try {
-      const { default: User } = await import("../models/user.js");
-      const { default: Employee } = await import("../models/employee.js");
-      
-      console.log(`🔍 Looking for team leader for department: ${template.department}`);
-      
-      // First, check all team leaders
-      const allTeamLeaders = await User.findAll({
-        where: { role: "teamleader" },
-        include: [{
-          model: Employee,
-          as: "employee",
-          required: false
-        }]
-      });
-      
-      console.log(`📋 Found ${allTeamLeaders.length} team leader(s) in system:`);
-      allTeamLeaders.forEach(tl => {
-        console.log(`   - User: ${tl.username}, employeeId FK: ${tl.employeeId}`);
-        if (tl.employee) {
-          console.log(`     Employee: ${tl.employee.employee_id}, Dept: ${tl.employee.department}, Position: ${tl.employee.position}`);
-        } else {
-          console.log(`     ⚠️ No employee record linked!`);
-        }
-      });
-      
-      const teamLeaderUser = await User.findOne({
-        where: { role: "teamleader" },
-        include: [{
-          model: Employee,
-          as: "employee",
-          where: { department: template.department }
-        }]
-      });
-      
-      if (teamLeaderUser && teamLeaderUser.employee) {
-        const teamLeaderId = teamLeaderUser.employee.employee_id;
-        console.log(`👑 Auto-assigning team leader ${teamLeaderId} to newly created template ${template.id} (${template.department})`);
-        
-        const now = new Date().toISOString();
-        const teamLeaderAssignment = [{
-          employee_id: teamLeaderId,
-          assigned_date: now,
-          assigned_by: processedData.created_by || "system"
-        }];
-        
-        await template.update({
-          assigned_employees: JSON.stringify(teamLeaderAssignment)
-        });
-        
-        console.log(`✅ Team leader ${teamLeaderId} auto-assigned to template ${template.id}`);
-      } else {
-        console.log(`⚠️ No team leader found for department: ${template.department}`);
-        console.log(`   This means either:`);
-        console.log(`   1. No user with role='teamleader' exists`);
-        console.log(`   2. Team leader user has no linked employee record`);
-        console.log(`   3. Team leader's employee record has different department`);
-      }
-    } catch (error) {
-      console.error("⚠️ Error auto-assigning team leader during template creation:", error);
-      console.error("   Error details:", error.message);
-      // Don't fail the template creation if team leader assignment fails
-    }
-  }
-  
   return template;
 };
 
@@ -304,43 +237,10 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
   
   console.log(`📊 Existing assignments:`, existingAssignments.map(a => a.employee_id));
   
-  // Auto-assign team leader for this department if not already assigned
-  let finalEmployeeIds = [...employeeIds];
-  try {
-    const { default: User } = await import("../models/user.js");
-    const { default: Employee } = await import("../models/employee.js");
-    
-    const teamLeaderUser = await User.findOne({
-      where: { role: "teamleader" },
-      include: [{
-        model: Employee,
-        as: "employee",
-        where: { department: template.department }
-      }]
-    });
-    
-    if (teamLeaderUser && teamLeaderUser.employee) {
-      const teamLeaderId = teamLeaderUser.employee.employee_id;
-      console.log(`👑 Found team leader for ${template.department}: ${teamLeaderId}`);
-      
-      // Check if team leader is already assigned
-      const teamLeaderExists = existingAssignments.find(existing => existing.employee_id === teamLeaderId);
-      
-      if (!teamLeaderExists && !employeeIds.includes(teamLeaderId)) {
-        console.log(`🎯 Auto-assigning team leader ${teamLeaderId} to template ${templateId}`);
-        finalEmployeeIds = [teamLeaderId, ...employeeIds]; // Add team leader first
-      } else {
-        console.log(`ℹ️ Team leader ${teamLeaderId} already assigned or in the list`);
-      }
-    } else {
-      console.log(`⚠️ No team leader found for department: ${template.department}`);
-    }
-  } catch (error) {
-    console.error("⚠️ Error auto-assigning team leader:", error);
-    // Don't fail the main operation if team leader assignment fails
-  }
+  // Add new assignments — only the explicitly requested employee IDs
+  const finalEmployeeIds = [...employeeIds];
   
-  console.log(`📋 Final employee IDs to assign (including team leader):`, finalEmployeeIds);
+  console.log(`📋 Final employee IDs to assign:`, finalEmployeeIds);
   
   // Add new assignments
   const now = new Date().toISOString();

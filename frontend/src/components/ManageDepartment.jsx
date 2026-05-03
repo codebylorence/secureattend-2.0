@@ -331,10 +331,13 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                           return `Employee ${member.employee_id}`;
                         })();
                         
-                        // Check if this member is the team leader (compare with manager name)
+                        // Check if this member is the ASSIGNED manager (compare with dept.manager field)
                         const isTeamLeader = memberFullName === selectedDepartment?.manager ||
                                            (member.firstname && member.lastname && 
                                             `${member.firstname} ${member.lastname}` === selectedDepartment?.manager);
+
+                        // Check if this member has Team Leader position but is NOT the assigned manager
+                        const isOtherTeamLeader = !isTeamLeader && member.position === "Team Leader";
                         
                         return (
                           <tr 
@@ -342,6 +345,8 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                             className={`hover:bg-gray-50 ${
                               isTeamLeader 
                                 ? 'bg-primary-50 hover:bg-primary-100 border-l-4 border-l-blue-600' 
+                                : isOtherTeamLeader
+                                ? 'bg-gray-50 hover:bg-gray-100 border-l-4 border-l-gray-300'
                                 : ''
                             }`}
                           >
@@ -350,6 +355,11 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                               {memberFullName}
                               {isTeamLeader && (
                                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800">
+                                  ★ Assigned Manager
+                                </span>
+                              )}
+                              {isOtherTeamLeader && (
+                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
                                   Team Leader
                                 </span>
                               )}
@@ -625,51 +635,53 @@ export default function ManageDepartment({ supervisorView = false, refreshTrigge
                   className="w-full px-4 py-3 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white"
                 >
                   <option value="">No Manager</option>
-                  {teamLeaders.map((leader) => {
-                    const leaderFullName = (() => {
-                      if (leader.employee?.firstname && leader.employee?.lastname) {
-                        return `${leader.employee.firstname} ${leader.employee.lastname}`;
-                      }
-                      if (leader.employee?.firstname?.trim()) {
-                        return leader.employee.firstname;
-                      }
-                      return leader.username;
-                    })();
+                  {teamLeaders
+                    .filter((leader) => {
+                      const leaderDept = leader.employee?.department;
+                      const leaderFullName = leader.employee?.firstname && leader.employee?.lastname
+                        ? `${leader.employee.firstname} ${leader.employee.lastname}`
+                        : leader.employee?.firstname || leader.username;
 
-                    // A leader is "taken" if they have a department that is NOT the current dept being edited
-                    const leaderDept = leader.employee?.department;
-                    const isAssignedElsewhere =
-                      leaderDept &&
-                      leaderDept !== "No Department" &&
-                      leaderDept !== editingDept.name;
+                      // Always show the current manager so they can be deselected
+                      if (leaderFullName === editingDept.manager) return true;
 
-                    return (
-                      <option
-                        key={leader.id}
-                        value={leaderFullName}
-                        disabled={isAssignedElsewhere}
-                      >
-                        {leaderFullName}
-                        {leader.employee?.employee_id ? ` (${leader.employee.employee_id})` : ""}
-                      </option>
-                    );
-                  })}
+                      // Only show team leaders who belong to this department
+                      return leaderDept === editingDept.name;
+                    })
+                    .map((leader) => {
+                      const leaderFullName = (() => {
+                        if (leader.employee?.firstname && leader.employee?.lastname) {
+                          return `${leader.employee.firstname} ${leader.employee.lastname}`;
+                        }
+                        if (leader.employee?.firstname?.trim()) {
+                          return leader.employee.firstname;
+                        }
+                        return leader.username;
+                      })();
+
+                      const isCurrentManager = leaderFullName === editingDept.manager;
+
+                      return (
+                        <option key={leader.id} value={leaderFullName}>
+                          {leaderFullName}
+                          {leader.employee?.employee_id ? ` (${leader.employee.employee_id})` : ""}
+                          {isCurrentManager ? " ★ Current Manager" : ""}
+                        </option>
+                      );
+                    })}
                 </select>
-                {/* Helper text when a leader is already assigned elsewhere */}
-                {editForm.manager && (() => {
-                  const selected = teamLeaders.find((l) => {
-                    const n = l.employee?.firstname && l.employee?.lastname
-                      ? `${l.employee.firstname} ${l.employee.lastname}`
-                      : l.employee?.firstname || l.username;
-                    return n === editForm.manager;
-                  });
-                  const dept = selected?.employee?.department;
-                  return dept && dept !== "No Department" && dept !== editingDept.name ? (
-                    <p className="mt-1.5 text-xs text-amber-600 font-medium">
-                      ⚠ This team leader is already assigned to <strong>{dept}</strong>. Remove their assignment there first.
-                    </p>
-                  ) : null;
-                })()}
+                {/* Helper text when no team leaders are available for this zone */}
+                {teamLeaders.filter((l) => {
+                  const dept = l.employee?.department;
+                  const name = l.employee?.firstname && l.employee?.lastname
+                    ? `${l.employee.firstname} ${l.employee.lastname}`
+                    : l.employee?.firstname || l.username;
+                  return dept === editingDept.name || name === editingDept.manager;
+                }).length === 0 && (
+                  <p className="mt-1.5 text-xs text-gray-400 font-medium">
+                    No Team Leaders are assigned to this zone yet.
+                  </p>
+                )}
               </div>
 
               {/* Buttons */}

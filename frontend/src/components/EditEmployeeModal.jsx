@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { updateEmployee } from "../api/EmployeeApi";
+import { updateEmployee, fetchEmployees } from "../api/EmployeeApi";
 import { fetchDepartments } from "../api/DepartmentApi";
 import api from "../api/axiosConfig";
 import { toast } from 'react-toastify';
 import teamLeaderEventManager from "../utils/teamLeaderEvents";
-import { MdClose, MdSave, MdPerson, MdEmail, MdPhone, MdBadge, MdBusiness, MdAssignmentInd, MdInfoOutline } from "react-icons/md";
+import { MdClose, MdSave, MdPerson, MdEmail, MdPhone, MdBadge, MdBusiness, MdAssignmentInd, MdInfoOutline, MdInfo } from "react-icons/md";
 
 export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated }) {
   const [formData, setFormData] = useState({
@@ -19,6 +19,7 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
   });
 
   const [departments, setDepartments] = useState([]);
+  const [departmentsWithTeamLeader, setDepartmentsWithTeamLeader] = useState([]);
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,12 +57,23 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
   const loadDepartmentsAndPositions = async () => {
     try {
       setLoading(true);
-      const [deptResponse, posResponse] = await Promise.all([
+      const [deptResponse, posResponse, allEmployees] = await Promise.all([
         fetchDepartments(),
-        api.get('/positions')
+        api.get('/positions'),
+        fetchEmployees(),
       ]);
       setDepartments(deptResponse);
       setPositions(posResponse.data);
+
+      // Track which departments already have a team leader (excluding this employee)
+      const deptsWithLeader = allEmployees
+        .filter(emp =>
+          emp.position === 'Team Leader' &&
+          emp.status === 'Active' &&
+          emp.employee_id !== employee?.employee_id   // exclude self
+        )
+        .map(emp => emp.department);
+      setDepartmentsWithTeamLeader(deptsWithLeader);
     } catch (error) {
       console.error('Error loading data:', error);
       setPositions([
@@ -75,6 +87,21 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
     } finally {
       setLoading(false);
     }
+  };
+
+  const isTeamLeaderPosition = (pos) =>
+    pos && (pos.toLowerCase().includes('team leader') || pos.toLowerCase().includes('teamleader'));
+
+  // Departments available for team leader assignment (zones without one, plus current zone)
+  const getAvailableDepartments = () => {
+    if (isTeamLeaderPosition(formData.position)) {
+      return departments.filter(
+        dept =>
+          !departmentsWithTeamLeader.includes(dept.name) ||
+          dept.name === employee?.department  // always allow keeping current dept
+      );
+    }
+    return departments;
   };
 
   const getRoleFromPosition = (position) => {
@@ -129,7 +156,8 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
       onUpdated();
       onClose();
     } catch (error) {
-      toast.error("Failed to update employee");
+      const msg = error.response?.data?.message || error.message || "Failed to update employee";
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -247,14 +275,20 @@ export default function EditEmployeeModal({ isOpen, onClose, employee, onUpdated
                   className={`${inputClass} appearance-none`}
                 >
                   <option value="">{loading ? 'Loading...' : 'Select'}</option>
-                  <option value="Company-wide">Company-wide</option>
-                  {departments.map((dept) => (
+                  {['admin', 'supervisor', 'warehouseadmin'].includes(getRoleFromPosition(formData.position)) && (
+                    <option value="Company-wide">Company-wide</option>
+                  )}
+                  {getAvailableDepartments().map((dept) => (
                     <option key={dept.id} value={dept.name}>{dept.name}</option>
                   ))}
                 </select>
               </div>
-              {['admin', 'supervisor', 'warehouseadmin'].includes(getRoleFromPosition(formData.position)) && (
+              {['admin', 'supervisor', 'warehouseadmin'].includes(getRoleFromPosition(formData.position)) ? (
                 <p className="text-[11px] text-blue-500 mt-1 ml-1">Auto-set to Company-wide for this role</p>
+              ) : isTeamLeaderPosition(formData.position) && (
+                <p className="text-[10px] font-medium text-amber-600 mt-1.5 flex items-center gap-1">
+                  <MdInfo size={12} /> Showing zones without an existing Team Leader
+                </p>
               )}
             </div>
 

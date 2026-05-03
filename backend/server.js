@@ -21,6 +21,7 @@ import systemConfigRoutes from "./routes/systemConfigRoutes.js";
 import scheduleNotificationRoutes from "./routes/scheduleNotificationRoutes.js";
 import shiftTemplateRoutes from "./routes/shiftTemplateRoutes.js";
 import holidayRoutes from "./routes/holidayRoutes.js";
+import dtrRoutes from "./routes/dtrRoutes.js";
 import { startScheduleCleanupJob } from "./services/scheduleCleanupService.js";
 import { startMissedClockoutJob } from "./services/missedClockoutService.js";
 // Import models first
@@ -141,6 +142,7 @@ app.use("/api/backup", backupRoutes);
 app.use("/api/system", systemConfigRoutes);
 app.use("/api/shift-templates", shiftTemplateRoutes);
 app.use("/api/holidays", holidayRoutes);
+app.use("/api/dtr", dtrRoutes);
 app.use("/employees", employeeRoutes);
 
 // Biometric app specific routes

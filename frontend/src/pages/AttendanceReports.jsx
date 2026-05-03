@@ -1,11 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
-import { FaDownload, FaFileExcel, FaFilePdf, FaSearch, FaFilter } from "react-icons/fa";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { FaDownload, FaFileExcel, FaFilePdf, FaSearch, FaFilter, FaPrint, FaCalendarAlt } from "react-icons/fa";
+import { MdTableChart } from "react-icons/md";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { useSystemConfig } from "../contexts/SystemConfigContext";
 import { useSocket } from "../context/SocketContext";
 import api from "../api/axiosConfig";
+import { fetchEmployees } from "../api/EmployeeApi";
+import { getDTR, getAllDTR } from "../api/DtrApi";
+import { notifyReportGenerated } from "../api/NotificationApi";
 
 export default function AttendanceReports() {
   const [reportType, setReportType] = useState("employee");
@@ -32,18 +36,35 @@ export default function AttendanceReports() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = user.role === "admin";
   const isSupervisor = user.role === "supervisor";
+  const isWarehouseAdmin = user.role === "warehouseadmin";
+  const canViewAttendance = isAdmin || isSupervisor || isWarehouseAdmin;
   const { systemConfig } = useSystemConfig();
   const { socket, connected } = useSocket();
+
+  // ── DTR state ──────────────────────────────────────────────────────────────
+  const printRef = useRef(null);
+  const currentYear  = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+  const [dtrEmployees, setDtrEmployees]   = useState([]);
+  const [dtrEmpSearch, setDtrEmpSearch]   = useState("");
+  const [dtrSelectedEmp, setDtrSelectedEmp] = useState("");
+  const [dtrYear, setDtrYear]   = useState(currentYear);
+  const [dtrMonth, setDtrMonth] = useState(currentMonth);
+  const [dtrCutoff, setDtrCutoff] = useState("1-15");
+  const [dtrBatchMode, setDtrBatchMode] = useState(false);
+  const [dtrData, setDtrData]     = useState(null);
+  const [dtrBatchData, setDtrBatchData] = useState([]);
+  const [dtrLoading, setDtrLoading] = useState(false);
 
   // Initial data fetch
   useEffect(() => {
     if (reportType === "employee") {
       fetchEmployees();
       fetchDepartments();
-    } else if (reportType === "attendance" && isAdmin) {
+    } else if (reportType === "attendance" && canViewAttendance) {
       fetchAttendanceData();
     }
-  }, [reportType, isAdmin]);
+  }, [reportType, canViewAttendance]);
 
   // Real-time updates via WebSocket
   useEffect(() => {
@@ -62,7 +83,7 @@ export default function AttendanceReports() {
     // Listen for attendance updates
     const handleAttendanceUpdate = (data) => {
       console.log("📊 Attendance update received:", data);
-      if (reportType === "attendance" && isAdmin) {
+      if (reportType === "attendance" && canViewAttendance) {
         fetchAttendanceData();
       }
     };
@@ -94,7 +115,7 @@ export default function AttendanceReports() {
       socket.off('department_updated', handleDepartmentUpdate);
       socket.off('department_deleted', handleDepartmentUpdate);
     };
-  }, [socket, connected, reportType, isAdmin]);
+  }, [socket, connected, reportType, canViewAttendance]);
 
   // Periodic refresh as fallback (every 30 seconds)
   useEffect(() => {
@@ -102,17 +123,17 @@ export default function AttendanceReports() {
       console.log("🔄 Periodic refresh triggered");
       if (reportType === "employee") {
         fetchEmployees();
-      } else if (reportType === "attendance" && isAdmin) {
+      } else if (reportType === "attendance" && canViewAttendance) {
         fetchAttendanceData();
       }
     }, 30000); // 30 seconds
 
     return () => clearInterval(interval);
-  }, [reportType, isAdmin]);
+  }, [reportType, canViewAttendance]);
 
   // Fetch attendance data when date filters change
   useEffect(() => {
-    if (reportType === "attendance" && isAdmin) {
+    if (reportType === "attendance" && canViewAttendance) {
       fetchAttendanceData();
     }
   }, [dateFilter.startDate, dateFilter.endDate]);
@@ -152,7 +173,7 @@ export default function AttendanceReports() {
   }, []);
 
   const fetchAttendanceData = useCallback(async () => {
-    if (reportType !== "attendance" || !isAdmin) return;
+    if (reportType !== "attendance" || !canViewAttendance) return;
     
     setLoading(true);
     try {
@@ -176,7 +197,681 @@ export default function AttendanceReports() {
     } finally {
       setLoading(false);
     }
-  }, [reportType, isAdmin, dateFilter.startDate, dateFilter.endDate, departmentFilter]);
+  }, [reportType, canViewAttendance, dateFilter.startDate, dateFilter.endDate, departmentFilter]);
+
+  // ── DTR helpers ────────────────────────────────────────────────────────────
+  const dtrPad = (n) => String(n).padStart(2, "0");
+  const getDtrCutoffDates = (year, month, cutoff) => {
+    const days = new Date(year, month, 0).getDate();
+    if (cutoff === "1-15")   return { start: `${year}-${dtrPad(month)}-01`,  end: `${year}-${dtrPad(month)}-15` };
+    if (cutoff === "whole")  return { start: `${year}-${dtrPad(month)}-01`,  end: `${year}-${dtrPad(month)}-${days}` };
+    return { start: `${year}-${dtrPad(month)}-16`, end: `${year}-${dtrPad(month)}-${days}` };
+  };
+
+  const DTR_REMARK_STYLE = {
+    P:"bg-green-100 text-green-800", L:"bg-orange-100 text-orange-800", A:"bg-red-100 text-red-800",
+    OT:"bg-purple-100 text-purple-800", MCO:"bg-yellow-100 text-yellow-800",
+    H:"bg-red-50 text-red-600 font-bold", HW:"bg-pink-100 text-pink-700",
+    RD:"bg-gray-100 text-gray-500", NS:"bg-gray-50 text-gray-400",
+  };
+  const DTR_REMARK_LABEL = {
+    P:"Present", L:"Late", A:"Absent", OT:"Overtime", MCO:"Missed Clock-out",
+    H:"Holiday", HW:"Holiday Worked", RD:"Rest Day", NS:"No Schedule",
+  };
+
+  useEffect(() => {
+    if (reportType === "dtr") {
+      import("../api/EmployeeApi").then(({ fetchEmployees: fe }) =>
+        fe().then(d => setDtrEmployees(d.filter(e => e.status === "Active"))).catch(() => {})
+      );
+    }
+  }, [reportType]);
+
+  const dtrFilteredEmployees = dtrEmployees.filter(e => {
+    const q = dtrEmpSearch.toLowerCase();
+    return `${e.firstname} ${e.lastname}`.toLowerCase().includes(q) || e.employee_id.toLowerCase().includes(q);
+  });
+
+  // ── DTR Export: Excel ─────────────────────────────────────────────────────
+  const generateDtrExcel = async (dtrList) => {
+    const companyName = (systemConfig.companyName || systemConfig.systemName || "TOPLIS SOLUTIONS, INC.").toUpperCase();
+    const systemName  = systemConfig.systemName || "SecureAttend";
+    const now         = new Date();
+    const dateStr     = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const timeStr     = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+    const DARK_BLUE  = "1E3A8A";
+    const MID_BLUE   = "2D4FA3";
+    const LIGHT_BLUE = "EEF2FF";
+    const WHITE      = "FFFFFF";
+    const BORDER_CLR = "C7D2E8";
+    const FOOTER_FG  = "6B7280";
+
+    const REMARK_STYLES = {
+      P:   { fg: "166534", bg: "DCFCE7" },
+      L:   { fg: "92400E", bg: "FEF3C7" },
+      A:   { fg: "991B1B", bg: "FEE2E2" },
+      OT:  { fg: "1E3A8A", bg: "DBEAFE" },
+      MCO: { fg: "854D0E", bg: "FEF9C3" },
+      H:   { fg: "991B1B", bg: "FEE2E2" },
+      HW:  { fg: "9D174D", bg: "FCE7F3" },
+      RD:  { fg: "374151", bg: "F3F4F6" },
+      NS:  { fg: "6B7280", bg: "F9FAFB" },
+    };
+
+    const thinBorder = (color = BORDER_CLR) => ({
+      top:    { style: "thin", color: { argb: "FF" + color } },
+      bottom: { style: "thin", color: { argb: "FF" + color } },
+      left:   { style: "thin", color: { argb: "FF" + color } },
+      right:  { style: "thin", color: { argb: "FF" + color } },
+    });
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator  = systemName;
+    wb.created  = now;
+    wb.modified = now;
+
+    dtrList.forEach((dtr, sheetIdx) => {
+      const { employee, period, summary, rows } = dtr;
+      const sheetName = `${employee.lastname}_${employee.firstname}`.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 31);
+      const ws = wb.addWorksheet(sheetName || `DTR_${sheetIdx + 1}`, {
+        pageSetup: {
+          paperSize: 9, orientation: "portrait",
+          fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+          margins: { left: 0.5, right: 0.5, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+        },
+        views: [{ state: "frozen", ySplit: 9 }],
+      });
+
+      const LAST_COL = 11;
+      ws.columns = [
+        { key: "day",        width: 6  },
+        { key: "dayName",    width: 8  },
+        { key: "shift",      width: 14 },
+        { key: "shiftStart", width: 12 },
+        { key: "shiftEnd",   width: 12 },
+        { key: "timeIn",     width: 12 },
+        { key: "timeOut",    width: 12 },
+        { key: "hours",      width: 10 },
+        { key: "late",       width: 10 },
+        { key: "undertime",  width: 12 },
+        { key: "remarks",    width: 14 },
+      ];
+
+      // Row 1 – Company
+      const r1 = ws.addRow([companyName]);
+      ws.mergeCells(1, 1, 1, LAST_COL);
+      const r1c = r1.getCell(1);
+      r1c.value     = companyName;
+      r1c.font      = { name: "Calibri", bold: true, size: 16, color: { argb: "FF" + WHITE } };
+      r1c.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_BLUE } };
+      r1c.alignment = { horizontal: "center", vertical: "middle" };
+      r1.height     = 32;
+
+      // Row 2 – Form title
+      const r2 = ws.addRow(["Civil Service Form No. 48 — Daily Time Record"]);
+      ws.mergeCells(2, 1, 2, LAST_COL);
+      const r2c = r2.getCell(1);
+      r2c.value     = "Civil Service Form No. 48 — Daily Time Record";
+      r2c.font      = { name: "Calibri", bold: true, size: 12, color: { argb: "FF" + WHITE } };
+      r2c.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + MID_BLUE } };
+      r2c.alignment = { horizontal: "center", vertical: "middle" };
+      r2.height     = 22;
+
+      // Row 3 – Spacer
+      ws.addRow([]);
+
+      // Rows 4-6 – Employee meta
+      const metaLabel = (cell, text) => {
+        cell.value     = text;
+        cell.font      = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + MID_BLUE } };
+        cell.alignment = { vertical: "middle" };
+      };
+      const metaValue = (cell, text) => {
+        cell.value     = text;
+        cell.font      = { name: "Calibri", size: 10 };
+        cell.alignment = { vertical: "middle" };
+      };
+
+      const r4 = ws.addRow([]); r4.height = 18;
+      metaLabel(r4.getCell(1), "Name:");
+      metaValue(r4.getCell(2), `${employee.lastname}, ${employee.firstname}`.toUpperCase());
+      ws.mergeCells(4, 2, 4, 6);
+      metaLabel(r4.getCell(7), "Employee ID:");
+      metaValue(r4.getCell(8), employee.employee_id);
+      ws.mergeCells(4, 8, 4, LAST_COL);
+
+      const r5 = ws.addRow([]); r5.height = 18;
+      metaLabel(r5.getCell(1), "Position:");
+      metaValue(r5.getCell(2), employee.position || "");
+      ws.mergeCells(5, 2, 5, 6);
+      metaLabel(r5.getCell(7), "Department:");
+      metaValue(r5.getCell(8), employee.department || "");
+      ws.mergeCells(5, 8, 5, LAST_COL);
+
+      const r6 = ws.addRow([]); r6.height = 18;
+      metaLabel(r6.getCell(1), "Period:");
+      metaValue(r6.getCell(2), `${period.start_date}  to  ${period.end_date}`);
+      ws.mergeCells(6, 2, 6, 6);
+
+      // Row 7 – Spacer
+      ws.addRow([]);
+
+      // Row 8 – Table header
+      const HEADERS = ["Day", "Day Name", "Shift", "Shift Start", "Shift End", "Time In", "Time Out", "Hours", "Late", "Undertime", "Remarks"];
+      const rH = ws.addRow(HEADERS);
+      rH.height = 20;
+      rH.eachCell((cell) => {
+        cell.font      = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + WHITE } };
+        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_BLUE } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border    = thinBorder(MID_BLUE);
+      });
+
+      // Data rows
+      rows.forEach((row, idx) => {
+        const isEven = idx % 2 === 0;
+        const rowBg  = row.isHoliday ? "FEF2F2" : row.isWeekend ? "F9FAFB" : (isEven ? LIGHT_BLUE : WHITE);
+        const dr = ws.addRow([
+          row.day,
+          row.dayName.slice(0, 3),
+          row.shift      || "—",
+          row.shiftStart || "—",
+          row.shiftEnd   || "—",
+          row.timeIn     || "—",
+          row.timeOut    || "—",
+          row.hours      || "—",
+          row.late       || "—",
+          row.undertime  || "—",
+          row.isHoliday && row.remarks === "H" ? `H — ${row.holidayName}` : (row.remarks || "—"),
+        ]);
+        dr.height = 17;
+        dr.eachCell({ includeEmpty: true }, (cell, colNum) => {
+          cell.font      = { name: "Calibri", size: 10 };
+          cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + rowBg } };
+          cell.border    = thinBorder();
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        });
+        // Colour-code remarks cell
+        const remarkCell = dr.getCell(11);
+        const style = REMARK_STYLES[row.remarks];
+        if (style) {
+          remarkCell.font = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + style.fg } };
+          remarkCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + style.bg } };
+        }
+        // Colour late/undertime
+        if (row.late && row.late !== "—") {
+          dr.getCell(9).font = { name: "Calibri", size: 10, color: { argb: "FFB45309" } };
+        }
+        if (row.undertime && row.undertime !== "—") {
+          dr.getCell(10).font = { name: "Calibri", size: 10, color: { argb: "FF1D4ED8" } };
+        }
+      });
+
+      // Totals row
+      const totRow = ws.addRow(["", "", "", "", "", "Totals:", summary.totalHours + "h", summary.totalLate || "—", summary.totalUndertime || "—", "", ""]);
+      totRow.height = 18;
+      totRow.eachCell({ includeEmpty: true }, (cell) => {
+        cell.font      = { name: "Calibri", bold: true, size: 10 };
+        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + LIGHT_BLUE } };
+        cell.border    = thinBorder(MID_BLUE);
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+      });
+      totRow.getCell(6).alignment = { horizontal: "right", vertical: "middle" };
+
+      // Spacer
+      ws.addRow([]);
+
+      // Summary section
+      const sumHdr = ws.addRow(["SUMMARY"]);
+      ws.mergeCells(sumHdr.number, 1, sumHdr.number, LAST_COL);
+      const sumHdrCell = sumHdr.getCell(1);
+      sumHdrCell.value     = "SUMMARY";
+      sumHdrCell.font      = { name: "Calibri", bold: true, size: 11, color: { argb: "FF" + WHITE } };
+      sumHdrCell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + MID_BLUE } };
+      sumHdrCell.alignment = { horizontal: "left", vertical: "middle" };
+      sumHdr.height        = 20;
+
+      [
+        ["Total Hours Worked", summary.totalHours + " hrs"],
+        ["Total Late",         summary.totalLate    || "0"],
+        ["Total Undertime",    summary.totalUndertime || "0"],
+      ].forEach(([label, value]) => {
+        const sr = ws.addRow([]); sr.height = 17;
+        const lc = sr.getCell(1);
+        lc.value     = label;
+        lc.font      = { name: "Calibri", bold: true, size: 10 };
+        lc.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + LIGHT_BLUE } };
+        lc.alignment = { horizontal: "left", vertical: "middle" };
+        lc.border    = thinBorder();
+        ws.mergeCells(sr.number, 1, sr.number, 3);
+        const vc = sr.getCell(4);
+        vc.value     = value;
+        vc.font      = { name: "Calibri", bold: true, size: 10 };
+        vc.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + LIGHT_BLUE } };
+        vc.alignment = { horizontal: "center", vertical: "middle" };
+        vc.border    = thinBorder();
+      });
+
+      // Spacer + footer
+      ws.addRow([]);
+      const footerRow = ws.addRow([`Report generated by ${systemName}  •  ${dateStr} at ${timeStr}`]);
+      ws.mergeCells(footerRow.number, 1, footerRow.number, LAST_COL);
+      const fc = footerRow.getCell(1);
+      fc.font      = { name: "Calibri", italic: true, size: 9, color: { argb: "FF" + FOOTER_FG } };
+      fc.alignment = { horizontal: "center", vertical: "middle" };
+      footerRow.height = 16;
+    });
+
+    const timestamp = now.toISOString().slice(0, 10);
+    const filename  = `${(systemConfig.companyName || "Company").replace(/\s+/g, "-")}-DTR-${timestamp}.xlsx`;
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob   = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement("a");
+    a.href       = url;
+    a.download   = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    notifyReportGenerated({ reportType: "dtr", generatedBy: user.name || user.username || "A user", details: `DTR exported as Excel.` });
+  };
+
+  // ── DTR Export: PDF ───────────────────────────────────────────────────────
+  const generateDtrPDF = (dtrList) => {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const systemName = systemConfig.systemName || "SecureAttend";
+
+    // ── Layout constants ────────────────────────────────────────────────────
+    const pageW   = 210;
+    const marginL = 14;
+    const marginR = 14;
+    const contentW = pageW - marginL - marginR;
+
+    // Column definitions
+    // Total content width = 182mm
+    const COLS = [
+      { x: marginL,       w: 10, h: "Day",         a: "center" },
+      { x: marginL + 10,  w: 12, h: "",             a: "center" }, // day name
+      { x: marginL + 22,  w: 20, h: "Shift",        a: "center" },
+      { x: marginL + 42,  w: 20, h: "Shift Start",  a: "center" },
+      { x: marginL + 62,  w: 20, h: "Shift End",    a: "center" },
+      { x: marginL + 82,  w: 22, h: "Time In",      a: "center" },
+      { x: marginL +104,  w: 22, h: "Time Out",     a: "center" },
+      { x: marginL +126,  w: 14, h: "Hours",        a: "center" },
+      { x: marginL +140,  w: 14, h: "Late",         a: "center" },
+      { x: marginL +154,  w: 14, h: "Undertime",    a: "center" },
+      { x: marginL +168,  w: 14, h: "Remarks",      a: "center" },
+    ];
+    const tableRight = marginL + contentW; // 196
+
+    // ── Remark text colours (RGB) ───────────────────────────────────────────
+    const REMARK_FG = {
+      P:   [22,  101, 52 ],   // green
+      L:   [180, 83,  9  ],   // amber
+      A:   [153, 27,  27 ],   // red
+      OT:  [30,  58,  138],   // blue
+      MCO: [133, 77,  14 ],   // yellow-brown
+      H:   [153, 27,  27 ],   // red
+      HW:  [157, 23,  77 ],   // pink
+      RD:  [107, 114, 128],   // gray
+      NS:  [156, 163, 175],   // light gray
+    };
+
+    // ── Border helper ───────────────────────────────────────────────────────
+    const ROW_H   = 7;   // mm per data row
+    const HDR_H   = 8;   // mm for header row
+    const BORDER  = [209, 213, 219]; // gray-300
+
+    const drawRowBorders = (y, rowH) => {
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.2);
+      // outer rect
+      doc.rect(marginL, y, contentW, rowH);
+      // vertical dividers
+      COLS.forEach((col, i) => {
+        if (i > 0) {
+          doc.line(col.x, y, col.x, y + rowH);
+        }
+      });
+    };
+
+    dtrList.forEach((dtr, dtrIdx) => {
+      if (dtrIdx > 0) doc.addPage();
+      const { employee, period, summary, rows } = dtr;
+      const fullName = `${employee.lastname}, ${employee.firstname}`.toUpperCase();
+
+      let y = 14;
+
+      // ── Header: "CIVIL SERVICE FORM NO. 48" + "DAILY TIME RECORD" ─────────
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(7.5);
+      doc.setFont(undefined, "normal");
+      doc.text("CIVIL SERVICE FORM NO. 48", pageW / 2, y, { align: "center" });
+      y += 5;
+      doc.setTextColor(20, 20, 20);
+      doc.setFontSize(13);
+      doc.setFont(undefined, "bold");
+      doc.text("DAILY TIME RECORD", pageW / 2, y, { align: "center" });
+      y += 9;
+
+      // ── Employee info block ───────────────────────────────────────────────
+      // Left side: Name label + bold name + position/dept
+      doc.setFontSize(7.5);
+      doc.setFont(undefined, "normal");
+      doc.setTextColor(120, 120, 120);
+      doc.text("Name", marginL, y);
+      // Right side: Period label
+      doc.text("Period", tableRight, y, { align: "right" });
+      y += 4.5;
+
+      doc.setFontSize(11);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(20, 20, 20);
+      doc.text(fullName, marginL, y);
+      // Period value right-aligned, bold, larger
+      doc.setFontSize(11);
+      doc.text(`${period.start_date} to ${period.end_date}`, tableRight, y, { align: "right" });
+      y += 5;
+
+      doc.setFontSize(8);
+      doc.setFont(undefined, "normal");
+      doc.setTextColor(80, 80, 80);
+      const positionDept = `${employee.position || ""}${employee.position && employee.department ? " — " : ""}${employee.department || ""}`;
+      doc.text(positionDept, marginL, y);
+      // ID right-aligned
+      doc.setTextColor(100, 100, 100);
+      doc.text(`ID: ${employee.employee_id}`, tableRight, y, { align: "right" });
+      y += 7;
+
+      // ── Table header row ──────────────────────────────────────────────────
+      doc.setFillColor(248, 249, 250);
+      doc.rect(marginL, y, contentW, HDR_H, "F");
+      drawRowBorders(y, HDR_H);
+
+      doc.setFontSize(8);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(30, 30, 30);
+      COLS.forEach(col => {
+        if (col.h) {
+          doc.text(col.h, col.x + col.w / 2, y + HDR_H / 2 + 1.5, { align: "center" });
+        }
+      });
+      y += HDR_H;
+
+      // ── Data rows ─────────────────────────────────────────────────────────
+      rows.forEach((row) => {
+        // Page break check
+        if (y + ROW_H > 270) {
+          doc.addPage();
+          y = 14;
+          // Redraw header on new page
+          doc.setFillColor(248, 249, 250);
+          doc.rect(marginL, y, contentW, HDR_H, "F");
+          drawRowBorders(y, HDR_H);
+          doc.setFontSize(8);
+          doc.setFont(undefined, "bold");
+          doc.setTextColor(30, 30, 30);
+          COLS.forEach(col => {
+            if (col.h) doc.text(col.h, col.x + col.w / 2, y + HDR_H / 2 + 1.5, { align: "center" });
+          });
+          y += HDR_H;
+        }
+
+        // White background for all rows
+        doc.setFillColor(255, 255, 255);
+        doc.rect(marginL, y, contentW, ROW_H, "F");
+        drawRowBorders(y, ROW_H);
+
+        const cy = y + ROW_H / 2 + 1.5; // vertical center of row
+
+        // Day number
+        doc.setFontSize(8);
+        doc.setFont(undefined, "normal");
+        doc.setTextColor(30, 30, 30);
+        doc.text(String(row.day), COLS[0].x + COLS[0].w / 2, cy, { align: "center" });
+
+        // Day name (gray)
+        doc.setTextColor(120, 120, 120);
+        doc.text(row.dayName.slice(0, 3), COLS[1].x + COLS[1].w / 2, cy, { align: "center" });
+
+        // Shift
+        doc.setTextColor(60, 60, 60);
+        const shiftText = row.shift || "—";
+        doc.setFontSize(7.5);
+        doc.text(shiftText, COLS[2].x + COLS[2].w / 2, cy, { align: "center" });
+
+        // Shift Start
+        doc.setFontSize(7.5);
+        doc.setTextColor(80, 80, 80);
+        doc.text(row.shiftStart || "—", COLS[3].x + COLS[3].w / 2, cy, { align: "center" });
+
+        // Shift End
+        doc.text(row.shiftEnd || "—", COLS[4].x + COLS[4].w / 2, cy, { align: "center" });
+
+        // Time In
+        doc.setFontSize(8);
+        doc.setTextColor(30, 30, 30);
+        doc.text(row.timeIn || "—", COLS[5].x + COLS[5].w / 2, cy, { align: "center" });
+
+        // Time Out
+        doc.text(row.timeOut || "—", COLS[6].x + COLS[6].w / 2, cy, { align: "center" });
+
+        // Hours
+        doc.text(String(row.hours || "—"), COLS[7].x + COLS[7].w / 2, cy, { align: "center" });
+
+        // Late — orange dash when empty
+        if (row.late) {
+          doc.setTextColor(180, 83, 9);
+          doc.text(row.late, COLS[8].x + COLS[8].w / 2, cy, { align: "center" });
+        } else {
+          doc.setTextColor(249, 115, 22);
+          doc.text("—", COLS[8].x + COLS[8].w / 2, cy, { align: "center" });
+        }
+
+        // Undertime — blue dash when empty
+        if (row.undertime) {
+          doc.setTextColor(30, 58, 138);
+          doc.text(row.undertime, COLS[9].x + COLS[9].w / 2, cy, { align: "center" });
+        } else {
+          doc.setTextColor(59, 130, 246);
+          doc.text("—", COLS[9].x + COLS[9].w / 2, cy, { align: "center" });
+        }
+
+        // Remarks — coloured bold text
+        const remarkText = row.isHoliday && row.remarks === "H"
+          ? `H`
+          : (row.remarks || "—");
+        const fgColor = REMARK_FG[row.remarks] || [80, 80, 80];
+        doc.setTextColor(...fgColor);
+        doc.setFont(undefined, "bold");
+        doc.setFontSize(8);
+        doc.text(remarkText, COLS[10].x + COLS[10].w / 2, cy, { align: "center" });
+        doc.setFont(undefined, "normal");
+
+        y += ROW_H;
+      });
+
+      // ── Totals row ────────────────────────────────────────────────────────
+      const TOT_H = 7;
+      doc.setFillColor(255, 255, 255);
+      doc.rect(marginL, y, contentW, TOT_H, "F");
+      drawRowBorders(y, TOT_H);
+
+      const ty = y + TOT_H / 2 + 1.5;
+      doc.setFontSize(8);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(30, 30, 30);
+      // "Totals:" label right-aligned into the Time Out column (col 4)
+      doc.text("Totals:", COLS[6].x + COLS[6].w - 1, ty, { align: "right" });
+      // Hours value centered in the Hours column (col 7)
+      doc.text(summary.totalHours + "h", COLS[7].x + COLS[7].w / 2, ty, { align: "center" });
+
+      // Late total — orange
+      doc.setTextColor(249, 115, 22);
+      doc.text(summary.totalLate || "—", COLS[8].x + COLS[8].w / 2, ty, { align: "center" });
+
+      // Undertime total — blue
+      doc.setTextColor(59, 130, 246);
+      doc.text(summary.totalUndertime || "—", COLS[9].x + COLS[9].w / 2, ty, { align: "center" });
+
+      y += TOT_H + 5;
+
+      // ── Legend ────────────────────────────────────────────────────────────
+      if (y + 14 > 275) { doc.addPage(); y = 14; }
+
+      const LEGEND = [
+        { key: "P",   label: "P = Present",         color: [22,  101, 52 ] },
+        { key: "L",   label: "L = Late",             color: [180, 83,  9  ] },
+        { key: "A",   label: "A = Absent",           color: [153, 27,  27 ] },
+        { key: "OT",  label: "OT = Overtime",        color: [30,  58,  138] },
+        { key: "MCO", label: "MCO = Missed Clock-out", color: [133, 77, 14 ] },
+        { key: "H",   label: "H = Holiday",          color: [153, 27,  27 ] },
+        { key: "HW",  label: "HW = Holiday Worked",  color: [157, 23,  77 ] },
+      ];
+      const LEGEND2 = [
+        { key: "RD",  label: "RD = Rest Day",        color: [107, 114, 128] },
+        { key: "NS",  label: "NS = No Schedule",     color: [156, 163, 175] },
+      ];
+
+      doc.setFontSize(7);
+      doc.setFont(undefined, "bold");
+      let lx = marginL;
+      LEGEND.forEach(({ label, color }) => {
+        doc.setTextColor(...color);
+        doc.text(label, lx, y);
+        lx += doc.getTextWidth(label) + 5;
+      });
+      y += 5;
+      lx = marginL;
+      LEGEND2.forEach(({ label, color }) => {
+        doc.setTextColor(...color);
+        doc.text(label, lx, y);
+        lx += doc.getTextWidth(label) + 5;
+      });
+      y += 10;
+
+      // ── Signature lines ───────────────────────────────────────────────────
+      if (y + 16 > 282) { doc.addPage(); y = 14; }
+
+      const sigLabels = ["Employee Signature", "Verified by (Supervisor)", "Approved by (HR/Admin)"];
+      const sigSlotW  = contentW / 3;
+      doc.setFont(undefined, "normal");
+      sigLabels.forEach((label, i) => {
+        const sx = marginL + i * sigSlotW;
+        const lineX1 = sx + 4;
+        const lineX2 = sx + sigSlotW - 4;
+        doc.setDrawColor(150, 150, 150);
+        doc.setLineWidth(0.3);
+        doc.line(lineX1, y, lineX2, y);
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 100, 100);
+        doc.text(label, sx + sigSlotW / 2, y + 5, { align: "center" });
+      });
+    });
+
+    const timestamp = new Date().toISOString().slice(0, 10);
+    doc.save(`${(systemConfig.companyName || "Company").replace(/\s+/g, "-")}-DTR-${timestamp}.pdf`);
+    notifyReportGenerated({ reportType: "dtr", generatedBy: user.name || user.username || "A user", details: `DTR exported as PDF.` });
+  };
+
+  const handleDtrGenerate = async () => {
+    const { start, end } = getDtrCutoffDates(dtrYear, dtrMonth, dtrCutoff);
+    if (!dtrBatchMode && !dtrSelectedEmp) { alert("Please select an employee."); return; }
+    setDtrLoading(true); setDtrData(null); setDtrBatchData([]);
+    try {
+      if (dtrBatchMode) {
+        const data = await getAllDTR({ start_date: start, end_date: end });
+        setDtrBatchData(data);
+        notifyReportGenerated({ reportType: "dtr", generatedBy: user.name || user.username || "A user", details: `Batch DTR generated for ${data.length} employee(s) (${start} to ${end}).` });
+      } else {
+        const data = await getDTR({ employee_id: dtrSelectedEmp, start_date: start, end_date: end });
+        setDtrData(data);
+        notifyReportGenerated({ reportType: "dtr", generatedBy: user.name || user.username || "A user", details: `DTR generated for employee ${dtrSelectedEmp} (${start} to ${end}).` });
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || "Failed to generate DTR.");
+    } finally {
+      setDtrLoading(false);
+    }
+  };
+
+  const DTRTableComponent = ({ dtr }) => {
+    const { employee, period, summary, rows } = dtr;
+    const fullName = `${employee.lastname}, ${employee.firstname}`.toUpperCase();
+    return (
+      <div className="dtr-block mb-10 page-break-after">
+        <div className="text-center mb-3">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest">Civil Service Form No. 48</p>
+          <h2 className="text-base font-bold uppercase tracking-wide">Daily Time Record</h2>
+        </div>
+        <div className="flex justify-between items-end mb-2 border-b pb-2">
+          <div>
+            <p className="text-xs text-gray-500">Name</p>
+            <p className="font-bold text-sm">{fullName}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{employee.position} — {employee.department}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-500">Period</p>
+            <p className="font-semibold text-sm">{period.start_date} to {period.end_date}</p>
+            <p className="text-xs text-gray-500 mt-0.5">ID: {employee.employee_id}</p>
+          </div>
+        </div>
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-gray-100">
+              {["Day","","Shift","Shift Start","Shift End","Time In","Time Out","Hours","Late","Undertime","Remarks"].map((h,i) => (
+                <th key={i} className="border border-gray-300 px-2 py-1.5 text-center">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.date} className={`${row.isHoliday?"bg-red-50":""} hover:bg-blue-50/30`}>
+                <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.day}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center text-gray-500">{row.dayName.slice(0,3)}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center text-gray-600">{row.shift||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center font-mono text-gray-600">{row.shiftStart||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center font-mono text-gray-600">{row.shiftEnd||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.timeIn||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.timeOut||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.hours||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center text-orange-600 font-medium">{row.late||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center text-blue-600 font-medium">{row.undertime||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-center">
+                  {row.isHoliday && row.remarks==="H"
+                    ? <span className="text-red-600 font-bold text-[10px]" title={row.holidayName}>H — {row.holidayName}</span>
+                    : <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${DTR_REMARK_STYLE[row.remarks]||"bg-gray-100 text-gray-600"}`}>{row.remarks}</span>
+                  }
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-gray-100 font-semibold">
+              <td colSpan={7} className="border border-gray-300 px-2 py-1.5 text-right text-xs">Totals:</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-center text-xs font-mono">{summary.totalHours}h</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-center text-xs text-orange-600">{summary.totalLate||"—"}</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-center text-xs text-blue-600">{summary.totalUndertime||"—"}</td>
+              <td className="border border-gray-300 px-2 py-1.5"></td>
+            </tr>
+          </tfoot>
+        </table>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {Object.entries(DTR_REMARK_LABEL).map(([k,v]) => (
+            <span key={k} className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${DTR_REMARK_STYLE[k]}`}>{k} = {v}</span>
+          ))}
+        </div>
+        <div className="mt-6 flex justify-between text-xs">
+          {["Employee Signature","Verified by (Supervisor)","Approved by (HR/Admin)"].map(label => (
+            <div key={label} className="text-center w-48">
+              <div className="border-b border-gray-400 mb-1 h-8"></div>
+              <p className="text-gray-500">{label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const filteredEmployees = employees.filter(employee => {
     const matchesSearch = employee.firstname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -317,6 +1012,7 @@ export default function AttendanceReports() {
     doc.text(`Report generated by ${systemConfig.systemName || 'SecureAttend'}`, 20, currentY + 15);
     
     doc.save("employee-list-report.pdf");
+    notifyReportGenerated({ reportType: "employee", generatedBy: user.name || user.username || "A user", details: `${filteredEmployees.length} employee(s) exported as PDF.` });
   };
 
   const generateAttendancePDF = () => {
@@ -411,6 +1107,7 @@ export default function AttendanceReports() {
     doc.text(`Report generated by ${systemConfig.systemName || 'SecureAttend'}`, 20, currentY + 15);
     
     doc.save("attendance-report.pdf");
+    notifyReportGenerated({ reportType: "attendance", generatedBy: user.name || user.username || "A user", details: `${filteredAttendance.length} record(s) exported as PDF.` });
   };
 
   const generateEmployeeExcel = async () => {
@@ -707,6 +1404,7 @@ export default function AttendanceReports() {
     a.download   = filename;
     a.click();
     URL.revokeObjectURL(url);
+    notifyReportGenerated({ reportType: "employee", generatedBy: user.name || user.username || "A user", details: `${filteredEmployees.length} employee(s) exported as Excel.` });
   };
 
   const generateAttendanceExcel = async () => {
@@ -982,6 +1680,7 @@ export default function AttendanceReports() {
     a.download   = filename;
     a.click();
     URL.revokeObjectURL(url);
+    notifyReportGenerated({ reportType: "attendance", generatedBy: user.name || user.username || "A user", details: `${filteredAttendance.length} record(s) exported as Excel.` });
   };
 
   const renderPagination = (totalPages) => {
@@ -1053,9 +1752,19 @@ export default function AttendanceReports() {
               >
                 Attendance Reports
               </button>
+              <button
+                onClick={() => { setReportType("dtr"); setCurrentPage(1); }}
+                className={`w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg font-medium text-sm transition-all ${
+                  reportType === "dtr"
+                    ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-600 ring-offset-1"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                DTR
+              </button>
             </div>
           </div>
-          {!isAdmin && reportType === "attendance" && (
+          {!canViewAttendance && reportType === "attendance" && (
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p className="text-sm text-yellow-800 flex items-center gap-2">
                 <span className="font-bold">⚠️</span> Attendance reports are only available for administrators.
@@ -1066,6 +1775,7 @@ export default function AttendanceReports() {
       </div>
 
       {/* Filters and Search */}
+      {reportType !== "dtr" && (
       <div className="mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1098,7 +1808,7 @@ export default function AttendanceReports() {
             </div>
 
             {/* Date Range (for attendance reports) */}
-            {reportType === "attendance" && isAdmin && (
+            {reportType === "attendance" && canViewAttendance && (
               <div className="flex flex-col sm:flex-row gap-2 w-full">
                 <input
                   type="date"
@@ -1117,7 +1827,7 @@ export default function AttendanceReports() {
           </div>
 
           {/* Status Filter Checkboxes (for attendance reports) */}
-          {reportType === "attendance" && isAdmin && (
+          {reportType === "attendance" && canViewAttendance && (
             <div className="mt-4 pt-4 border-t border-gray-200">
               <div className="flex items-center justify-between mb-3">
                 <label className="text-sm font-semibold text-gray-700">Filter by Status:</label>
@@ -1162,8 +1872,10 @@ export default function AttendanceReports() {
           )}
         </div>
       </div>
+      )} {/* end reportType !== "dtr" filters */}
 
       {/* Export Buttons */}
+      {reportType !== "dtr" && (
       <div className="mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1172,7 +1884,7 @@ export default function AttendanceReports() {
               <div className="relative group w-full sm:w-auto">
                 <button
                   onClick={reportType === "employee" ? generateEmployeePDF : generateAttendancePDF}
-                  disabled={loading || (reportType === "attendance" && !isAdmin)}
+                  disabled={loading || (reportType === "attendance" && !canViewAttendance)}
                   className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   <FaFilePdf />
@@ -1185,7 +1897,7 @@ export default function AttendanceReports() {
               <div className="relative group w-full sm:w-auto">
                 <button
                   onClick={reportType === "employee" ? generateEmployeeExcel : generateAttendanceExcel}
-                  disabled={loading || (reportType === "attendance" && !isAdmin)}
+                  disabled={loading || (reportType === "attendance" && !canViewAttendance)}
                   className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 sm:py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   <FaFileExcel />
@@ -1199,8 +1911,10 @@ export default function AttendanceReports() {
           </div>
         </div>
       </div>
+      )} {/* end reportType !== "dtr" export */}
 
       {/* Data Display */}
+      {reportType !== "dtr" && (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 relative overflow-hidden">
         {/* Real-time update indicator */}
         {loading && (
@@ -1268,7 +1982,7 @@ export default function AttendanceReports() {
               </div>
             ) : (
               // Attendance Report Display
-              isAdmin ? (
+              canViewAttendance ? (
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full min-w-[700px]">
                     <thead className="bg-gray-50">
@@ -1338,6 +2052,157 @@ export default function AttendanceReports() {
           </div>
         )}
       </div>
+      )} {/* end reportType !== "dtr" data display */}
+
+      {/* ── DTR Panel ── */}
+      {reportType === "dtr" && (
+        <>
+          <style>{`
+            @media print {
+              body * { visibility: hidden !important; }
+              #dtr-print-area, #dtr-print-area * { visibility: visible !important; }
+              #dtr-print-area { position: fixed; top: 0; left: 0; width: 100%; }
+              .page-break-after { page-break-after: always; }
+              .no-print { display: none !important; }
+              @page { size: A4 portrait; margin: 15mm; }
+            }
+          `}</style>
+
+          <div className="no-print bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <FaCalendarAlt className="text-blue-500" size={13} /> DTR Filter Options
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="lg:col-span-4 flex items-center gap-3">
+                <div onClick={() => { setDtrBatchMode(!dtrBatchMode); setDtrSelectedEmp(""); setDtrData(null); setDtrBatchData([]); }}
+                  className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${dtrBatchMode ? "bg-blue-600" : "bg-gray-300"} relative`}>
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${dtrBatchMode ? "translate-x-5" : "translate-x-0.5"}`} />
+                </div>
+                <span className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                  onClick={() => { setDtrBatchMode(!dtrBatchMode); setDtrSelectedEmp(""); setDtrData(null); setDtrBatchData([]); }}>
+                  {dtrBatchMode ? "All Employees (Batch)" : "Single Employee"}
+                </span>
+              </div>
+              {!dtrBatchMode && (
+                <div className="lg:col-span-2">
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
+                    Employee <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative mb-1">
+                    <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
+                    <input type="text" placeholder="Search employee..." value={dtrEmpSearch}
+                      onChange={e => setDtrEmpSearch(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 bg-gray-50 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                  </div>
+                  <select value={dtrSelectedEmp} onChange={e => setDtrSelectedEmp(e.target.value)} size={4}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                    <option value="">— Select Employee —</option>
+                    {dtrFilteredEmployees.map(e => (
+                      <option key={e.employee_id} value={e.employee_id}>
+                        {e.lastname}, {e.firstname} ({e.employee_id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Year</label>
+                <select value={dtrYear} onChange={e => setDtrYear(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                  {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Month</label>
+                <select value={dtrMonth} onChange={e => setDtrMonth(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString("en-US", { month: "long" })}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Cutoff Period</label>
+                <select value={dtrCutoff} onChange={e => setDtrCutoff(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                  <option value="1-15">1st — 15th</option>
+                  <option value="16-end">16th — End of Month</option>
+                  <option value="whole">Whole Month</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-3">
+              <button onClick={handleDtrGenerate} disabled={dtrLoading}
+                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 shadow-sm shadow-blue-200 transition-all disabled:opacity-60">
+                {dtrLoading
+                  ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                  : <MdTableChart size={16} />}
+                Generate DTR
+              </button>
+              {(dtrData || dtrBatchData.length > 0) && (
+                <>
+                  <button onClick={() => window.print()}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 transition-all">
+                    <FaPrint size={13} /> Print
+                  </button>
+                  <div className="relative group">
+                    <button
+                      onClick={() => generateDtrPDF(dtrData ? [dtrData] : dtrBatchData)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 shadow-sm transition-all">
+                      <FaFilePdf size={13} />
+                    </button>
+                    <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 text-xs font-medium text-white bg-gray-800 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg">
+                      Export as PDF
+                      <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                    </span>
+                  </div>
+                  <div className="relative group">
+                    <button
+                      onClick={() => generateDtrExcel(dtrData ? [dtrData] : dtrBatchData)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-bold rounded-xl hover:bg-green-700 shadow-sm transition-all">
+                      <FaFileExcel size={13} />
+                    </button>
+                    <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 text-xs font-medium text-white bg-gray-800 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-lg">
+                      Export as Excel
+                      <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div id="dtr-print-area" ref={printRef}>
+            {dtrLoading && (
+              <div className="no-print flex items-center justify-center py-20 text-gray-400">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3" />
+                Generating DTR...
+              </div>
+            )}
+            {!dtrLoading && dtrData && (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <DTRTableComponent dtr={dtrData} />
+              </div>
+            )}
+            {!dtrLoading && dtrBatchData.length > 0 && (
+              <div className="space-y-6">
+                {dtrBatchData.map(dtr => (
+                  <div key={dtr.employee.employee_id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                    <DTRTableComponent dtr={dtr} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {!dtrLoading && !dtrData && dtrBatchData.length === 0 && (
+              <div className="no-print text-center py-20 text-gray-400">
+                <MdTableChart size={40} className="mx-auto mb-3 text-gray-200" />
+                <p className="font-medium text-gray-500">No DTR generated yet</p>
+                <p className="text-sm">Select filters above and click "Generate DTR"</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
