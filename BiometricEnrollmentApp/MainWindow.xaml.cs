@@ -16,12 +16,15 @@ namespace BiometricEnrollmentApp
         private DispatcherTimer? _absentMarkingTimer;
         private bool _isAdminMode = false;
 
+        private readonly ShiftAttendanceEngine _shiftEngine;
+
         public MainWindow()
         {
             InitializeComponent();
             
             // Initialize global sync service
             _syncService = new SyncService(_dataService, _apiService);
+            _shiftEngine = new ShiftAttendanceEngine(_dataService.ConnectionString);
             
             InitializeApp();
         }
@@ -65,26 +68,23 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                LogHelper.Write($"⏰ Running absent marking check (last {daysToCheck} day(s))...");
+                LogHelper.Write($"⏰ Running shift-based evaluation (last {daysToCheck} day(s))...");
                 
-                var result = _dataService.MarkAbsentAndMissedClockouts(daysToCheck);
+                var (absent, missed) = _shiftEngine.EvaluateShifts(TimezoneHelper.Now, daysBack: daysToCheck);
                 
-                if (result.markedAbsent > 0 || result.markedMissedClockout > 0)
+                if (absent > 0 || missed > 0)
                 {
-                    LogHelper.Write($"✅ Absent marking complete: {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs");
-                    
-                    // Trigger immediate sync to web app
-                    LogHelper.Write("⚡ Triggering immediate sync for new absent/missed clock-out records...");
+                    LogHelper.Write($"✅ Evaluation complete: {absent} absent, {missed} missed clock-outs");
                     await _syncService.TriggerImmediateSync();
                 }
                 else
                 {
-                    LogHelper.Write($"ℹ️ Absent marking check complete: No new records to create");
+                    LogHelper.Write("ℹ️ Evaluation complete: No new records");
                 }
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Absent marking error: {ex.Message}");
+                LogHelper.Write($"💥 Shift evaluation error: {ex.Message}");
             }
         }
 

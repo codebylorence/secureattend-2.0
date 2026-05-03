@@ -135,7 +135,7 @@ const OvertimeModal = ({ isOpen, onClose }) => {
           });
         }
 
-        if (summary.errors === 0) {
+        if (summary.success > 0) {
           setSelectedEmployees([]);
           setReason('Production Rush');
           setEstimatedHours('2.0');

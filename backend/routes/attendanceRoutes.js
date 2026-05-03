@@ -56,4 +56,7 @@ router.put("/overtime/hours", authenticateToken, requireAttendanceAccess, update
 router.delete("/overtime/:employee_id", authenticateToken, requireAttendanceAccess, removeOvertime);
 router.get("/overtime", authenticateToken, requireAttendanceAccess, getOvertimeAssignments);
 
+// No-auth endpoint for biometric app to poll overtime assignments
+router.get("/overtime/biometric-sync", getOvertimeAssignments);
+
 export default router;

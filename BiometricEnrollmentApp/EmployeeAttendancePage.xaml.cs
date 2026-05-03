@@ -18,6 +18,7 @@ namespace BiometricEnrollmentApp
         private readonly ApiService _apiService;
         private readonly SyncService _syncService;
         private readonly PhotoService _photoService;
+        private readonly ShiftAttendanceEngine _shiftEngine;
         private CancellationTokenSource? _continuousScanCts;
         private static bool _isPageActive = false;
         private DispatcherTimer? _clockTimer;
@@ -28,6 +29,7 @@ namespace BiometricEnrollmentApp
             InitializeComponent();
             _zkService = zkService ?? new ZKTecoService();
             _dataService = new DataService();
+            _shiftEngine = new ShiftAttendanceEngine(_dataService.ConnectionString);
             _apiService = new ApiService();
             _syncService = new SyncService(_dataService, _apiService);
             _photoService = new PhotoService();
@@ -250,215 +252,117 @@ namespace BiometricEnrollmentApp
             var now = TimezoneHelper.Now;
             try
             {
+                // ── Use ShiftAttendanceEngine for all clock-in/out logic ──
                 long openSessionId = _dataService.GetOpenSessionId(employeeId, now);
 
                 if (openSessionId > 0)
                 {
-                    // Found open session - this is a clock-out request
-                    DateTime clockInTime = DateTime.MinValue;
-                    
-                    // Get session details
-                    var sessions = _dataService.GetTodaySessions();
-                    var session = sessions.FirstOrDefault(s => s.Id == openSessionId);
-                    
-                    if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
+                    // ── CLOCK-OUT ──
+                    // Show confirmation dialog if enabled
+                    if (IsClockOutConfirmationEnabled())
                     {
-                        clockInTime = DateTime.Parse(session.ClockIn);
-                        LogHelper.Write($"🔍 Session found - Clock-in: {clockInTime}, checking if clock-out is allowed...");
+                        bool shouldClockOut = false;
+                        DateTime clockInTime = DateTime.MinValue;
 
-                        // FIRST: Check if clock-out is allowed based on shift end time
-                        // This prevents showing the confirmation dialog if shift has already ended
-                        if (!_dataService.IsClockOutAllowed(employeeId, now, out string shiftEndTime, out string allowMessage))
+                        // Get clock-in time for the dialog
+                        var sessions = _dataService.GetTodaySessions();
+                        var openSession = sessions.FirstOrDefault(s => s.Id == openSessionId);
+                        if (openSession.Id > 0 && !string.IsNullOrEmpty(openSession.ClockIn))
+                            DateTime.TryParse(openSession.ClockIn, out clockInTime);
+
+                        using (var dialogCompleted = new System.Threading.ManualResetEventSlim(false))
                         {
-                            LogHelper.Write($"🚫 Clock-out denied for {employeeId}: {allowMessage}");
                             Dispatcher.Invoke(() =>
                             {
-                                UpdateInstruction($"❌ Clock-out not allowed. Shift has ended.");
-                                ShowEmployeeResult(employeeId, employeeName, "Clock-out Denied", now);
+                                try
+                                {
+                                    var confirmDialog = new ConfirmationDialog();
+                                    var parentWindow = Window.GetWindow(this) ?? Application.Current.MainWindow;
+                                    if (parentWindow != null)
+                                    {
+                                        confirmDialog.Owner = parentWindow;
+                                    }
+                                    confirmDialog.Topmost = true;
+                                    confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                                    confirmDialog.ShowInTaskbar = true;
+                                    confirmDialog.SetEmployeeInfo(employeeName, employeeId, clockInTime);
+
+                                    var dialogResult = confirmDialog.ShowDialog();
+                                    shouldClockOut = dialogResult == true && confirmDialog.IsConfirmed;
+
+                                    if (!shouldClockOut)
+                                    {
+                                        UpdateInstruction("❌ Clock-out cancelled by user");
+                                        ShowEmployeeResult(employeeId, employeeName, "Cancelled", now);
+                                    }
+                                }
+                                catch (Exception dialogEx)
+                                {
+                                    LogHelper.Write($"Dialog error: {dialogEx.Message}");
+                                    shouldClockOut = false;
+                                }
+                                finally
+                                {
+                                    dialogCompleted.Set();
+                                }
                             });
-                            Thread.Sleep(3000); // Show message for 3 seconds
+                            dialogCompleted.Wait();
+                        }
+
+                        if (!shouldClockOut)
+                        {
+                            Thread.Sleep(2000);
                             return;
                         }
-                        
-                        LogHelper.Write($"✅ Clock-out allowed: {allowMessage}");
-                        
-                        // Check if confirmation is enabled
-                        if (IsClockOutConfirmationEnabled())
-                        {
-                            LogHelper.Write("🔍 Clock-out confirmation is ENABLED - showing dialog");
-                            
-                            // Show confirmation dialog on UI thread and wait for result
-                            bool shouldClockOut = false;
-                            
-                            // Use ManualResetEventSlim for proper synchronization
-                            using (var dialogCompleted = new System.Threading.ManualResetEventSlim(false))
-                            {
-                                Dispatcher.Invoke(() =>
-                                {
-                                    try
-                                    {
-                                        LogHelper.Write("🔍 Creating and showing confirmation dialog...");
-                                        var confirmDialog = new ConfirmationDialog();
-                                        
-                                        // Find the correct parent window
-                                        Window parentWindow = null;
-                                        
-                                        // Try to find the window that contains this page
-                                        var currentElement = this as FrameworkElement;
-                                        while (currentElement != null && parentWindow == null)
-                                        {
-                                            parentWindow = Window.GetWindow(currentElement);
-                                            if (parentWindow != null) break;
-                                            currentElement = currentElement.Parent as FrameworkElement;
-                                        }
-                                        
-                                        // Fallback to main window
-                                        if (parentWindow == null)
-                                        {
-                                            parentWindow = Application.Current.MainWindow;
-                                        }
-                                        
-                                        if (parentWindow != null)
-                                        {
-                                            confirmDialog.Owner = parentWindow;
-                                            LogHelper.Write($"🔍 Set dialog owner to: {parentWindow.GetType().Name}");
-                                        }
-                                        else
-                                        {
-                                            LogHelper.Write("🔍 WARNING - No parent window found, dialog may appear behind");
-                                        }
-                                        
-                                        // Ensure dialog appears on top and centered
-                                        confirmDialog.Topmost = true;
-                                        confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-                                        confirmDialog.ShowInTaskbar = true;
-                                        confirmDialog.WindowState = WindowState.Normal;
-                                        
-                                        confirmDialog.SetEmployeeInfo(employeeName, employeeId, clockInTime);
-                                        
-                                        LogHelper.Write("🔍 About to show confirmation dialog");
-                                        
-                                        // Show as modal dialog
-                                        var result = confirmDialog.ShowDialog();
-                                        shouldClockOut = result == true && confirmDialog.IsConfirmed;
-                                        
-                                        LogHelper.Write($"🔍 Dialog result: {result}, IsConfirmed: {confirmDialog.IsConfirmed}, shouldClockOut: {shouldClockOut}");
-                                        
-                                        if (!shouldClockOut)
-                                        {
-                                            UpdateInstruction("❌ Clock-out cancelled by user");
-                                            ShowEmployeeResult(employeeId, employeeName, "Cancelled", now);
-                                        }
-                                    }
-                                    catch (Exception dialogEx)
-                                    {
-                                        LogHelper.Write($"🔍 Dialog error: {dialogEx.Message}");
-                                        LogHelper.Write($"🔍 Dialog stack trace: {dialogEx.StackTrace}");
-                                        shouldClockOut = false;
-                                    }
-                                    finally
-                                    {
-                                        dialogCompleted.Set();
-                                    }
-                                });
-                                
-                                // Wait for dialog to complete
-                                dialogCompleted.Wait();
-                            }
-                            
-                            if (!shouldClockOut)
-                            {
-                                LogHelper.Write("❌ User cancelled clock-out - stopping process");
-                                // User cancelled, don't process clock-out
-                                Thread.Sleep(2000);
-                                return;
-                            }
-                            
-                            LogHelper.Write("✅ User confirmed clock-out - proceeding");
-                        }
-                        else
-                        {
-                            LogHelper.Write("🔍 Clock-out confirmation is DISABLED - proceeding directly");
-                        }
                     }
-                    
-                    // User confirmed or confirmation disabled - proceed with clock-out
-                    LogHelper.Write("💾 Saving clock-out to database...");
-                    double hours = _dataService.SaveClockOut(openSessionId, employeeId, now);
-                    
-                    if (hours == -2)
+
+                    var result = _shiftEngine.ClockOut(employeeId, now);
+
+                    if (!result.Success)
                     {
-                        // Clock-out not allowed - shift has ended
-                        LogHelper.Write($"🚫 Clock-out denied for {employeeId} - shift has ended");
+                        LogHelper.Write($"🚫 Clock-out denied for {employeeId}: {result.Message}");
                         Dispatcher.Invoke(() =>
                         {
-                            UpdateInstruction($"❌ Clock-out not allowed. Shift has ended.");
+                            UpdateInstruction($"❌ {result.Message}");
                             ShowEmployeeResult(employeeId, employeeName, "Clock-out Denied", now);
                         });
                         Thread.Sleep(3000);
                         return;
                     }
-                    
-                    if (hours < 0)
-                    {
-                        LogHelper.Write($"❌ Failed to save clock-out for {employeeId}");
-                        Dispatcher.Invoke(() =>
-                        {
-                            UpdateInstruction("❌ Failed to save clock-out. Please try again.");
-                            ShowEmployeeResult(employeeId, employeeName, "Error", now);
-                        });
-                        Thread.Sleep(2000);
-                        return;
-                    }
-                    
+
+                    // Sync to server
+                    var sessions2 = _dataService.GetTodaySessions();
+                    var session   = sessions2.FirstOrDefault(s => s.Id == openSessionId);
                     if (session.Id > 0 && !string.IsNullOrEmpty(session.ClockIn))
                     {
-                        clockInTime = DateTime.Parse(session.ClockIn);
-                        string finalStatus = session.Status;
-                        Task.Run(async () => await _syncService.QueueAttendanceSync(employeeId, openSessionId, clockInTime, now, finalStatus));
+                        var clockInTime = DateTime.Parse(session.ClockIn);
+                        Task.Run(async () => await _syncService.QueueAttendanceSync(
+                            employeeId, openSessionId, clockInTime, now, session.Status));
                     }
-                    
+
                     Dispatcher.Invoke(() => ShowEmployeeResult(employeeId, employeeName, "Clock-out", now));
                 }
                 else
                 {
-                    // Check if employee is scheduled today
-                    var scheduleCheck = _dataService.IsEmployeeScheduledToday(employeeId);
-                    
-                    if (!scheduleCheck.IsScheduled)
-                    {
-                        Dispatcher.Invoke(() => ShowEmployeeResult(employeeId, employeeName, "Not Scheduled", now));
-                        return;
-                    }
+                    // ── CLOCK-IN ──
+                    var result = _shiftEngine.ClockIn(employeeId, now);
 
-                    var timeWindowCheck = _dataService.IsWithinShiftTimeWindow(scheduleCheck.StartTime, scheduleCheck.EndTime);
-                    
-                    if (!timeWindowCheck.IsWithinShiftTime)
+                    if (!result.Success)
                     {
-                        Dispatcher.Invoke(() => ShowEmployeeResult(employeeId, employeeName, "Outside Hours", now));
-                        return;
-                    }
-
-                    // Check if already clocked in today
-                    var todaySessions = _dataService.GetTodaySessions();
-                    bool hasCompleted = todaySessions.Any(s => s.EmployeeId == employeeId && (s.Status == "Present" || s.Status == "Late"));
-
-                    if (hasCompleted)
-                    {
-                        Dispatcher.Invoke(() => {
-                            UpdateInstruction($"⚠️ Already clocked in for today.");
-                            Task.Delay(3000).ContinueWith(_ => 
-                                Dispatcher.Invoke(() => UpdateInstruction("Place your finger to Clock-In/Clock-Out.")));
+                        LogHelper.Write($"🚫 Clock-in denied for {employeeId}: {result.Message}");
+                        Dispatcher.Invoke(() =>
+                        {
+                            UpdateInstruction($"❌ {result.Message}");
+                            ShowEmployeeResult(employeeId, employeeName, "No Active Shift", now);
                         });
+                        Thread.Sleep(3000);
                         return;
                     }
 
-                    // Clock-in
-                    string status = _dataService.DetermineAttendanceStatus(now, scheduleCheck.StartTime);
-                    long sid = _dataService.SaveClockIn(employeeId, now, status);
-                    
-                    Task.Run(async () => await _syncService.QueueAttendanceSync(employeeId, sid, now, null, status));
-                    
+                    string status = result.Message.Contains("Late") ? "Late" : "IN";
+                    Task.Run(async () => await _syncService.QueueAttendanceSync(
+                        employeeId, result.SessionId, now, null, status));
+
                     Dispatcher.Invoke(() => ShowEmployeeResult(employeeId, employeeName, status, now));
                 }
             }

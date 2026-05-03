@@ -154,6 +154,14 @@ namespace BiometricEnrollmentApp
 
                 _overtimeAssignments.Add(overtimeAssignment);
 
+                // Persist to local DB so ShiftAttendanceEngine can use it immediately
+                _dataService.UpsertOvertimeAssignment(
+                    overtimeAssignment.EmployeeId,
+                    overtimeAssignment.AssignedDate.ToString("yyyy-MM-dd"),
+                    overtimeAssignment.EstimatedHours,
+                    overtimeAssignment.Reason,
+                    overtimeAssignment.AssignedBy);
+
                 // Try to sync to server
                 try
                 {
@@ -208,6 +216,12 @@ namespace BiometricEnrollmentApp
                     if (result == MessageBoxResult.Yes)
                     {
                         _overtimeAssignments.Remove(assignment);
+
+                        // Remove from local DB
+                        _dataService.RemoveOvertimeAssignment(
+                            employeeId,
+                            assignment.AssignedDate.ToString("yyyy-MM-dd"));
+
                         LoadOvertimeAssignments();
                         
                         LogHelper.Write($"✅ Overtime assignment removed: {employeeId}");

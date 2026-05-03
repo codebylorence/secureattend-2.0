@@ -313,6 +313,51 @@ namespace BiometricEnrollmentApp.Services
         }
 
         /// <summary>
+        /// Fetch today's overtime assignments from the web app.
+        /// Returns list of (EmployeeId, Date, EstimatedHours, Reason).
+        /// </summary>
+        public async Task<List<OvertimeAssignmentDto>> GetOvertimeAssignmentsAsync()
+        {
+            try
+            {
+                // Use the no-auth biometric-sync endpoint so no JWT is required
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/attendances/overtime/biometric-sync");
+                if (!response.IsSuccessStatusCode)
+                {
+                    LogHelper.Write($"⚠️ Failed to fetch overtime assignments: {response.StatusCode}");
+                    return new List<OvertimeAssignmentDto>();
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                var items = JsonSerializer.Deserialize<List<JsonElement>>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                var result = new List<OvertimeAssignmentDto>();
+                if (items == null) return result;
+
+                foreach (var item in items)
+                {
+                    var empId = item.TryGetProperty("employee_id", out var e) ? e.GetString() ?? "" : "";
+                    var date  = item.TryGetProperty("date",        out var d) ? d.GetString() ?? "" : "";
+                    var hrs   = item.TryGetProperty("overtime_hours", out var h) && h.ValueKind == JsonValueKind.Number
+                                    ? h.GetDouble() : 0.0;
+                    var reason = item.TryGetProperty("reason", out var r) ? r.GetString() ?? "" : "";
+
+                    if (!string.IsNullOrEmpty(empId) && !string.IsNullOrEmpty(date) && hrs > 0)
+                        result.Add(new OvertimeAssignmentDto(empId, date, hrs, reason));
+                }
+
+                LogHelper.Write($"📥 Fetched {result.Count} overtime assignment(s) from server");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 GetOvertimeAssignmentsAsync error: {ex.Message}");
+                return new List<OvertimeAssignmentDto>();
+            }
+        }
+
+        /// <summary>
         /// Sync multiple attendance records to the server in bulk
         /// </summary>
         public async Task<bool> SyncAttendanceRecordsAsync(List<object> records)
@@ -416,4 +461,11 @@ namespace BiometricEnrollmentApp.Services
         public string? Message { get; set; }
         public int WaitTime { get; set; }
     }
+
+    /// <summary>DTO for overtime assignments fetched from the web app.</summary>
+    public record OvertimeAssignmentDto(
+        string EmployeeId,
+        string Date,
+        double EstimatedHours,
+        string Reason);
 }

@@ -217,8 +217,8 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                               totalHours += regularHours;
                             }
                             
-                            // Add overtime hours if status is Overtime
-                            if (attendance.status === 'Overtime' && attendance.overtime_hours) {
+                            // Add overtime hours if status is Overtime and employee has clocked out
+                            if (attendance.status === 'Overtime' && attendance.overtime_hours && attendance.clock_out) {
                               totalHours += parseFloat(attendance.overtime_hours);
                             }
                             

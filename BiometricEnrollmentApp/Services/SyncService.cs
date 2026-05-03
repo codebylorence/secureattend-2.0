@@ -13,10 +13,12 @@ namespace BiometricEnrollmentApp.Services
         private readonly ApiService _apiService;
         private readonly System.Timers.Timer _syncTimer;
         private readonly System.Timers.Timer _bulkSyncTimer;
+        private readonly System.Timers.Timer _overtimeSyncTimer;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private bool _isRunning = false;
         private bool _isScheduleSyncRunning = false;
         private bool _isBulkSyncRunning = false;
+        private bool _isOvertimeSyncRunning = false;
         private DateTime _lastScheduleSync = DateTime.MinValue;
 
         public SyncService(DataService dataService, ApiService apiService)
@@ -26,14 +28,19 @@ namespace BiometricEnrollmentApp.Services
             _cancellationTokenSource = new CancellationTokenSource();
             
             // Set up timer to retry failed syncs every 5 minutes
-            _syncTimer = new System.Timers.Timer(5 * 60 * 1000); // 5 minutes
+            _syncTimer = new System.Timers.Timer(5 * 60 * 1000);
             _syncTimer.Elapsed += OnSyncTimerElapsed;
             _syncTimer.AutoReset = true;
 
-            // Set up timer for bulk attendance sync every 2 seconds (faster for real-time sync)
-            _bulkSyncTimer = new System.Timers.Timer(2 * 1000); // 2 seconds
+            // Set up timer for bulk attendance sync every 2 seconds
+            _bulkSyncTimer = new System.Timers.Timer(2 * 1000);
             _bulkSyncTimer.Elapsed += OnBulkSyncTimerElapsed;
             _bulkSyncTimer.AutoReset = true;
+
+            // Sync overtime assignments from web app every 10 seconds for near-instant status updates
+            _overtimeSyncTimer = new System.Timers.Timer(10 * 1000);
+            _overtimeSyncTimer.Elapsed += OnOvertimeSyncTimerElapsed;
+            _overtimeSyncTimer.AutoReset = true;
         }
         
         /// <summary>
@@ -61,6 +68,7 @@ namespace BiometricEnrollmentApp.Services
             
             _syncTimer.Start();
             _bulkSyncTimer.Start();
+            _overtimeSyncTimer.Start();
             
             LogHelper.Write("✅ Sync timers started successfully");
             
@@ -71,6 +79,10 @@ namespace BiometricEnrollmentApp.Services
             // Perform initial schedule sync
             LogHelper.Write("🔄 Performing initial schedule sync...");
             Task.Run(async () => await SyncSchedulesAsync());
+
+            // Perform initial overtime sync
+            LogHelper.Write("🔄 Performing initial overtime sync...");
+            Task.Run(async () => await SyncOvertimeAssignmentsAsync());
         }
 
         public void StopSyncService()
@@ -78,6 +90,7 @@ namespace BiometricEnrollmentApp.Services
             LogHelper.Write("⏹️ Stopping sync service...");
             _syncTimer.Stop();
             _bulkSyncTimer.Stop();
+            _overtimeSyncTimer.Stop();
             _cancellationTokenSource.Cancel();
         }
 
@@ -131,7 +144,7 @@ namespace BiometricEnrollmentApp.Services
 
         private async void OnBulkSyncTimerElapsed(object sender, ElapsedEventArgs e)
         {
-            if (_isBulkSyncRunning) return; // Prevent overlapping sync operations
+            if (_isBulkSyncRunning) return;
             
             _isBulkSyncRunning = true;
             try
@@ -141,6 +154,76 @@ namespace BiometricEnrollmentApp.Services
             finally
             {
                 _isBulkSyncRunning = false;
+            }
+        }
+
+        private async void OnOvertimeSyncTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            if (_isOvertimeSyncRunning) return;
+
+            _isOvertimeSyncRunning = true;
+            try
+            {
+                await SyncOvertimeAssignmentsAsync();
+            }
+            finally
+            {
+                _isOvertimeSyncRunning = false;
+            }
+        }
+
+        /// <summary>
+        /// Pull today's overtime assignments from the web app and persist them locally.
+        /// This is what makes overtime_hours available to ShiftAttendanceEngine.
+        /// </summary>
+        public async Task SyncOvertimeAssignmentsAsync()
+        {
+            try
+            {
+                if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+                    return;
+
+                var assignments = await _apiService.GetOvertimeAssignmentsAsync();
+
+                // Build a set of employee+date keys that currently have overtime on the server
+                var serverOvertimeKeys = new HashSet<string>();
+
+                foreach (var ot in assignments)
+                {
+                    _dataService.UpsertOvertimeAssignment(
+                        ot.EmployeeId,
+                        ot.Date,
+                        ot.EstimatedHours,
+                        ot.Reason);
+
+                    // Also update the local AttendanceSessions row so the biometric
+                    // app shows "Overtime" status immediately without waiting for a
+                    // clock-in/clock-out event.
+                    _dataService.UpdateAttendanceSessionStatusToOvertime(ot.EmployeeId, ot.Date);
+
+                    serverOvertimeKeys.Add($"{ot.EmployeeId}|{ot.Date}");
+                }
+
+                // Revert any local sessions that were previously set to Overtime but
+                // are no longer in the server's overtime list (i.e. overtime was removed).
+                var localOvertimeSessions = _dataService.GetLocalOvertimeSessions();
+                foreach (var session in localOvertimeSessions)
+                {
+                    var key = $"{session.EmployeeId}|{session.Date}";
+                    if (!serverOvertimeKeys.Contains(key))
+                    {
+                        _dataService.RemoveOvertimeAssignment(session.EmployeeId, session.Date);
+                        _dataService.RevertAttendanceSessionFromOvertime(session.EmployeeId, session.Date);
+                        LogHelper.Write($"↩️ Overtime removed from server — reverted {session.EmployeeId} on {session.Date}");
+                    }
+                }
+
+                if (assignments.Count > 0)
+                    LogHelper.Write($"✅ Overtime sync: {assignments.Count} assignment(s) stored locally and sessions updated");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 SyncOvertimeAssignmentsAsync error: {ex.Message}");
             }
         }
 

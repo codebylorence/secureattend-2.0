@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,6 +10,7 @@ namespace BiometricEnrollmentApp.Services
     {
         private readonly string _dbPath;
         private readonly string _connString;
+        public string ConnectionString => _connString;
 
         public DataService()
         {
@@ -55,13 +56,31 @@ namespace BiometricEnrollmentApp.Services
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     employee_id TEXT NOT NULL,
                     date TEXT NOT NULL,
-                    clock_in TEXT NOT NULL,
+                    clock_in TEXT,
                     clock_out TEXT,
                     total_hours REAL,
-                    status TEXT NOT NULL
+                    status TEXT NOT NULL,
+                    shift_name TEXT,
+                    shift_start_time TEXT,
+                    shift_end_time TEXT
                 );
             ";
             cmd.ExecuteNonQuery();
+
+            // Add new columns to existing tables if they don't exist (migration)
+            foreach (var col in new[] {
+                ("AttendanceSessions", "shift_name",       "TEXT"),
+                ("AttendanceSessions", "shift_start_time", "TEXT"),
+                ("AttendanceSessions", "shift_end_time",   "TEXT"),
+            })
+            {
+                try
+                {
+                    cmd.CommandText = $"ALTER TABLE {col.Item1} ADD COLUMN {col.Item2} {col.Item3}";
+                    cmd.ExecuteNonQuery();
+                }
+                catch { /* column already exists â€” ignore */ }
+            }
 
             cmd.CommandText = @"
                 CREATE INDEX IF NOT EXISTS idx_attendances_employee_date ON Attendances(employee_id, recorded_at);
@@ -69,7 +88,21 @@ namespace BiometricEnrollmentApp.Services
             cmd.ExecuteNonQuery();
 
             cmd.CommandText = @"
-                CREATE INDEX IF NOT EXISTS idx_sessions_emp_date ON AttendanceSessions(employee_id, date);
+                CREATE TABLE IF NOT EXISTS OvertimeAssignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id TEXT NOT NULL,
+                    assigned_date TEXT NOT NULL,
+                    estimated_hours REAL NOT NULL,
+                    reason TEXT,
+                    assigned_by TEXT,
+                    synced_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE(employee_id, assigned_date)
+                );
+            ";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = @"
+                CREATE INDEX IF NOT EXISTS idx_overtime_emp_date ON OvertimeAssignments(employee_id, assigned_date);
             ";
             cmd.ExecuteNonQuery();
 
@@ -139,10 +172,10 @@ namespace BiometricEnrollmentApp.Services
                     VALUES (1, 'admin', 'admin123');
                 ";
                 cmd.ExecuteNonQuery();
-                LogHelper.Write("🔐 Default admin credentials created (username: admin, password: admin123)");
+                LogHelper.Write("ðŸ” Default admin credentials created (username: admin, password: admin123)");
             }
 
-            LogHelper.Write($"📂 Database initialized at {_dbPath}");
+            LogHelper.Write($"ðŸ“‚ Database initialized at {_dbPath}");
         }
 
         // -----------------------
@@ -188,12 +221,12 @@ namespace BiometricEnrollmentApp.Services
                     else if (long.TryParse(obj.ToString(), out var p)) id = p;
                 }
 
-                LogHelper.Write($"✅ Enrollment saved/updated for {employeeId} (row id {id})");
+                LogHelper.Write($"âœ… Enrollment saved/updated for {employeeId} (row id {id})");
                 return id;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error saving enrollment: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error saving enrollment: {ex.Message}");
                 return -1;
             }
         }
@@ -295,12 +328,12 @@ namespace BiometricEnrollmentApp.Services
                 int rows = cmd.ExecuteNonQuery();
 
                 LogHelper.Write(rows > 0
-                    ? $"🗑️ Deleted enrollment for {employeeId}"
-                    : $"⚠️ No enrollment found for {employeeId}");
+                    ? $"ðŸ—‘ï¸ Deleted enrollment for {employeeId}"
+                    : $"âš ï¸ No enrollment found for {employeeId}");
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error deleting enrollment for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error deleting enrollment for {employeeId}: {ex.Message}");
             }
         }
 
@@ -330,11 +363,11 @@ namespace BiometricEnrollmentApp.Services
 
                 cmd.ExecuteNonQuery();
 
-                LogHelper.Write($"✅ Attendance recorded: {employeeId} ({method}) at {ts} (Philippines time)");
+                LogHelper.Write($"âœ… Attendance recorded: {employeeId} ({method}) at {ts} (Philippines time)");
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Failed to save attendance for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Failed to save attendance for {employeeId}: {ex.Message}");
             }
         }
 
@@ -414,12 +447,12 @@ namespace BiometricEnrollmentApp.Services
                     else if (Int64.TryParse(obj.ToString(), out var parsed)) id = parsed;
                 }
 
-                LogHelper.Write($"🕘 Clock-in saved for {employeeId} (session {id}) at {ts} with date {attendanceDate}");
+                LogHelper.Write($"ðŸ•˜ Clock-in saved for {employeeId} (session {id}) at {ts} with date {attendanceDate}");
                 return id;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 SaveClockIn failed for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ SaveClockIn failed for {employeeId}: {ex.Message}");
                 return -1;
             }
         }
@@ -438,7 +471,7 @@ namespace BiometricEnrollmentApp.Services
                 if (!scheduleCheck.IsScheduled)
                 {
                     // No schedule found, use current date
-                    LogHelper.Write($"📅 No schedule found for {employeeId}, using current date: {clockInTime:yyyy-MM-dd}");
+                    LogHelper.Write($"ðŸ“… No schedule found for {employeeId}, using current date: {clockInTime:yyyy-MM-dd}");
                     return clockInTime.ToString("yyyy-MM-dd");
                 }
                 
@@ -472,7 +505,7 @@ namespace BiometricEnrollmentApp.Services
                             // Employee was scheduled yesterday and this is an overnight shift
                             // Use yesterday's date for the attendance session
                             var attendanceDate = yesterdayDate;
-                            LogHelper.Write($"🌙 Overnight shift detected for {employeeId}, using shift start date: {attendanceDate}");
+                            LogHelper.Write($"ðŸŒ™ Overnight shift detected for {employeeId}, using shift start date: {attendanceDate}");
                             return attendanceDate;
                         }
                     }
@@ -480,12 +513,12 @@ namespace BiometricEnrollmentApp.Services
                 
                 // Default: use current date
                 var currentDate = clockInTime.ToString("yyyy-MM-dd");
-                LogHelper.Write($"📅 Using current date for {employeeId}: {currentDate}");
+                LogHelper.Write($"ðŸ“… Using current date for {employeeId}: {currentDate}");
                 return currentDate;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error determining attendance date for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error determining attendance date for {employeeId}: {ex.Message}");
                 // Fallback to current date
                 return clockInTime.ToString("yyyy-MM-dd");
             }
@@ -506,14 +539,14 @@ namespace BiometricEnrollmentApp.Services
                 var clockInObj = cmd.ExecuteScalar();
                 if (clockInObj == null || clockInObj == DBNull.Value)
                 {
-                    LogHelper.Write($"⚠️ Session {sessionId} not found for clock-out.");
+                    LogHelper.Write($"âš ï¸ Session {sessionId} not found for clock-out.");
                     return -1;
                 }
 
                 var clockInStr = clockInObj.ToString();
                 if (!DateTime.TryParse(clockInStr, out var clockInLocal))
                 {
-                    LogHelper.Write($"⚠️ Invalid clock_in value in DB for session {sessionId}: {clockInStr}");
+                    LogHelper.Write($"âš ï¸ Invalid clock_in value in DB for session {sessionId}: {clockInStr}");
                     return -1;
                 }
 
@@ -539,14 +572,14 @@ namespace BiometricEnrollmentApp.Services
                 int rows = cmd.ExecuteNonQuery();
 
                 LogHelper.Write(rows > 0
-                    ? $"🕙 Clock-out saved for session {sessionId} at {tsOut} (hours={total:F2})"
-                    : $"⚠️ Failed to update session {sessionId} on clock-out.");
+                    ? $"ðŸ•™ Clock-out saved for session {sessionId} at {tsOut} (hours={total:F2})"
+                    : $"âš ï¸ Failed to update session {sessionId} on clock-out.");
 
                 return total;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 SaveClockOut failed for session {sessionId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ SaveClockOut failed for session {sessionId}: {ex.Message}");
                 return -1;
             }
         }
@@ -578,7 +611,7 @@ namespace BiometricEnrollmentApp.Services
                 // Parse shift end time
                 if (!TimeSpan.TryParse(scheduleCheck.EndTime, out var endTime))
                 {
-                    LogHelper.Write($"⚠️ Invalid shift end time format: {scheduleCheck.EndTime}");
+                    LogHelper.Write($"âš ï¸ Invalid shift end time format: {scheduleCheck.EndTime}");
                     message = "Invalid shift end time - clock-out allowed";
                     return true;
                 }
@@ -586,10 +619,9 @@ namespace BiometricEnrollmentApp.Services
                 // Get current time
                 var currentTime = clockOutTime.TimeOfDay;
                 
-                // Get grace period from settings
-                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
-                var gracePeriodMinutes = settingsService.GetClockOutGracePeriodMinutes();
-                var endTimeWithGrace = endTime.Add(TimeSpan.FromMinutes(gracePeriodMinutes));
+                // No grace period â€” clock-out must be at or before shift end time
+                var gracePeriodMinutes = 0;
+                var endTimeWithGrace = endTime; // no grace
                 
                 // Handle overnight shifts
                 if (IsOvernightShift(scheduleCheck.StartTime, scheduleCheck.EndTime))
@@ -623,7 +655,7 @@ namespace BiometricEnrollmentApp.Services
                 {
                     // Regular shift (not overnight)
                     // If current time is past midnight (00:00-05:59) but shift end was in the evening,
-                    // the shift has ended on the previous day — deny clock-out
+                    // the shift has ended on the previous day â€” deny clock-out
                     if (currentTime.Hours < 6 && endTime.Hours >= 18)
                     {
                         message = $"Clock-out not allowed. Shift ended at {scheduleCheck.EndTime} (it is now past midnight)";
@@ -645,7 +677,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error checking clock-out permission: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error checking clock-out permission: {ex.Message}");
                 message = "Error checking schedule - clock-out allowed";
                 return true; // Allow clock-out on error to avoid blocking employees
             }
@@ -661,11 +693,11 @@ namespace BiometricEnrollmentApp.Services
                 // Check if clock-out is allowed based on shift end time
                 if (!IsClockOutAllowed(employeeId, clockOutLocal, out string shiftEndTime, out string message))
                 {
-                    LogHelper.Write($"🚫 Clock-out denied for {employeeId}: {message}");
+                    LogHelper.Write($"ðŸš« Clock-out denied for {employeeId}: {message}");
                     return -2; // Special return value to indicate clock-out not allowed
                 }
                 
-                LogHelper.Write($"✅ Clock-out allowed for {employeeId}: {message}");
+                LogHelper.Write($"âœ… Clock-out allowed for {employeeId}: {message}");
                 
                 var tsOut = clockOutLocal.ToString("yyyy-MM-dd HH:mm:ss");
 
@@ -678,14 +710,14 @@ namespace BiometricEnrollmentApp.Services
                 var clockInObj = cmd.ExecuteScalar();
                 if (clockInObj == null || clockInObj == DBNull.Value)
                 {
-                    LogHelper.Write($"⚠️ Session {sessionId} not found for clock-out.");
+                    LogHelper.Write($"âš ï¸ Session {sessionId} not found for clock-out.");
                     return -1;
                 }
 
                 var clockInStr = clockInObj.ToString();
                 if (!DateTime.TryParse(clockInStr, out var clockInLocal))
                 {
-                    LogHelper.Write($"⚠️ Invalid clock_in value in DB for session {sessionId}: {clockInStr}");
+                    LogHelper.Write($"âš ï¸ Invalid clock_in value in DB for session {sessionId}: {clockInStr}");
                     return -1;
                 }
 
@@ -706,7 +738,31 @@ namespace BiometricEnrollmentApp.Services
                 {
                     finalStatus = "Missed Clock-out";
                     total = 0; // Do not record hours for missed clock-out
-                    LogHelper.Write($"⚠️ Marking session {sessionId} as 'Missed Clock-out' for employee {employeeId} — hours cleared");
+                    LogHelper.Write($"âš ï¸ Marking session {sessionId} as 'Missed Clock-out' for employee {employeeId} â€” hours cleared");
+                }
+                else if (!string.IsNullOrEmpty(shiftEndTime) && TimeSpan.TryParse(shiftEndTime, out var shiftEnd))
+                {
+                    // If clock-out is past the shift end time, cap total hours at shift end time
+                    // (excess time beyond shift end is not counted as worked hours)
+                    var scheduleCheck = IsEmployeeScheduledToday(employeeId);
+                    bool isOvernight = IsOvernightShift(scheduleCheck.StartTime, shiftEndTime);
+
+                    var shiftEndDateTime = new DateTime(
+                        clockInLocal.Year, clockInLocal.Month, clockInLocal.Day,
+                        shiftEnd.Hours, shiftEnd.Minutes, 0);
+
+                    if (isOvernight && shiftEndDateTime <= clockInLocal)
+                        shiftEndDateTime = shiftEndDateTime.AddDays(1);
+
+                    if (clockOutLocal > shiftEndDateTime)
+                    {
+                        var cappedTotal = (shiftEndDateTime - clockInLocal).TotalHours;
+                        if (cappedTotal > 0 && cappedTotal < total)
+                        {
+                            LogHelper.Write($"â±ï¸ Clock-out at {clockOutLocal:HH:mm} is past shift end {shiftEndTime} â€” capping hours from {total:F2} to {cappedTotal:F2}");
+                            total = cappedTotal;
+                        }
+                    }
                 }
 
                 cmd.CommandText = @"
@@ -723,14 +779,14 @@ namespace BiometricEnrollmentApp.Services
                 int rows = cmd.ExecuteNonQuery();
 
                 LogHelper.Write(rows > 0
-                    ? $"🕙 Clock-out saved for session {sessionId} at {tsOut} (hours={total:F2}, status={finalStatus})"
-                    : $"⚠️ Failed to update session {sessionId} on clock-out.");
+                    ? $"ðŸ•™ Clock-out saved for session {sessionId} at {tsOut} (hours={total:F2}, status={finalStatus})"
+                    : $"âš ï¸ Failed to update session {sessionId} on clock-out.");
 
                 return total;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 SaveClockOut failed for session {sessionId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ SaveClockOut failed for session {sessionId}: {ex.Message}");
                 return -1;
             }
         }
@@ -765,7 +821,7 @@ namespace BiometricEnrollmentApp.Services
             if (localDate.Hour >= 0 && localDate.Hour < 12) // Early morning hours
             {
                 var yesterday = localDate.AddDays(-1).ToString("yyyy-MM-dd");
-                LogHelper.Write($"🌙 Checking yesterday ({yesterday}) for open overnight shift sessions for {employeeId}");
+                LogHelper.Write($"ðŸŒ™ Checking yesterday ({yesterday}) for open overnight shift sessions for {employeeId}");
                 
                 cmd.CommandText = @"
                     SELECT id FROM AttendanceSessions
@@ -781,17 +837,17 @@ namespace BiometricEnrollmentApp.Services
                 {
                     if (obj2 is long l2) 
                     {
-                        LogHelper.Write($"🌙 Found open overnight session {l2} from {yesterday} for {employeeId}");
+                        LogHelper.Write($"ðŸŒ™ Found open overnight session {l2} from {yesterday} for {employeeId}");
                         return l2;
                     }
                     if (obj2 is int i2) 
                     {
-                        LogHelper.Write($"🌙 Found open overnight session {i2} from {yesterday} for {employeeId}");
+                        LogHelper.Write($"ðŸŒ™ Found open overnight session {i2} from {yesterday} for {employeeId}");
                         return i2;
                     }
                     if (Int64.TryParse(obj2.ToString(), out var parsed2)) 
                     {
-                        LogHelper.Write($"🌙 Found open overnight session {parsed2} from {yesterday} for {employeeId}");
+                        LogHelper.Write($"ðŸŒ™ Found open overnight session {parsed2} from {yesterday} for {employeeId}");
                         return parsed2;
                     }
                 }
@@ -950,12 +1006,12 @@ namespace BiometricEnrollmentApp.Services
                 cmd.Parameters.AddWithValue("$cutoff", cutoff);
 
                 int rows = cmd.ExecuteNonQuery();
-                LogHelper.Write($"🗑️ Deleted {rows} attendance records older than {retentionDays} days (Philippines time).");
+                LogHelper.Write($"ðŸ—‘ï¸ Deleted {rows} attendance records older than {retentionDays} days (Philippines time).");
                 return rows;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error deleting old attendances: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error deleting old attendances: {ex.Message}");
                 return 0;
             }
         }
@@ -1012,7 +1068,7 @@ namespace BiometricEnrollmentApp.Services
                         // Store the specific date directly in schedule_dates as a simple array
                         var dates = new List<string> { schedule.Specific_Date };
                         scheduleDatesValue = System.Text.Json.JsonSerializer.Serialize(dates);
-                        LogHelper.Write($"📅 Created schedule_dates for {schedule.Specific_Date}: {scheduleDatesValue}");
+                        LogHelper.Write($"ðŸ“… Created schedule_dates for {schedule.Specific_Date}: {scheduleDatesValue}");
                     }
                     cmd.Parameters.AddWithValue("$dates", scheduleDatesValue);
                     
@@ -1026,12 +1082,12 @@ namespace BiometricEnrollmentApp.Services
                 }
 
                 transaction.Commit();
-                LogHelper.Write($"✅ Updated {count} employee schedule(s) in local database (new biometric API format)");
+                LogHelper.Write($"âœ… Updated {count} employee schedule(s) in local database (new biometric API format)");
                 return count;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error updating schedules: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error updating schedules: {ex.Message}");
                 return 0;
             }
         }
@@ -1044,7 +1100,7 @@ namespace BiometricEnrollmentApp.Services
                 var now = TimezoneHelper.Now;
                 var todayDate = now.ToString("yyyy-MM-dd");
                 
-                LogHelper.Write($"📅 Getting schedules for {todayDate} (date-based matching only)");
+                LogHelper.Write($"ðŸ“… Getting schedules for {todayDate} (date-based matching only)");
                 
                 using var conn = new SqliteConnection($"Data Source={_dbPath}");
                 conn.Open();
@@ -1054,7 +1110,7 @@ namespace BiometricEnrollmentApp.Services
                 {
                     allCmd.CommandText = "SELECT COUNT(*) FROM EmployeeSchedules";
                     var totalCount = Convert.ToInt32(allCmd.ExecuteScalar());
-                    LogHelper.Write($"📊 Total schedules in database: {totalCount}");
+                    LogHelper.Write($"ðŸ“Š Total schedules in database: {totalCount}");
                 }
 
                 using var cmd = conn.CreateCommand();
@@ -1076,17 +1132,17 @@ namespace BiometricEnrollmentApp.Services
                     var days = reader.GetString(4);
                     var scheduleDates = reader.IsDBNull(5) ? "" : reader.GetString(5);
                     
-                    LogHelper.Write($"  ✓ Found schedule: {empId} - {shift} ({start} - {end}) [specific date: {todayDate}]");
+                    LogHelper.Write($"  âœ“ Found schedule: {empId} - {shift} ({start} - {end}) [specific date: {todayDate}]");
                     
                     result.Add((empId, shift, start, end, days));
                 }
                 
-                LogHelper.Write($"📊 Total schedules found for today: {result.Count}");
+                LogHelper.Write($"ðŸ“Š Total schedules found for today: {result.Count}");
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error getting today's schedules: {ex.Message}");
-                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                LogHelper.Write($"ðŸ’¥ Error getting today's schedules: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Stack trace: {ex.StackTrace}");
             }
             return result;
         }
@@ -1124,7 +1180,7 @@ namespace BiometricEnrollmentApp.Services
                     var employeeId = reader.GetString(0);
                     var employeeName = reader.GetString(1);
                     
-                    // Clean up schedule_dates: remove JSON array brackets/quotes e.g. ["2026-03-31"] → 2026-03-31
+                    // Clean up schedule_dates: remove JSON array brackets/quotes e.g. ["2026-03-31"] â†’ 2026-03-31
                     var rawDates = reader.GetString(5);
                     var cleanDates = rawDates
                         .Trim('[', ']')
@@ -1146,7 +1202,7 @@ namespace BiometricEnrollmentApp.Services
                     result.Add(schedule);
                 }
                 
-                LogHelper.Write($"📊 Retrieved {result.Count} schedules from database");
+                LogHelper.Write($"ðŸ“Š Retrieved {result.Count} schedules from database");
                 
                 // Log first few employee IDs for debugging
                 if (result.Count > 0)
@@ -1159,7 +1215,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error getting all schedules: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error getting all schedules: {ex.Message}");
             }
             return result;
         }
@@ -1193,7 +1249,7 @@ namespace BiometricEnrollmentApp.Services
                     var shiftName = reader.GetString(0);
                     var startTime = reader.GetString(1);
                     var endTime = reader.GetString(2);
-                    LogHelper.Write($"📅 Found schedule for {employeeId} on {todayDate}: {shiftName} ({startTime} - {endTime})");
+                    LogHelper.Write($"ðŸ“… Found schedule for {employeeId} on {todayDate}: {shiftName} ({startTime} - {endTime})");
                     return (true, shiftName, startTime, endTime);
                 }
                 reader.Close();
@@ -1202,7 +1258,7 @@ namespace BiometricEnrollmentApp.Services
                 // This handles cases where it's past midnight and the shift started yesterday
                 if (now.Hour >= 0 && now.Hour < 12) // Check overnight shifts only in early hours (00:00-11:59)
                 {
-                    LogHelper.Write($"🌙 Checking yesterday ({yesterdayDate}) for overnight shifts for {employeeId}");
+                    LogHelper.Write($"ðŸŒ™ Checking yesterday ({yesterdayDate}) for overnight shifts for {employeeId}");
                     
                     cmd.CommandText = @"
                         SELECT shift_name, start_time, end_time
@@ -1229,7 +1285,7 @@ namespace BiometricEnrollmentApp.Services
                             var currentTime = TimezoneHelper.FormatTimeDisplayShort(now);
                             if (IsCurrentTimeWithinOvernightShift(startTime, endTime, currentTime))
                             {
-                                LogHelper.Write($"🌙 Found overnight shift for {employeeId} from {yesterdayDate}: {shiftName} ({startTime} - {endTime})");
+                                LogHelper.Write($"ðŸŒ™ Found overnight shift for {employeeId} from {yesterdayDate}: {shiftName} ({startTime} - {endTime})");
                                 return (true, shiftName, startTime, endTime);
                             }
                         }
@@ -1238,7 +1294,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error checking schedule for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error checking schedule for {employeeId}: {ex.Message}");
             }
             return (false, "", "", "");
         }
@@ -1267,7 +1323,7 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (count > 0)
                 {
-                    LogHelper.Write($"⏰ Employee {employeeId} has overtime assignment for {today}");
+                    LogHelper.Write($"â° Employee {employeeId} has overtime assignment for {today}");
                     return true;
                 }
                 
@@ -1275,7 +1331,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error checking overtime assignment for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error checking overtime assignment for {employeeId}: {ex.Message}");
                 return false;
             }
         }
@@ -1304,7 +1360,7 @@ namespace BiometricEnrollmentApp.Services
                 var existingCount = Convert.ToInt32(checkCmd.ExecuteScalar());
                 if (existingCount > 0)
                 {
-                    LogHelper.Write($"⚠️ Overtime assignment already exists for {employeeId} on {today}");
+                    LogHelper.Write($"âš ï¸ Overtime assignment already exists for {employeeId} on {today}");
                     return -1;
                 }
 
@@ -1322,13 +1378,13 @@ namespace BiometricEnrollmentApp.Services
                 // Get the last inserted row ID
                 cmd.CommandText = "SELECT last_insert_rowid()";
                 var sessionId = Convert.ToInt64(cmd.ExecuteScalar());
-                LogHelper.Write($"✅ Created overtime assignment for {employeeId} (Session ID: {sessionId})");
+                LogHelper.Write($"âœ… Created overtime assignment for {employeeId} (Session ID: {sessionId})");
                 
                 return sessionId;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error creating overtime assignment for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error creating overtime assignment for {employeeId}: {ex.Message}");
                 return -1;
             }
         }
@@ -1391,7 +1447,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error checking shift time window: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error checking shift time window: {ex.Message}");
                 return (true, ""); // If error, allow attendance
             }
         }
@@ -1431,13 +1487,13 @@ namespace BiometricEnrollmentApp.Services
                 string toolboxStartStr = toolboxStart.ToString("HH:mm:ss");
                 string toolboxEndStr = scheduleCheck.StartTime + ":00";
                 
-                LogHelper.Write($"📋 Toolbox meeting for {employeeId}: {toolboxStartStr} - {toolboxEndStr} (Shift: {scheduleCheck.StartTime} - {scheduleCheck.EndTime})");
+                LogHelper.Write($"ðŸ“‹ Toolbox meeting for {employeeId}: {toolboxStartStr} - {toolboxEndStr} (Shift: {scheduleCheck.StartTime} - {scheduleCheck.EndTime})");
                 
                 return (toolboxStartStr, toolboxEndStr, scheduleCheck.StartTime, scheduleCheck.EndTime);
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error getting toolbox meeting times: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error getting toolbox meeting times: {ex.Message}");
                 return ("", "", "", "");
             }
         }
@@ -1466,7 +1522,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"⚠️ Error reading toolbox meeting config: {ex.Message}");
+                LogHelper.Write($"âš ï¸ Error reading toolbox meeting config: {ex.Message}");
             }
             
             // Default to 60 minutes
@@ -1505,14 +1561,14 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (isWithinPeriod)
                 {
-                    LogHelper.Write($"📋 {employeeId} is within toolbox meeting period: {toolboxTimes.ToolboxStart} - {toolboxTimes.ToolboxEnd}");
+                    LogHelper.Write($"ðŸ“‹ {employeeId} is within toolbox meeting period: {toolboxTimes.ToolboxStart} - {toolboxTimes.ToolboxEnd}");
                 }
                 
                 return isWithinPeriod;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error checking toolbox meeting period: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error checking toolbox meeting period: {ex.Message}");
                 return false;
             }
         }
@@ -1540,18 +1596,18 @@ namespace BiometricEnrollmentApp.Services
                 // Get toolbox meeting duration
                 int toolboxMinutes = GetToolboxMeetingMinutes();
                 
-                LogHelper.Write($"📊 Clock-in analysis: {minutesDifference:F1} minutes from shift start (Grace period: ±{gracePeriod} min, Toolbox: {toolboxMinutes} min before)");
+                LogHelper.Write($"ðŸ“Š Clock-in analysis: {minutesDifference:F1} minutes from shift start (Grace period: Â±{gracePeriod} min, Toolbox: {toolboxMinutes} min before)");
                 
                 // If within grace period (before or after shift start), mark as Present
                 if (Math.Abs(minutesDifference) <= gracePeriod)
                 {
                     if (minutesDifference <= 0)
                     {
-                        LogHelper.Write($"✅ Early clock-in within grace period ({minutesDifference:F1} min) - Status: Present");
+                        LogHelper.Write($"âœ… Early clock-in within grace period ({minutesDifference:F1} min) - Status: Present");
                     }
                     else
                     {
-                        LogHelper.Write($"✅ Late clock-in within grace period ({minutesDifference:F1} min) - Status: Present");
+                        LogHelper.Write($"âœ… Late clock-in within grace period ({minutesDifference:F1} min) - Status: Present");
                     }
                     return "Present";
                 }
@@ -1559,24 +1615,24 @@ namespace BiometricEnrollmentApp.Services
                 // If beyond grace period and late, mark as Late
                 if (minutesDifference > gracePeriod)
                 {
-                    LogHelper.Write($"⏰ Beyond grace period ({minutesDifference:F1} > {gracePeriod} min) - Status: Late");
+                    LogHelper.Write($"â° Beyond grace period ({minutesDifference:F1} > {gracePeriod} min) - Status: Late");
                     return "Late";
                 }
                 
                 // If early but within toolbox meeting period, mark as Present
                 if (minutesDifference < -gracePeriod && Math.Abs(minutesDifference) <= toolboxMinutes)
                 {
-                    LogHelper.Write($"📋 Toolbox meeting clock-in ({minutesDifference:F1} min before shift) - Status: Present");
+                    LogHelper.Write($"ðŸ“‹ Toolbox meeting clock-in ({minutesDifference:F1} min before shift) - Status: Present");
                     return "Present";
                 }
                 
                 // If too early (before toolbox meeting period), still mark as Present but log it
-                LogHelper.Write($"⏰ Very early clock-in ({minutesDifference:F1} min before shift, outside toolbox period) - Status: Present");
+                LogHelper.Write($"â° Very early clock-in ({minutesDifference:F1} min before shift, outside toolbox period) - Status: Present");
                 return "Present";
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error determining status: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error determining status: {ex.Message}");
                 return "Present";
             }
         }
@@ -1592,7 +1648,7 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (!scheduleCheck.IsScheduled)
                 {
-                    LogHelper.Write($"📅 No schedule found for {employeeId}, allowing normal clock-out");
+                    LogHelper.Write($"ðŸ“… No schedule found for {employeeId}, allowing normal clock-out");
                     return false;
                 }
                 
@@ -1627,28 +1683,24 @@ namespace BiometricEnrollmentApp.Services
                     }
                 }
                 
-                // Get grace period from settings
-                var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
-                int gracePeriod = settingsService.GetClockOutGracePeriodMinutes();
-                
-                // Calculate minutes after shift end (positive = late clock-out)
+                // No grace period â€” any clock-out after shift end is missed clock-out
                 var minutesAfterShiftEnd = (clockOutTime - shiftEnd).TotalMinutes;
                 
-                LogHelper.Write($"🕐 Clock-out analysis for {employeeId}: {minutesAfterShiftEnd:F1} minutes after shift end (Grace period: {gracePeriod} min)");
+                LogHelper.Write($"ðŸ• Clock-out analysis for {employeeId}: {minutesAfterShiftEnd:F1} minutes after shift end (no grace period)");
                 
-                // If clocking out more than grace period after shift end, mark as "Missed Clock-out"
-                if (minutesAfterShiftEnd > gracePeriod)
+                // If clocking out after shift end, mark as "Missed Clock-out"
+                if (minutesAfterShiftEnd > 0)
                 {
-                    LogHelper.Write($"⚠️ {employeeId} clocking out {minutesAfterShiftEnd:F1} minutes after shift end - Status: Missed Clock-out");
+                    LogHelper.Write($"âš ï¸ {employeeId} clocking out {minutesAfterShiftEnd:F1} minutes after shift end - Status: Missed Clock-out");
                     return true;
                 }
                 
-                LogHelper.Write($"✅ {employeeId} clocking out within grace period - Status: Normal");
+                LogHelper.Write($"âœ… {employeeId} clocking out on time - Status: Normal");
                 return false;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error checking missed clock-out for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error checking missed clock-out for {employeeId}: {ex.Message}");
                 return false; // Default to normal clock-out if error
             }
         }
@@ -1664,9 +1716,9 @@ namespace BiometricEnrollmentApp.Services
                 var now = TimezoneHelper.Now;
                 var today = now.Date;
                 
-                LogHelper.Write($"🔍 ========== HISTORICAL ABSENT MARKING ==========");
-                LogHelper.Write($"🔍 Checking last {daysBack} days for missing absent records");
-                LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} - Philippines time");
+                LogHelper.Write($"ðŸ” ========== HISTORICAL ABSENT MARKING ==========");
+                LogHelper.Write($"ðŸ” Checking last {daysBack} days for missing absent records");
+                LogHelper.Write($"ðŸ” Current time: {now:yyyy-MM-dd HH:mm:ss} - Philippines time");
                 
                 int totalMarkedAbsent = 0;
                 int totalMarkedMissedClockout = 0;
@@ -1697,11 +1749,11 @@ namespace BiometricEnrollmentApp.Services
                     }
                 }
                 
-                LogHelper.Write($"📊 Found {allSchedules.Count} total schedules in database");
+                LogHelper.Write($"ðŸ“Š Found {allSchedules.Count} total schedules in database");
                 
                 // Get all enrolled employees
                 var enrolledEmployees = GetAllEnrollments().Select(e => e.EmployeeId).ToHashSet();
-                LogHelper.Write($"👆 Found {enrolledEmployees.Count} employees with enrolled fingerprints");
+                LogHelper.Write($"ðŸ‘† Found {enrolledEmployees.Count} employees with enrolled fingerprints");
                 
                 // Check each day going backwards
                 for (int i = 1; i <= daysBack; i++)
@@ -1717,7 +1769,7 @@ namespace BiometricEnrollmentApp.Services
                     if (schedulesForDate.Count == 0)
                         continue;
                     
-                    LogHelper.Write($"\n📅 Checking {checkDateStr} - {schedulesForDate.Count} scheduled");
+                    LogHelper.Write($"\nðŸ“… Checking {checkDateStr} - {schedulesForDate.Count} scheduled");
                     
                     // Get all attendance sessions for this date
                     var sessionsForDate = new List<(long Id, string EmployeeId, string ClockIn, string ClockOut, string Status)>();
@@ -1752,18 +1804,17 @@ namespace BiometricEnrollmentApp.Services
                         if (!enrolledEmployees.Contains(schedule.EmployeeId))
                             continue;
                         
-                        // Check if shift has ended (with grace period)
+                        // Check if shift has ended (past dates are always fully ended)
                         var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
-                        int clockOutGracePeriod = settingsService.GetClockOutGracePeriodMinutes();
                         
-                        // Parse shift end time
+                        // Parse shift end time â€” no grace period, process immediately after shift ends â€” no grace period, process immediately after shift ends
                         var endTimeParts = schedule.EndTime.Split(':');
                         if (endTimeParts.Length < 2)
                             continue;
                         
                         int endHour = int.Parse(endTimeParts[0]);
                         int endMinute = int.Parse(endTimeParts[1]);
-                        var shiftEndTime = checkDate.AddHours(endHour).AddMinutes(endMinute).AddMinutes(clockOutGracePeriod);
+                        var shiftEndTime = checkDate.AddHours(endHour).AddMinutes(endMinute);
                         
                         // Only process if shift has ended
                         if (now < shiftEndTime)
@@ -1808,7 +1859,7 @@ namespace BiometricEnrollmentApp.Services
                                 AddToSyncQueue(schedule.EmployeeId, sessionId, "absent", $"{{\"date\":\"{checkDateStr}\",\"status\":\"Absent\"}}");
                                 
                                 totalMarkedAbsent++;
-                                LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent for {checkDateStr} - Queued for sync");
+                                LogHelper.Write($"  âŒ {schedule.EmployeeId} - Marked as Absent for {checkDateStr} - Queued for sync");
                             }
                         }
                         else if (!string.IsNullOrEmpty(session.ClockIn) && string.IsNullOrEmpty(session.ClockOut))
@@ -1818,23 +1869,23 @@ namespace BiometricEnrollmentApp.Services
                             {
                                 MarkSessionAsMissedClockout(session.Id, schedule.EndTime);
                                 totalMarkedMissedClockout++;
-                                LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out for {checkDateStr}");
+                                LogHelper.Write($"  ðŸ• {schedule.EmployeeId} - Marked as Missed Clock-out for {checkDateStr}");
                             }
                         }
                     }
                 }
                 
-                LogHelper.Write($"\n✅ Historical check complete:");
+                LogHelper.Write($"\nâœ… Historical check complete:");
                 LogHelper.Write($"   {totalMarkedAbsent} marked absent");
                 LogHelper.Write($"   {totalMarkedMissedClockout} marked missed clock-out");
-                LogHelper.Write($"🔍 ========== END HISTORICAL ABSENT MARKING ==========\n");
+                LogHelper.Write($"ðŸ” ========== END HISTORICAL ABSENT MARKING ==========\n");
                 
                 return (totalMarkedAbsent, totalMarkedMissedClockout);
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error in MarkHistoricalAbsences: {ex.Message}");
-                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                LogHelper.Write($"ðŸ’¥ Error in MarkHistoricalAbsences: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Stack trace: {ex.StackTrace}");
                 return (0, 0);
             }
         }
@@ -1856,20 +1907,20 @@ namespace BiometricEnrollmentApp.Services
                 var today = now.ToString("yyyy-MM-dd");
                 var currentTime = TimezoneHelper.FormatTimeDisplayShort(now);
                 
-                LogHelper.Write($"🔍 ========== ABSENT & MISSED CLOCK-OUT CHECK ==========");
-                LogHelper.Write($"🔍 Current time: {now:yyyy-MM-dd HH:mm:ss} - Philippines time");
-                LogHelper.Write($"🔍 Today's date: {today}");
+                LogHelper.Write($"ðŸ” ========== ABSENT & MISSED CLOCK-OUT CHECK ==========");
+                LogHelper.Write($"ðŸ” Current time: {now:yyyy-MM-dd HH:mm:ss} - Philippines time");
+                LogHelper.Write($"ðŸ” Today's date: {today}");
                 
                 // CRITICAL: Only process schedules for TODAY, not future dates
                 // Get all schedules for today - THIS MUST BE CALLED EVERY TIME
                 var schedulesToday = GetTodaysSchedules();
                 
-                LogHelper.Write($"👥 Found {schedulesToday.Count} employees scheduled for {today}");
+                LogHelper.Write($"ðŸ‘¥ Found {schedulesToday.Count} employees scheduled for {today}");
                 
                 // Log detailed schedule information for debugging
                 if (schedulesToday.Count > 0)
                 {
-                    LogHelper.Write($"📋 Schedule details:");
+                    LogHelper.Write($"ðŸ“‹ Schedule details:");
                     foreach (var sched in schedulesToday)
                     {
                         LogHelper.Write($"   - {sched.EmployeeId}: {sched.ShiftName} ({sched.StartTime} - {sched.EndTime})");
@@ -1878,8 +1929,8 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (schedulesToday.Count == 0)
                 {
-                    LogHelper.Write("⚠️ No employees scheduled for today!");
-                    LogHelper.Write("💡 Possible reasons:");
+                    LogHelper.Write("âš ï¸ No employees scheduled for today!");
+                    LogHelper.Write("ðŸ’¡ Possible reasons:");
                     LogHelper.Write("   1. No schedules synced from server");
                     LogHelper.Write("   2. No employees assigned to work on " + today);
                     LogHelper.Write("   3. Schedules not published in admin panel");
@@ -1893,14 +1944,14 @@ namespace BiometricEnrollmentApp.Services
                         using var cmd = conn.CreateCommand();
                         cmd.CommandText = "SELECT COUNT(*) FROM EmployeeSchedules";
                         var totalSchedules = Convert.ToInt32(cmd.ExecuteScalar());
-                        LogHelper.Write($"   📊 Total schedules in database: {totalSchedules}");
+                        LogHelper.Write($"   ðŸ“Š Total schedules in database: {totalSchedules}");
                         
                         if (totalSchedules > 0)
                         {
                             // Show sample schedule_dates to debug
                             cmd.CommandText = "SELECT DISTINCT schedule_dates FROM EmployeeSchedules LIMIT 5";
                             using var reader = cmd.ExecuteReader();
-                            LogHelper.Write($"   📅 Sample 'schedule_dates' values in database:");
+                            LogHelper.Write($"   ðŸ“… Sample 'schedule_dates' values in database:");
                             while (reader.Read())
                             {
                                 LogHelper.Write($"      - \"{reader.GetString(0)}\"");
@@ -1909,7 +1960,7 @@ namespace BiometricEnrollmentApp.Services
                     }
                     catch (Exception ex)
                     {
-                        LogHelper.Write($"   ❌ Error checking database: {ex.Message}");
+                        LogHelper.Write($"   âŒ Error checking database: {ex.Message}");
                     }
                     
                     return (0, 0);
@@ -1917,29 +1968,29 @@ namespace BiometricEnrollmentApp.Services
                 
                 // Get all enrolled employees (those with fingerprints)
                 var enrolledEmployees = GetAllEnrollments().Select(e => e.EmployeeId).ToHashSet();
-                LogHelper.Write($"👆 Found {enrolledEmployees.Count} employees with enrolled fingerprints");
+                LogHelper.Write($"ðŸ‘† Found {enrolledEmployees.Count} employees with enrolled fingerprints");
                 
                 // Get all today's sessions ONCE (not in the loop)
                 var allSessions = GetTodaySessions();
-                LogHelper.Write($"📊 Found {allSessions.Count} attendance sessions for today");
+                LogHelper.Write($"ðŸ“Š Found {allSessions.Count} attendance sessions for today");
                 
                 int markedAbsent = 0;
                 int markedMissedClockout = 0;
                 
                 foreach (var schedule in schedulesToday)
                 {
-                    LogHelper.Write($"  📋 Checking {schedule.EmployeeId}: Shift {schedule.ShiftName} ({schedule.StartTime} - {schedule.EndTime})");
+                    LogHelper.Write($"  ðŸ“‹ Checking {schedule.EmployeeId}: Shift {schedule.ShiftName} ({schedule.StartTime} - {schedule.EndTime})");
                     
                     // Check if employee has enrolled fingerprints
                     if (!enrolledEmployees.Contains(schedule.EmployeeId))
                     {
-                        LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - No enrolled fingerprints, skipping");
+                        LogHelper.Write($"  âš ï¸ {schedule.EmployeeId} - No enrolled fingerprints, skipping");
                         continue;
                     }
                     
                     // Detect if this is an overnight shift
                     bool isOvernightShift = IsOvernightShift(schedule.StartTime, schedule.EndTime);
-                    LogHelper.Write($"  🌙 {schedule.EmployeeId} - Overnight shift: {isOvernightShift}");
+                    LogHelper.Write($"  ðŸŒ™ {schedule.EmployeeId} - Overnight shift: {isOvernightShift}");
                     
                     // Get settings for absent marking grace period
                     var settingsService = new BiometricEnrollmentApp.Services.SettingsService();
@@ -1947,14 +1998,14 @@ namespace BiometricEnrollmentApp.Services
                     int absentMarkingGracePeriod = 30; // 30 minutes after shift start to mark absent
                     
                     // Check if shift has STARTED + grace period for absent marking
-                    LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Checking if shift started (start time: {schedule.StartTime}, grace: {absentMarkingGracePeriod} min)");
+                    LogHelper.Write($"  â° {schedule.EmployeeId} - Checking if shift started (start time: {schedule.StartTime}, grace: {absentMarkingGracePeriod} min)");
                     bool shiftStartedWithGrace = HasShiftStartedWithGracePeriod(schedule.StartTime, absentMarkingGracePeriod);
-                    LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift started + grace result: {shiftStartedWithGrace}");
+                    LogHelper.Write($"  â° {schedule.EmployeeId} - Shift started + grace result: {shiftStartedWithGrace}");
                     
-                    // Check if shift has ENDED + grace period for missed clock-out marking
-                    LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Checking if shift ended (end time: {schedule.EndTime}, grace: {clockOutGracePeriod} min)");
-                    bool shiftEnded = HasShiftEndedWithGracePeriod(schedule.EndTime, clockOutGracePeriod);
-                    LogHelper.Write($"  ⏰ {schedule.EmployeeId} - Shift ended result: {shiftEnded}");
+                    // Check if shift has ENDED (no grace period) for missed clock-out marking
+                    LogHelper.Write($"  â° {schedule.EmployeeId} - Checking if shift ended (end time: {schedule.EndTime})");
+                    bool shiftEnded = HasShiftEndedWithGracePeriod(schedule.EndTime, 0);
+                    LogHelper.Write($"  â° {schedule.EmployeeId} - Shift ended result: {shiftEnded}");
                     
                     // Get employee session once
                     var employeeSession = allSessions.FirstOrDefault(s => s.EmployeeId == schedule.EmployeeId);
@@ -1965,11 +2016,11 @@ namespace BiometricEnrollmentApp.Services
                     // This ensures we don't mark absent prematurely during the shift
                     if (shiftEnded && !hasClockIn)
                     {
-                        LogHelper.Write($"  ✅ {schedule.EmployeeId} - Shift ended, no clock-in, checking if should mark absent...");
+                        LogHelper.Write($"  âœ… {schedule.EmployeeId} - Shift ended, no clock-in, checking if should mark absent...");
                         
                         if (!hasSession)
                         {
-                        LogHelper.Write($"  ❌ {schedule.EmployeeId} - No attendance session found, will mark as absent");
+                        LogHelper.Write($"  âŒ {schedule.EmployeeId} - No attendance session found, will mark as absent");
                         // No attendance session - mark as absent
                         using var conn = new SqliteConnection(_connString);
                         conn.Open();
@@ -1990,7 +2041,7 @@ namespace BiometricEnrollmentApp.Services
                             // SAFETY CHECK: Only create absent records for TODAY, not future dates
                             if (today != now.ToString("yyyy-MM-dd"))
                             {
-                                LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - Skipping: date mismatch (today={today}, now={now:yyyy-MM-dd})");
+                                LogHelper.Write($"  âš ï¸ {schedule.EmployeeId} - Skipping: date mismatch (today={today}, now={now:yyyy-MM-dd})");
                                 continue;
                             }
                             
@@ -2011,11 +2062,11 @@ namespace BiometricEnrollmentApp.Services
                             AddToSyncQueue(schedule.EmployeeId, sessionId, "absent", $"{{\"date\":\"{today}\",\"status\":\"Absent\"}}");
                             
                             markedAbsent++;
-                            LogHelper.Write($"  ❌ {schedule.EmployeeId} - Marked as Absent (shift: {schedule.StartTime}-{schedule.EndTime}) - Queued for sync");
+                            LogHelper.Write($"  âŒ {schedule.EmployeeId} - Marked as Absent (shift: {schedule.StartTime}-{schedule.EndTime}) - Queued for sync");
                         }
                         else
                         {
-                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent");
+                            LogHelper.Write($"  â„¹ï¸ {schedule.EmployeeId} - Already marked absent");
                         }
                     }
                     else if (hasSession && !hasClockIn)
@@ -2023,24 +2074,24 @@ namespace BiometricEnrollmentApp.Services
                         // Has session but no clock-in - might be pre-created absent record
                         if (employeeSession.Status == "Absent")
                         {
-                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked absent (no clock-in)");
+                            LogHelper.Write($"  â„¹ï¸ {schedule.EmployeeId} - Already marked absent (no clock-in)");
                         }
                         else
                         {
-                            LogHelper.Write($"  ⚠️ {schedule.EmployeeId} - Has session with status '{employeeSession.Status}' but no clock-in - this is unusual");
+                            LogHelper.Write($"  âš ï¸ {schedule.EmployeeId} - Has session with status '{employeeSession.Status}' but no clock-in - this is unusual");
                         }
                     }
                     else
                     {
-                        LogHelper.Write($"  ✅ {schedule.EmployeeId} - Has clocked in, not absent");
+                        LogHelper.Write($"  âœ… {schedule.EmployeeId} - Has clocked in, not absent");
                     }
                     }
                     
                     // MISSED CLOCK-OUT MARKING: Only check if shift has ended
                     if (shiftEnded && hasClockIn)
                     {
-                        LogHelper.Write($"  📊 {schedule.EmployeeId} - Shift ended, checking for missed clock-out...");
-                        LogHelper.Write($"  📊 {schedule.EmployeeId} - Session: ClockIn={employeeSession.ClockIn ?? "NULL"}, ClockOut={employeeSession.ClockOut ?? "NULL"}, Status={employeeSession.Status}");
+                        LogHelper.Write($"  ðŸ“Š {schedule.EmployeeId} - Shift ended, checking for missed clock-out...");
+                        LogHelper.Write($"  ðŸ“Š {schedule.EmployeeId} - Session: ClockIn={employeeSession.ClockIn ?? "NULL"}, ClockOut={employeeSession.ClockOut ?? "NULL"}, Status={employeeSession.Status}");
                         
                         // Check if needs missed clock-out marking
                         if (string.IsNullOrEmpty(employeeSession.ClockOut))
@@ -2051,16 +2102,16 @@ namespace BiometricEnrollmentApp.Services
                             {
                                 MarkSessionAsMissedClockout(employeeSession.Id, schedule.EndTime);
                                 markedMissedClockout++;
-                                LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime}, previous status: {employeeSession.Status})");
+                                LogHelper.Write($"  ðŸ• {schedule.EmployeeId} - Marked as Missed Clock-out (clocked in at {employeeSession.ClockIn}, shift ended at {schedule.EndTime}, previous status: {employeeSession.Status})");
                             }
                             else
                             {
-                                LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Already marked as {employeeSession.Status}");
+                                LogHelper.Write($"  â„¹ï¸ {schedule.EmployeeId} - Already marked as {employeeSession.Status}");
                             }
                         }
                         else
                         {
-                            LogHelper.Write($"  ✅ {schedule.EmployeeId} - Has complete attendance ({employeeSession.Status})");
+                            LogHelper.Write($"  âœ… {schedule.EmployeeId} - Has complete attendance ({employeeSession.Status})");
                         }
                     }
                     else if (shiftEnded && !hasClockIn)
@@ -2098,42 +2149,42 @@ namespace BiometricEnrollmentApp.Services
 
                             if (overnightSession.EmployeeId != null && !string.IsNullOrEmpty(overnightSession.ClockIn))
                             {
-                                LogHelper.Write($"  🌙 {schedule.EmployeeId} - Found open overnight session from {yesterday}, shift ended at {schedule.EndTime}");
+                                LogHelper.Write($"  ðŸŒ™ {schedule.EmployeeId} - Found open overnight session from {yesterday}, shift ended at {schedule.EndTime}");
                                 if (overnightSession.Status != "Missed Clock-out" && overnightSession.Status != "Absent")
                                 {
                                     MarkSessionAsMissedClockout(overnightSession.Id, schedule.EndTime);
                                     markedMissedClockout++;
-                                    LogHelper.Write($"  🕐 {schedule.EmployeeId} - Marked overnight session as Missed Clock-out (clocked in at {overnightSession.ClockIn}, shift ended at {schedule.EndTime})");
+                                    LogHelper.Write($"  ðŸ• {schedule.EmployeeId} - Marked overnight session as Missed Clock-out (clocked in at {overnightSession.ClockIn}, shift ended at {schedule.EndTime})");
                                 }
                                 else
                                 {
-                                    LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Overnight session already marked as {overnightSession.Status}");
+                                    LogHelper.Write($"  â„¹ï¸ {schedule.EmployeeId} - Overnight session already marked as {overnightSession.Status}");
                                 }
                             }
                             else
                             {
-                                LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Shift ended but no clock-in (already handled as absent)");
+                                LogHelper.Write($"  â„¹ï¸ {schedule.EmployeeId} - Shift ended but no clock-in (already handled as absent)");
                             }
                         }
                         else
                         {
-                            LogHelper.Write($"  ℹ️ {schedule.EmployeeId} - Shift ended but no clock-in (already handled as absent)");
+                            LogHelper.Write($"  â„¹ï¸ {schedule.EmployeeId} - Shift ended but no clock-in (already handled as absent)");
                         }
                     }
                     else if (!shiftEnded && hasClockIn)
                     {
-                        LogHelper.Write($"  ⏳ {schedule.EmployeeId} - Shift not ended yet, will check for missed clock-out later");
+                        LogHelper.Write($"  â³ {schedule.EmployeeId} - Shift not ended yet, will check for missed clock-out later");
                     }
                 }
                 
-                LogHelper.Write($"✅ Check complete: {markedAbsent} marked absent, {markedMissedClockout} marked missed clock-out");
-                LogHelper.Write($"🔍 ========== END ABSENT & MISSED CLOCK-OUT CHECK ==========");
+                LogHelper.Write($"âœ… Check complete: {markedAbsent} marked absent, {markedMissedClockout} marked missed clock-out");
+                LogHelper.Write($"ðŸ” ========== END ABSENT & MISSED CLOCK-OUT CHECK ==========");
                 return (markedAbsent, markedMissedClockout);
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error in MarkAbsentEmployees: {ex.Message}");
-                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                LogHelper.Write($"ðŸ’¥ Error in MarkAbsentEmployees: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Stack trace: {ex.StackTrace}");
                 return (0, 0);
             }
         }
@@ -2149,7 +2200,7 @@ namespace BiometricEnrollmentApp.Services
             {
                 if (string.IsNullOrWhiteSpace(endTime))
                 {
-                    LogHelper.Write($"⚠️ HasShiftEnded: endTime is null or empty");
+                    LogHelper.Write($"âš ï¸ HasShiftEnded: endTime is null or empty");
                     return false;
                 }
 
@@ -2163,7 +2214,7 @@ namespace BiometricEnrollmentApp.Services
                     var timeParts = parts[0].Split(':');
                     if (timeParts.Length != 2) 
                     {
-                        LogHelper.Write($"⚠️ HasShiftEnded: Invalid time format: {endTime}");
+                        LogHelper.Write($"âš ï¸ HasShiftEnded: Invalid time format: {endTime}");
                         return false;
                     }
                     
@@ -2183,7 +2234,7 @@ namespace BiometricEnrollmentApp.Services
                     var timeParts = endTime.Split(':');
                     if (timeParts.Length < 2)
                     {
-                        LogHelper.Write($"⚠️ HasShiftEnded: Invalid time format: {endTime}");
+                        LogHelper.Write($"âš ï¸ HasShiftEnded: Invalid time format: {endTime}");
                         return false;
                     }
                     
@@ -2204,16 +2255,16 @@ namespace BiometricEnrollmentApp.Services
                 if (ended && (now - shiftEndTime).TotalMinutes < 1)
                 {
                     ended = false;
-                    LogHelper.Write($"  ⏳ Within 1-minute grace period of shift end");
+                    LogHelper.Write($"  â³ Within 1-minute grace period of shift end");
                 }
                 
-                LogHelper.Write($"  🕐 Shift end: {endTime} ({shiftEndTime:HH:mm}), Current: {now:HH:mm}, Ended: {ended}");
+                LogHelper.Write($"  ðŸ• Shift end: {endTime} ({shiftEndTime:HH:mm}), Current: {now:HH:mm}, Ended: {ended}");
                 
                 return ended;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 HasShiftEnded error for '{endTime}': {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ HasShiftEnded error for '{endTime}': {ex.Message}");
                 return false;
             }
         }
@@ -2229,7 +2280,7 @@ namespace BiometricEnrollmentApp.Services
             {
                 if (string.IsNullOrWhiteSpace(startTime))
                 {
-                    LogHelper.Write($"⚠️ HasShiftStarted: startTime is null or empty");
+                    LogHelper.Write($"âš ï¸ HasShiftStarted: startTime is null or empty");
                     return false;
                 }
 
@@ -2243,7 +2294,7 @@ namespace BiometricEnrollmentApp.Services
                     var timeParts = parts[0].Split(':');
                     if (timeParts.Length != 2) 
                     {
-                        LogHelper.Write($"⚠️ HasShiftStarted: Invalid time format: {startTime}");
+                        LogHelper.Write($"âš ï¸ HasShiftStarted: Invalid time format: {startTime}");
                         return false;
                     }
                     
@@ -2263,7 +2314,7 @@ namespace BiometricEnrollmentApp.Services
                     var timeParts = startTime.Split(':');
                     if (timeParts.Length < 2)
                     {
-                        LogHelper.Write($"⚠️ HasShiftStarted: Invalid time format: {startTime}");
+                        LogHelper.Write($"âš ï¸ HasShiftStarted: Invalid time format: {startTime}");
                         return false;
                     }
                     
@@ -2285,20 +2336,20 @@ namespace BiometricEnrollmentApp.Services
                     if (now >= yesterdayShiftStart)
                     {
                         shiftStartTime = yesterdayShiftStart;
-                        LogHelper.Write($"  🌙 Overnight shift - start time was yesterday: {shiftStartTime:yyyy-MM-dd HH:mm}");
+                        LogHelper.Write($"  ðŸŒ™ Overnight shift - start time was yesterday: {shiftStartTime:yyyy-MM-dd HH:mm}");
                     }
                 }
                 
                 // Check if current time is past the shift start time
                 bool started = now >= shiftStartTime;
                 
-                LogHelper.Write($"  🕐 Shift start: {startTime} ({shiftStartTime:yyyy-MM-dd HH:mm}), Current: {now:yyyy-MM-dd HH:mm}, Started: {started}");
+                LogHelper.Write($"  ðŸ• Shift start: {startTime} ({shiftStartTime:yyyy-MM-dd HH:mm}), Current: {now:yyyy-MM-dd HH:mm}, Started: {started}");
                 
                 return started;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 HasShiftStarted error for '{startTime}': {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ HasShiftStarted error for '{startTime}': {ex.Message}");
                 return false;
             }
         }
@@ -2333,20 +2384,20 @@ namespace BiometricEnrollmentApp.Services
                     // startMinutes = 1380 (23*60), endMinutes = 60 (1*60), currentMinutes = 30 (0*60+30)
                     // Since currentMinutes (30) < endMinutes (60), employee is within shift
                     bool withinShift = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
-                    LogHelper.Write($"🌙 Overnight shift check: {startTime}-{endTime}, current {currentTime} -> within: {withinShift}");
+                    LogHelper.Write($"ðŸŒ™ Overnight shift check: {startTime}-{endTime}, current {currentTime} -> within: {withinShift}");
                     return withinShift;
                 }
                 else
                 {
                     // Regular shift: check if current time is between start and end
                     bool withinShift = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-                    LogHelper.Write($"☀️ Regular shift check: {startTime}-{endTime}, current {currentTime} -> within: {withinShift}");
+                    LogHelper.Write($"â˜€ï¸ Regular shift check: {startTime}-{endTime}, current {currentTime} -> within: {withinShift}");
                     return withinShift;
                 }
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 IsCurrentTimeWithinOvernightShift error: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ IsCurrentTimeWithinOvernightShift error: {ex.Message}");
                 return false;
             }
         }
@@ -2449,7 +2500,7 @@ namespace BiometricEnrollmentApp.Services
             {
                 if (string.IsNullOrWhiteSpace(startTime))
                 {
-                    LogHelper.Write($"⚠️ HasShiftStartedWithGracePeriod: startTime is null or empty");
+                    LogHelper.Write($"âš ï¸ HasShiftStartedWithGracePeriod: startTime is null or empty");
                     return false;
                 }
 
@@ -2464,7 +2515,7 @@ namespace BiometricEnrollmentApp.Services
                     var timeParts = startTime.Replace("AM", "").Replace("PM", "").Trim().Split(':');
                     if (timeParts.Length != 2)
                     {
-                        LogHelper.Write($"⚠️ HasShiftStartedWithGracePeriod: Invalid time format: {startTime}");
+                        LogHelper.Write($"âš ï¸ HasShiftStartedWithGracePeriod: Invalid time format: {startTime}");
                         return false;
                     }
 
@@ -2484,7 +2535,7 @@ namespace BiometricEnrollmentApp.Services
                     var timeParts = startTime.Split(':');
                     if (timeParts.Length < 2)
                     {
-                        LogHelper.Write($"⚠️ HasShiftStartedWithGracePeriod: Invalid time format: {startTime}");
+                        LogHelper.Write($"âš ï¸ HasShiftStartedWithGracePeriod: Invalid time format: {startTime}");
                         return false;
                     }
 
@@ -2499,13 +2550,13 @@ namespace BiometricEnrollmentApp.Services
                 // Check if current time is past shift start + grace period
                 bool hasStarted = currentTime >= shiftStartWithGrace;
 
-                LogHelper.Write($"  ⏰ HasShiftStartedWithGracePeriod: start={startTime} ({shiftStartTime}), grace={gracePeriodMinutes}min, startWithGrace={shiftStartWithGrace}, current={currentTime}, result={hasStarted}");
+                LogHelper.Write($"  â° HasShiftStartedWithGracePeriod: start={startTime} ({shiftStartTime}), grace={gracePeriodMinutes}min, startWithGrace={shiftStartWithGrace}, current={currentTime}, result={hasStarted}");
 
                 return hasStarted;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 HasShiftStartedWithGracePeriod error for '{startTime}': {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ HasShiftStartedWithGracePeriod error for '{startTime}': {ex.Message}");
                 return false;
             }
         }
@@ -2520,7 +2571,7 @@ namespace BiometricEnrollmentApp.Services
             {
                 if (string.IsNullOrWhiteSpace(endTime))
                 {
-                    LogHelper.Write($"⚠️ HasShiftEndedWithGracePeriod: endTime is null or empty");
+                    LogHelper.Write($"âš ï¸ HasShiftEndedWithGracePeriod: endTime is null or empty");
                     return false;
                 }
 
@@ -2534,7 +2585,7 @@ namespace BiometricEnrollmentApp.Services
                     var timeParts = parts[0].Split(':');
                     if (timeParts.Length != 2) 
                     {
-                        LogHelper.Write($"⚠️ HasShiftEndedWithGracePeriod: Invalid time format: {endTime}");
+                        LogHelper.Write($"âš ï¸ HasShiftEndedWithGracePeriod: Invalid time format: {endTime}");
                         return false;
                     }
                     
@@ -2554,7 +2605,7 @@ namespace BiometricEnrollmentApp.Services
                     var timeParts = endTime.Split(':');
                     if (timeParts.Length < 2)
                     {
-                        LogHelper.Write($"⚠️ HasShiftEndedWithGracePeriod: Invalid time format: {endTime}");
+                        LogHelper.Write($"âš ï¸ HasShiftEndedWithGracePeriod: Invalid time format: {endTime}");
                         return false;
                     }
                     
@@ -2579,12 +2630,12 @@ namespace BiometricEnrollmentApp.Services
                         // Simple comparison: if now < shiftEndTime, shift hasn't ended
                         if (now < shiftEndTime)
                         {
-                            LogHelper.Write($"  🌅 Morning shift still active - ends at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
+                            LogHelper.Write($"  ðŸŒ… Morning shift still active - ends at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
                             return false;
                         }
                         else
                         {
-                            LogHelper.Write($"  🌅 Morning shift ended at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
+                            LogHelper.Write($"  ðŸŒ… Morning shift ended at {shiftEndTime:HH:mm}, now is {now:HH:mm}");
                         }
                     }
                     // If we're in afternoon/evening (after 12 PM) and shift ends in morning
@@ -2592,7 +2643,7 @@ namespace BiometricEnrollmentApp.Services
                     else if (now.Hour >= 12)
                     {
                         shiftEndTime = shiftEndTime.AddDays(1);
-                        LogHelper.Write($"  🌙 Overnight shift detected - ends tomorrow at {shiftEndTime:yyyy-MM-dd HH:mm}, shift still active");
+                        LogHelper.Write($"  ðŸŒ™ Overnight shift detected - ends tomorrow at {shiftEndTime:yyyy-MM-dd HH:mm}, shift still active");
                         return false; // Shift hasn't ended yet since it ends tomorrow
                     }
                 }
@@ -2603,13 +2654,13 @@ namespace BiometricEnrollmentApp.Services
                 // Check if current time is past the shift end + grace period
                 bool ended = now >= shiftEndWithGrace;
                 
-                LogHelper.Write($"  🕐 Shift end: {endTime} ({shiftEndTime:yyyy-MM-dd HH:mm}), Grace end: {shiftEndWithGrace:yyyy-MM-dd HH:mm}, Current: {now:yyyy-MM-dd HH:mm}, Ended: {ended}");
+                LogHelper.Write($"  ðŸ• Shift end: {endTime} ({shiftEndTime:yyyy-MM-dd HH:mm}), Grace end: {shiftEndWithGrace:yyyy-MM-dd HH:mm}, Current: {now:yyyy-MM-dd HH:mm}, Ended: {ended}");
                 
                 return ended;
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 HasShiftEndedWithGracePeriod error for '{endTime}': {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ HasShiftEndedWithGracePeriod error for '{endTime}': {ex.Message}");
                 return false;
             }
         }
@@ -2635,11 +2686,11 @@ namespace BiometricEnrollmentApp.Services
                 cmd.Parameters.AddWithValue("$payload", payload);
                 
                 cmd.ExecuteNonQuery();
-                LogHelper.Write($"📝 Added {syncType} sync to queue for {employeeId}");
+                LogHelper.Write($"ðŸ“ Added {syncType} sync to queue for {employeeId}");
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Failed to add sync to queue: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Failed to add sync to queue: {ex.Message}");
             }
         }
 
@@ -2680,7 +2731,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Failed to get pending sync items: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Failed to get pending sync items: {ex.Message}");
             }
             
             return items;
@@ -2707,7 +2758,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Failed to mark sync completed: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Failed to mark sync completed: {ex.Message}");
             }
         }
 
@@ -2733,7 +2784,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Failed to mark sync failed: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Failed to mark sync failed: {ex.Message}");
             }
         }
 
@@ -2744,7 +2795,7 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                LogHelper.Write($"🔍 DIAGNOSTIC: Checking attendance data for employee {employeeId}");
+                LogHelper.Write($"ðŸ” DIAGNOSTIC: Checking attendance data for employee {employeeId}");
                 
                 using var conn = new SqliteConnection(_connString);
                 conn.Open();
@@ -2754,7 +2805,7 @@ namespace BiometricEnrollmentApp.Services
                 cmd1.CommandText = "SELECT * FROM AttendanceSessions WHERE employee_id = @empId ORDER BY date DESC, clock_in DESC LIMIT 10";
                 cmd1.Parameters.AddWithValue("@empId", employeeId);
                 
-                LogHelper.Write($"📊 Recent AttendanceSessions for {employeeId}:");
+                LogHelper.Write($"ðŸ“Š Recent AttendanceSessions for {employeeId}:");
                 using var reader1 = cmd1.ExecuteReader();
                 int sessionCount = 0;
                 while (reader1.Read())
@@ -2771,7 +2822,7 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (sessionCount == 0)
                 {
-                    LogHelper.Write($"  ❌ No AttendanceSessions found for {employeeId}");
+                    LogHelper.Write($"  âŒ No AttendanceSessions found for {employeeId}");
                 }
                 reader1.Close();
                 
@@ -2780,7 +2831,7 @@ namespace BiometricEnrollmentApp.Services
                 cmd2.CommandText = "SELECT * FROM SyncQueue WHERE employee_id = @empId ORDER BY created_at DESC LIMIT 10";
                 cmd2.Parameters.AddWithValue("@empId", employeeId);
                 
-                LogHelper.Write($"🔄 SyncQueue entries for {employeeId}:");
+                LogHelper.Write($"ðŸ”„ SyncQueue entries for {employeeId}:");
                 using var reader2 = cmd2.ExecuteReader();
                 int queueCount = 0;
                 while (reader2.Read())
@@ -2798,7 +2849,7 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (queueCount == 0)
                 {
-                    LogHelper.Write($"  ✅ No SyncQueue entries for {employeeId}");
+                    LogHelper.Write($"  âœ… No SyncQueue entries for {employeeId}");
                 }
                 reader2.Close();
                 
@@ -2807,7 +2858,7 @@ namespace BiometricEnrollmentApp.Services
                 cmd3.CommandText = "SELECT * FROM Attendances WHERE employee_id = @empId ORDER BY recorded_at DESC LIMIT 5";
                 cmd3.Parameters.AddWithValue("@empId", employeeId);
                 
-                LogHelper.Write($"📝 Recent Attendances (legacy) for {employeeId}:");
+                LogHelper.Write($"ðŸ“ Recent Attendances (legacy) for {employeeId}:");
                 using var reader3 = cmd3.ExecuteReader();
                 int attendanceCount = 0;
                 while (reader3.Read())
@@ -2822,7 +2873,7 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (attendanceCount == 0)
                 {
-                    LogHelper.Write($"  ✅ No legacy Attendances for {employeeId}");
+                    LogHelper.Write($"  âœ… No legacy Attendances for {employeeId}");
                 }
                 reader3.Close();
                 
@@ -2836,20 +2887,20 @@ namespace BiometricEnrollmentApp.Services
                 {
                     var name = reader4.IsDBNull(1) ? "NULL" : reader4.GetString(1);
                     var dept = reader4.IsDBNull(2) ? "NULL" : reader4.GetString(2);
-                    LogHelper.Write($"👤 Enrollment found: {employeeId} | Name: {name} | Dept: {dept}");
+                    LogHelper.Write($"ðŸ‘¤ Enrollment found: {employeeId} | Name: {name} | Dept: {dept}");
                 }
                 else
                 {
-                    LogHelper.Write($"❌ No fingerprint enrollment found for {employeeId}");
+                    LogHelper.Write($"âŒ No fingerprint enrollment found for {employeeId}");
                 }
                 reader4.Close();
                 
-                LogHelper.Write($"🔍 DIAGNOSTIC COMPLETE for {employeeId}");
+                LogHelper.Write($"ðŸ” DIAGNOSTIC COMPLETE for {employeeId}");
                 
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Diagnostic failed for {employeeId}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Diagnostic failed for {employeeId}: {ex.Message}");
             }
         }
 
@@ -2867,8 +2918,8 @@ namespace BiometricEnrollmentApp.Services
             {
                 var now = TimezoneHelper.Now;
                 
-                LogHelper.Write($"🔍 ========== BIOMETRIC APP ABSENT MARKING ==========");
-                LogHelper.Write($"📅 Checking last {daysToCheck} day(s) for missed absences and clock-outs");
+                LogHelper.Write($"ðŸ” ========== BIOMETRIC APP ABSENT MARKING ==========");
+                LogHelper.Write($"ðŸ“… Checking last {daysToCheck} day(s) for missed absences and clock-outs");
 
                 // Check the specified number of days back
                 for (int daysAgo = daysToCheck - 1; daysAgo >= 0; daysAgo--)
@@ -2879,16 +2930,16 @@ namespace BiometricEnrollmentApp.Services
                     totalMissedClockout += result.markedMissedClockout;
                 }
 
-                LogHelper.Write($"📊 Overall summary (last {daysToCheck} day(s)):");
+                LogHelper.Write($"ðŸ“Š Overall summary (last {daysToCheck} day(s)):");
                 LogHelper.Write($"   Total marked absent: {totalAbsent}");
                 LogHelper.Write($"   Total marked missed clock-out: {totalMissedClockout}");
-                LogHelper.Write($"🔍 ========== END BIOMETRIC APP ABSENT MARKING ==========");
+                LogHelper.Write($"ðŸ” ========== END BIOMETRIC APP ABSENT MARKING ==========");
 
                 return (totalAbsent, totalMissedClockout);
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 MarkAbsentAndMissedClockouts error: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ MarkAbsentAndMissedClockouts error: {ex.Message}");
                 return (0, 0);
             }
         }
@@ -2907,11 +2958,11 @@ namespace BiometricEnrollmentApp.Services
                 var today = now.ToString("yyyy-MM-dd");
                 var isToday = targetDate == today;
 
-                LogHelper.Write($"\n📅 Processing date: {targetDate}");
+                LogHelper.Write($"\nðŸ“… Processing date: {targetDate}");
 
                 // Get all schedules for this date
                 var schedules = GetSchedulesForDate(targetDate);
-                LogHelper.Write($"📋 Found {schedules.Count} schedules for {targetDate}");
+                LogHelper.Write($"ðŸ“‹ Found {schedules.Count} schedules for {targetDate}");
 
                 foreach (var schedule in schedules)
                 {
@@ -2920,20 +2971,20 @@ namespace BiometricEnrollmentApp.Services
                     var startTime = schedule.StartTime;
                     var endTime = schedule.EndTime;
 
-                    LogHelper.Write($"  👤 Checking {employeeId} - {shiftName} ({startTime}-{endTime})");
+                    LogHelper.Write($"  ðŸ‘¤ Checking {employeeId} - {shiftName} ({startTime}-{endTime})");
 
                     // For today, check if shift has started
                     if (isToday && !HasShiftStarted(startTime))
                     {
-                        LogHelper.Write($"    ⏰ Shift hasn't started yet");
+                        LogHelper.Write($"    â° Shift hasn't started yet");
                         continue;
                     }
 
                     // Check if employee has attendance session for this date
                     var existingSession = GetSessionForEmployeeAndDate(employeeId, targetDate);
 
-                    // Check if shift has ended (with grace period)
-                    var shouldProcessShiftEnd = !isToday || HasShiftEndedWithGracePeriod(endTime, 60);
+                    // Check if shift has ended (no grace period)
+                    var shouldProcessShiftEnd = !isToday || HasShiftEndedWithGracePeriod(endTime, 0);
 
                     if (existingSession == null)
                     {
@@ -2942,11 +2993,11 @@ namespace BiometricEnrollmentApp.Services
                         {
                             CreateAbsentSession(employeeId, targetDate, startTime);
                             markedAbsent++;
-                            LogHelper.Write($"    ❌ Marked as Absent");
+                            LogHelper.Write($"    âŒ Marked as Absent");
                         }
                         else
                         {
-                            LogHelper.Write($"    ⏳ Shift still active, not marking absent yet");
+                            LogHelper.Write($"    â³ Shift still active, not marking absent yet");
                         }
                     }
                     else
@@ -2954,11 +3005,11 @@ namespace BiometricEnrollmentApp.Services
                         // Has attendance session - check status
                         if (existingSession.Value.Status == "Absent")
                         {
-                            LogHelper.Write($"    ℹ️ Already marked as absent");
+                            LogHelper.Write($"    â„¹ï¸ Already marked as absent");
                         }
                         else if (existingSession.Value.Status == "Missed Clock-out")
                         {
-                            LogHelper.Write($"    ℹ️ Already marked as missed clock-out");
+                            LogHelper.Write($"    â„¹ï¸ Already marked as missed clock-out");
                         }
                         else if (!string.IsNullOrEmpty(existingSession.Value.ClockIn) && 
                                  string.IsNullOrEmpty(existingSession.Value.ClockOut) && 
@@ -2967,25 +3018,25 @@ namespace BiometricEnrollmentApp.Services
                             // Clocked in but didn't clock out, and shift has ended
                             MarkSessionAsMissedClockout(existingSession.Value.Id, endTime);
                             markedMissedClockout++;
-                            LogHelper.Write($"    🕐 Marked as Missed Clock-out");
+                            LogHelper.Write($"    ðŸ• Marked as Missed Clock-out");
                         }
                         else if (!string.IsNullOrEmpty(existingSession.Value.ClockOut))
                         {
-                            LogHelper.Write($"    ✅ Has complete attendance ({existingSession.Value.Status})");
+                            LogHelper.Write($"    âœ… Has complete attendance ({existingSession.Value.Status})");
                         }
                         else
                         {
-                            LogHelper.Write($"    ⏳ Clocked in, waiting for clock-out or shift end");
+                            LogHelper.Write($"    â³ Clocked in, waiting for clock-out or shift end");
                         }
                     }
                 }
 
-                LogHelper.Write($"📊 Summary for {targetDate}: Absent={markedAbsent}, Missed Clock-out={markedMissedClockout}");
+                LogHelper.Write($"ðŸ“Š Summary for {targetDate}: Absent={markedAbsent}, Missed Clock-out={markedMissedClockout}");
                 return (markedAbsent, markedMissedClockout);
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 MarkAbsentForDate error for {targetDate}: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ MarkAbsentForDate error for {targetDate}: {ex.Message}");
                 return (0, 0);
             }
         }
@@ -2999,7 +3050,7 @@ namespace BiometricEnrollmentApp.Services
 
             try
             {
-                LogHelper.Write($"🔧 GetSchedulesForDate called: date={date}");
+                LogHelper.Write($"ðŸ”§ GetSchedulesForDate called: date={date}");
                 
                 using var conn = new SqliteConnection(_connString);
                 conn.Open();
@@ -3012,8 +3063,8 @@ namespace BiometricEnrollmentApp.Services
                 ";
                 cmd.Parameters.AddWithValue("$date", date);
 
-                LogHelper.Write($"🔧 Executing query: {cmd.CommandText}");
-                LogHelper.Write($"🔧 Parameter: date={date}");
+                LogHelper.Write($"ðŸ”§ Executing query: {cmd.CommandText}");
+                LogHelper.Write($"ðŸ”§ Parameter: date={date}");
 
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
@@ -3024,15 +3075,15 @@ namespace BiometricEnrollmentApp.Services
                     var endTime = reader.GetString(3);
                     
                     schedules.Add((empId, shiftName, startTime, endTime));
-                    LogHelper.Write($"🔧 Found schedule: {empId} - {shiftName} ({startTime} - {endTime})");
+                    LogHelper.Write($"ðŸ”§ Found schedule: {empId} - {shiftName} ({startTime} - {endTime})");
                 }
                 
-                LogHelper.Write($"🔧 GetSchedulesForDate complete: {schedules.Count} schedule(s) found");
+                LogHelper.Write($"ðŸ”§ GetSchedulesForDate complete: {schedules.Count} schedule(s) found");
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 GetSchedulesForDate error: {ex.Message}");
-                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                LogHelper.Write($"ðŸ’¥ GetSchedulesForDate error: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Stack trace: {ex.StackTrace}");
             }
 
             return schedules;
@@ -3072,7 +3123,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 GetSessionForEmployeeAndDate error: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ GetSessionForEmployeeAndDate error: {ex.Message}");
             }
 
             return null;
@@ -3111,7 +3162,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 GetSessionById error: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ GetSessionById error: {ex.Message}");
             }
 
             return null;
@@ -3124,12 +3175,12 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                LogHelper.Write($"🔧 CreateAbsentSession called: employeeId={employeeId}, date={date}, shiftStartTime={shiftStartTime}");
+                LogHelper.Write($"ðŸ”§ CreateAbsentSession called: employeeId={employeeId}, date={date}, shiftStartTime={shiftStartTime}");
                 
                 using var conn = new SqliteConnection(_connString);
                 conn.Open();
                 
-                LogHelper.Write($"🔧 Database connection opened: {_connString}");
+                LogHelper.Write($"ðŸ”§ Database connection opened: {_connString}");
 
                 using var cmd = conn.CreateCommand();
                 // Use empty string for clock_in instead of NULL since the column has NOT NULL constraint
@@ -3140,25 +3191,25 @@ namespace BiometricEnrollmentApp.Services
                 cmd.Parameters.AddWithValue("$empId", employeeId);
                 cmd.Parameters.AddWithValue("$date", date);
 
-                LogHelper.Write($"🔧 Executing INSERT query...");
+                LogHelper.Write($"ðŸ”§ Executing INSERT query...");
                 int rowsAffected = cmd.ExecuteNonQuery();
-                LogHelper.Write($"🔧 INSERT complete: {rowsAffected} row(s) affected");
+                LogHelper.Write($"ðŸ”§ INSERT complete: {rowsAffected} row(s) affected");
                 
                 // Get the inserted session ID
                 cmd.CommandText = "SELECT last_insert_rowid()";
                 var sessionId = Convert.ToInt64(cmd.ExecuteScalar());
                 
-                LogHelper.Write($"🔧 Session ID: {sessionId}");
+                LogHelper.Write($"ðŸ”§ Session ID: {sessionId}");
                 
                 // Add to sync queue for backend synchronization
                 AddToSyncQueue(employeeId, sessionId, "absent", $"{{\"date\":\"{date}\",\"status\":\"Absent\"}}");
                 
-                LogHelper.Write($"✅ Created absent session for {employeeId} on {date} (session ID: {sessionId})");
+                LogHelper.Write($"âœ… Created absent session for {employeeId} on {date} (session ID: {sessionId})");
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 CreateAbsentSession error: {ex.Message}");
-                LogHelper.Write($"💥 Stack trace: {ex.StackTrace}");
+                LogHelper.Write($"ðŸ’¥ CreateAbsentSession error: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Stack trace: {ex.StackTrace}");
             }
         }
 
@@ -3188,7 +3239,7 @@ namespace BiometricEnrollmentApp.Services
                 }
                 reader.Close();
 
-                // Update session status — do NOT record hours for missed clock-out
+                // Update session status â€” do NOT record hours for missed clock-out
                 cmd.CommandText = @"
                     UPDATE AttendanceSessions
                     SET status = 'Missed Clock-out', total_hours = 0
@@ -3203,12 +3254,12 @@ namespace BiometricEnrollmentApp.Services
                 if (!string.IsNullOrEmpty(employeeId) && !string.IsNullOrEmpty(date))
                 {
                     AddToSyncQueue(employeeId, sessionId, "missed_clockout", $"{{\"date\":\"{date}\",\"status\":\"Missed Clock-out\",\"hours\":0}}");
-                    LogHelper.Write($"✅ Marked session {sessionId} as Missed Clock-out for {employeeId} on {date} — hours cleared");
+                    LogHelper.Write($"âœ… Marked session {sessionId} as Missed Clock-out for {employeeId} on {date} â€” hours cleared");
                 }
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 MarkSessionAsMissedClockout error: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ MarkSessionAsMissedClockout error: {ex.Message}");
             }
         }
 
@@ -3257,7 +3308,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 CalculateHoursToShiftEnd error: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ CalculateHoursToShiftEnd error: {ex.Message}");
                 return 0;
             }
         }
@@ -3284,7 +3335,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error getting admin username: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error getting admin username: {ex.Message}");
                 return "admin";
             }
         }
@@ -3312,7 +3363,7 @@ namespace BiometricEnrollmentApp.Services
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error validating admin credentials: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error validating admin credentials: {ex.Message}");
                 return false;
             }
         }
@@ -3365,22 +3416,218 @@ namespace BiometricEnrollmentApp.Services
                 
                 if (rowsAffected > 0)
                 {
-                    LogHelper.Write($"✅ Admin account updated successfully");
+                    LogHelper.Write($"âœ… Admin account updated successfully");
                     return true;
                 }
                 else
                 {
-                    LogHelper.Write($"⚠️ No admin account found to update");
+                    LogHelper.Write($"âš ï¸ No admin account found to update");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                LogHelper.Write($"💥 Error updating admin account: {ex.Message}");
+                LogHelper.Write($"ðŸ’¥ Error updating admin account: {ex.Message}");
                 return false;
             }
         }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Overtime Assignment Data Access
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns overtime estimated hours for an employee on a specific date.
+        /// Returns 0 if no overtime is assigned.
+        /// </summary>
+        public double GetOvertimeHours(string employeeId, string date)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT estimated_hours FROM OvertimeAssignments
+                    WHERE employee_id = $emp AND assigned_date = $date
+                    LIMIT 1
+                ";
+                cmd.Parameters.AddWithValue("$emp",  employeeId);
+                cmd.Parameters.AddWithValue("$date", date);
+                var obj = cmd.ExecuteScalar();
+                return (obj == null || obj == DBNull.Value) ? 0.0 : Convert.ToDouble(obj);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"GetOvertimeHours error for {employeeId} on {date}: {ex.Message}");
+                return 0.0;
+            }
+        }
+
+        /// <summary>
+        /// Upsert an overtime assignment from the web app sync.
+        /// </summary>
+        public void UpsertOvertimeAssignment(string employeeId, string date, double estimatedHours,
+                                             string? reason = null, string? assignedBy = null)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT INTO OvertimeAssignments (employee_id, assigned_date, estimated_hours, reason, assigned_by)
+                    VALUES ($emp, $date, $hrs, $reason, $by)
+                    ON CONFLICT(employee_id, assigned_date)
+                    DO UPDATE SET estimated_hours = excluded.estimated_hours,
+                                  reason         = excluded.reason,
+                                  assigned_by    = excluded.assigned_by,
+                                  synced_at      = datetime('now')
+                ";
+                cmd.Parameters.AddWithValue("$emp",    employeeId);
+                cmd.Parameters.AddWithValue("$date",   date);
+                cmd.Parameters.AddWithValue("$hrs",    estimatedHours);
+                cmd.Parameters.AddWithValue("$reason", reason ?? string.Empty);
+                cmd.Parameters.AddWithValue("$by",     assignedBy ?? string.Empty);
+                cmd.ExecuteNonQuery();
+                LogHelper.Write($"Overtime upserted: {employeeId} on {date} = {estimatedHours}h");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"UpsertOvertimeAssignment error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Return all AttendanceSessions rows that currently have status "Overtime" for today.
+        /// Used by SyncOvertimeAssignmentsAsync to detect overtime that was removed on the server.
+        /// </summary>
+        public List<(string EmployeeId, string Date)> GetLocalOvertimeSessions()
+        {
+            var list = new List<(string, string)>();
+            try
+            {
+                var today = TimezoneHelper.Now.ToString("yyyy-MM-dd");
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT employee_id, date
+                    FROM AttendanceSessions
+                    WHERE status = 'Overtime'
+                      AND date   = $today
+                ";
+                cmd.Parameters.AddWithValue("$today", today);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    string emp  = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+                    string date = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                    if (!string.IsNullOrEmpty(emp))
+                        list.Add((emp, date));
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"GetLocalOvertimeSessions error: {ex.Message}");
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Update the AttendanceSessions record for the given employee/date to "Overtime"
+        /// so the biometric app reflects the status assigned from the web app.
+        /// Only updates sessions that are currently Present or Late (not already Overtime).
+        /// Returns true if a row was updated.
+        /// </summary>
+        public bool UpdateAttendanceSessionStatusToOvertime(string employeeId, string date)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    UPDATE AttendanceSessions
+                    SET status = 'Overtime'
+                    WHERE employee_id = $emp
+                      AND date        = $date
+                      AND status IN ('Present', 'Late', 'IN')
+                ";
+                cmd.Parameters.AddWithValue("$emp",  employeeId);
+                cmd.Parameters.AddWithValue("$date", date);
+                int rows = cmd.ExecuteNonQuery();
+                if (rows > 0)
+                    LogHelper.Write($"✅ AttendanceSessions status → Overtime for {employeeId} on {date}");
+                return rows > 0;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"UpdateAttendanceSessionStatusToOvertime error: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Revert the AttendanceSessions record for the given employee/date from "Overtime"
+        /// back to "Present" when overtime is removed from the web app.
+        /// Only reverts sessions that have no clock_out yet (still in progress).
+        /// </summary>
+        public bool RevertAttendanceSessionFromOvertime(string employeeId, string date)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    UPDATE AttendanceSessions
+                    SET status = 'Present'
+                    WHERE employee_id = $emp
+                      AND date        = $date
+                      AND status      = 'Overtime'
+                      AND (clock_out IS NULL OR clock_out = '')
+                ";
+                cmd.Parameters.AddWithValue("$emp",  employeeId);
+                cmd.Parameters.AddWithValue("$date", date);
+                int rows = cmd.ExecuteNonQuery();
+                if (rows > 0)
+                    LogHelper.Write($"↩️ AttendanceSessions status reverted from Overtime → Present for {employeeId} on {date}");
+                return rows > 0;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"RevertAttendanceSessionFromOvertime error: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Remove an overtime assignment (e.g. when admin cancels it from web app).
+        /// </summary>
+        public void RemoveOvertimeAssignment(string employeeId, string date)
+        {
+            try
+            {
+                using var conn = new SqliteConnection(_connString);
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    DELETE FROM OvertimeAssignments
+                    WHERE employee_id = $emp AND assigned_date = $date
+                ";
+                cmd.Parameters.AddWithValue("$emp",  employeeId);
+                cmd.Parameters.AddWithValue("$date", date);
+                cmd.ExecuteNonQuery();
+                LogHelper.Write($"Overtime removed: {employeeId} on {date}");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"RemoveOvertimeAssignment error: {ex.Message}");
+            }
+        }
     }
+
 
     public class SyncQueueItem
     {
