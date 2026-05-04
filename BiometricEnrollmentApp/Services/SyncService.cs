@@ -463,8 +463,8 @@ namespace BiometricEnrollmentApp.Services
         {
             try
             {
-                // Get all sessions from last 7 days from local database
-                var recentSessions = _dataService.GetRecentSessions(7);
+                // Get all sessions from last 7 days + tomorrow (for early clock-ins that span midnight)
+                var recentSessions = _dataService.GetRecentSessions(7, includeTomorrow: true);
                 
                 if (recentSessions.Count == 0)
                 {

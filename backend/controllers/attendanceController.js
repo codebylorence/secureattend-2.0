@@ -1269,13 +1269,32 @@ export const syncAttendanceFromBiometric = async (req, res) => {
           continue;
         }
         
-        // Check if record exists in web app
-        let existingRecord = await Attendance.findOne({
-          where: {
-            employee_id,
-            date
-          }
+        // Check if record(s) exist in web app — use findAll to catch duplicates
+        const existingRecords = await Attendance.findAll({
+          where: { employee_id, date }
         });
+
+        // If there are duplicates, keep the most relevant one and delete the rest
+        let existingRecord = null;
+        if (existingRecords.length > 1) {
+          console.log(`⚠️ Found ${existingRecords.length} duplicate records for ${employee_id} on ${date} — deduplicating`);
+          // Prefer the record with a clock_in (active record), then highest status priority
+          const statusPriorityDedup = { 'Overtime': 5, 'Missed Clock-out': 4, 'Late': 3, 'Present': 2, 'Absent': 1, 'IN': 1 };
+          const sorted = [...existingRecords].sort((a, b) => {
+            const aHasIn = a.clock_in ? 1 : 0;
+            const bHasIn = b.clock_in ? 1 : 0;
+            if (aHasIn !== bHasIn) return bHasIn - aHasIn;
+            return (statusPriorityDedup[b.status] || 0) - (statusPriorityDedup[a.status] || 0);
+          });
+          existingRecord = sorted[0];
+          // Delete the rest
+          for (let i = 1; i < sorted.length; i++) {
+            await sorted[i].destroy();
+            console.log(`🗑️ Deleted duplicate record id=${sorted[i].id} for ${employee_id} on ${date}`);
+          }
+        } else {
+          existingRecord = existingRecords[0] || null;
+        }
 
         // Skip if this record was permanently deleted (tombstone) - don't recreate it
         if (existingRecord && existingRecord.is_permanently_deleted) {
@@ -1288,12 +1307,13 @@ export const syncAttendanceFromBiometric = async (req, res) => {
           continue;
         }
         
-        // If syncing a Present/Late/Overtime record, delete any Absent record first
-        if (existingRecord && existingRecord.status === 'Absent' && 
+        // If syncing a Present/Late/Overtime record, delete any Absent or Missed Clock-out
+        // record first — the employee actually clocked in for a new shift
+        if (existingRecord && 
+            (existingRecord.status === 'Absent' || existingRecord.status === 'Missed Clock-out') && 
             (status === 'Present' || status === 'Late' || status === 'Overtime')) {
-          console.log(`🔄 Deleting Absent record for ${employee_id} - employee actually clocked in`);
+          console.log(`🔄 Deleting ${existingRecord.status} record for ${employee_id} on ${date} — employee clocked in for new shift`);
           await existingRecord.destroy();
-          // Set to null so we create a new record below
           existingRecord = null;
         }
         

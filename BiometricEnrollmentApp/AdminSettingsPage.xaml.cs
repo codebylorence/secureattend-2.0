@@ -41,6 +41,7 @@ namespace BiometricEnrollmentApp
                 LateThresholdInput.Text = _settingsService.GetLateThresholdMinutes().ToString();
                 ClockInGraceInput.Text = _settingsService.GetClockInGracePeriodMinutes().ToString();
                 ClockOutGraceInput.Text = _settingsService.GetClockOutGracePeriodMinutes().ToString();
+                EarlyClockInBufferInput.Text = _settingsService.GetEarlyClockInBufferHours().ToString();
                 
                 // Load API URL
                 ServerUrlTextBox.Text = _settingsService.GetApiBaseUrl();
@@ -81,17 +82,25 @@ namespace BiometricEnrollmentApp
                     return;
                 }
 
+                if (!int.TryParse(EarlyClockInBufferInput.Text.Trim(), out int earlyBuffer) || earlyBuffer < 0 || earlyBuffer > 12)
+                {
+                    MessageBox.Show("Early clock-in buffer must be a number between 0 and 12 hours.", "Invalid Input", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    EarlyClockInBufferInput.Focus();
+                    return;
+                }
+
                 // Save settings
                 bool success = true;
                 success &= _settingsService.SetLateThresholdMinutes(lateThreshold);
                 success &= _settingsService.SetClockInGracePeriodMinutes(clockInGrace);
                 success &= _settingsService.SetClockOutGracePeriodMinutes(clockOutGrace);
+                success &= _settingsService.SetEarlyClockInBufferHours(earlyBuffer);
                 success &= SaveClockOutConfirmationSetting(ClockOutConfirmationCheckBox.IsChecked == true);
 
                 if (success)
                 {
                     MessageBox.Show("Attendance settings saved successfully!", "Settings Saved", MessageBoxButton.OK, MessageBoxImage.Information);
-                    LogHelper.Write($"✅ Attendance settings updated - Late: {lateThreshold}min, Clock-in Grace: {clockInGrace}min, Clock-out Grace: {clockOutGrace}min, Clock-out Confirmation: {ClockOutConfirmationCheckBox.IsChecked == true}");
+                    LogHelper.Write($"✅ Attendance settings updated - Late: {lateThreshold}min, Clock-in Grace: {clockInGrace}min, Clock-out Grace: {clockOutGrace}min, Early Buffer: {earlyBuffer}h, Clock-out Confirmation: {ClockOutConfirmationCheckBox.IsChecked == true}");
                     
                     // Clear configuration cache so new settings take effect immediately
                     ClearConfigurationCache();
@@ -281,27 +290,19 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
-                if (System.IO.File.Exists(configPath))
-                {
-                    var configJson = System.IO.File.ReadAllText(configPath);
-                    var config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
-                    { 
-                        PropertyNameCaseInsensitive = true 
-                    });
-                    
-                    return config?.ClockOutConfirmation ?? true; // Default to true
-                }
-                else
-                {
-                    LogHelper.Write("📋 Config file not found, using default clock-out confirmation: enabled");
-                    return true; // Default to enabled
-                }
+                using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "biometric_local.db")}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT value FROM Settings WHERE key = 'clock_out_confirmation'";
+                var result = cmd.ExecuteScalar();
+                if (result != null && bool.TryParse(result.ToString(), out bool val))
+                    return val;
+                return true; // default enabled
             }
             catch (Exception ex)
             {
                 LogHelper.Write($"⚠️ Error reading clock-out confirmation setting: {ex.Message}");
-                return true; // Default to enabled on error
+                return true;
             }
         }
 
@@ -309,32 +310,15 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "config", "system-config.json");
-                
-                SystemConfig config;
-                if (System.IO.File.Exists(configPath))
-                {
-                    var configJson = System.IO.File.ReadAllText(configPath);
-                    config = System.Text.Json.JsonSerializer.Deserialize<SystemConfig>(configJson, new System.Text.Json.JsonSerializerOptions 
-                    { 
-                        PropertyNameCaseInsensitive = true 
-                    }) ?? new SystemConfig();
-                }
-                else
-                {
-                    config = new SystemConfig();
-                }
-                
-                config.ClockOutConfirmation = enabled;
-                config.LastUpdated = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                
-                var updatedJson = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions 
-                { 
-                    WriteIndented = true,
-                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-                });
-                
-                System.IO.File.WriteAllText(configPath, updatedJson);
+                using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "biometric_local.db")}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT OR REPLACE INTO Settings (key, value)
+                    VALUES ('clock_out_confirmation', $value)
+                ";
+                cmd.Parameters.AddWithValue("$value", enabled.ToString());
+                cmd.ExecuteNonQuery();
                 LogHelper.Write($"📋 Clock-out confirmation setting saved: {enabled}");
                 return true;
             }

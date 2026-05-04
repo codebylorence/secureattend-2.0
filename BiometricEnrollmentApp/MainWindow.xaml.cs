@@ -69,6 +69,17 @@ namespace BiometricEnrollmentApp
             try
             {
                 LogHelper.Write($"⏰ Running shift-based evaluation (last {daysToCheck} day(s))...");
+
+                // Force a schedule sync first so we have up-to-date schedule data
+                // before evaluating absences — this ensures past shifts are included
+                try
+                {
+                    await _syncService.SyncSchedulesAsync();
+                }
+                catch (Exception syncEx)
+                {
+                    LogHelper.Write($"⚠️ Schedule sync before absent marking failed: {syncEx.Message}");
+                }
                 
                 var (absent, missed) = _shiftEngine.EvaluateShifts(TimezoneHelper.Now, daysBack: daysToCheck);
                 

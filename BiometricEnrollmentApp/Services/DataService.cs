@@ -891,12 +891,16 @@ namespace BiometricEnrollmentApp.Services
             return list;
         }
 
-        public List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> GetRecentSessions(int daysBack = 7)
+        public List<(long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status)> GetRecentSessions(int daysBack = 7, bool includeTomorrow = false)
         {
             var list = new List<(long, string, string, string, string, double, string)>();
             var now = TimezoneHelper.Now;
             var fromDate = now.AddDays(-daysBack).ToString("yyyy-MM-dd");
-            var toDate = now.ToString("yyyy-MM-dd");
+            // Include tomorrow so early clock-ins (e.g. Graveyard at 11 PM) that are
+            // recorded with tomorrow's date are still picked up by the sync.
+            var toDate = includeTomorrow
+                ? now.AddDays(1).ToString("yyyy-MM-dd")
+                : now.ToString("yyyy-MM-dd");
 
             using var conn = new SqliteConnection($"Data Source={_dbPath}");
             conn.Open();

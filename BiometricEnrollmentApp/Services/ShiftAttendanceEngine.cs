@@ -47,15 +47,40 @@ namespace BiometricEnrollmentApp.Services
         private readonly string _connString;
         private readonly DataService _dataService;
 
-        // Configurable buffers (can be injected / loaded from settings)
+        // Configurable buffers — loaded from SettingsService on construction
         public TimeSpan EarlyClockInBuffer  { get; set; } = TimeSpan.FromHours(2);
         public TimeSpan LateClockOutBuffer  { get; set; } = TimeSpan.FromHours(2);
         public TimeSpan MaxWorkedHours      { get; set; } = TimeSpan.FromHours(8);
+
+        /// <summary>
+        /// Minutes after ShiftStart that still count as "Present" (not "Late").
+        /// Loaded from SettingsService (clock_in_grace_period_minutes). Default 0.
+        /// </summary>
+        public int ClockInGraceMinutes { get; set; } = 0;
 
         public ShiftAttendanceEngine(string connString)
         {
             _connString  = connString;
             _dataService = new DataService();
+
+            // Load grace period from persisted settings so the UI value is respected
+            try
+            {
+                var settings = new SettingsService();
+                ClockInGraceMinutes = settings.GetClockInGracePeriodMinutes();
+                int clockOutGrace   = settings.GetClockOutGracePeriodMinutes();
+                LateClockOutBuffer  = TimeSpan.FromMinutes(clockOutGrace);
+                int earlyBuffer     = settings.GetEarlyClockInBufferHours();
+                EarlyClockInBuffer  = TimeSpan.FromHours(earlyBuffer);
+                LogHelper.Write($"⚙️ ShiftAttendanceEngine loaded settings — " +
+                                $"ClockInGrace: {ClockInGraceMinutes}min, " +
+                                $"ClockOutGrace: {clockOutGrace}min, " +
+                                $"EarlyBuffer: {earlyBuffer}h");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"⚠️ Could not load attendance settings, using defaults: {ex.Message}");
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -136,6 +161,20 @@ namespace BiometricEnrollmentApp.Services
                 }
             }
 
+            // Also check tomorrow's schedules — needed when EarlyClockInBuffer spans midnight
+            // e.g. Graveyard starts 12:00 AM on 5/5, buffer opens at 10:00 PM on 5/4
+            var tomorrowSchedules = GetSchedulesForEmployee(employeeId, now.AddDays(1));
+            foreach (var s in tomorrowSchedules)
+            {
+                double overtimeTomorrow = _dataService.GetOvertimeHours(employeeId, now.AddDays(1).ToString("yyyy-MM-dd"));
+                var windowTomorrow = ResolveShiftWindow(employeeId, s.ShiftName, s.StartTime, s.EndTime, now.AddDays(1), overtimeTomorrow);
+                if (now >= windowTomorrow.AllowedStart && now <= windowTomorrow.AllowedEnd)
+                {
+                    LogHelper.Write($"🌙 Early clock-in for tomorrow's shift '{s.ShiftName}' — window opens at {windowTomorrow.AllowedStart:HH:mm} on {now.AddDays(1):yyyy-MM-dd}");
+                    return windowTomorrow;
+                }
+            }
+
             return null;
         }
 
@@ -163,13 +202,25 @@ namespace BiometricEnrollmentApp.Services
                 return new ClockInResult(false, $"Already clocked in today", legacyOpen.Value);
             }
 
+            // Check for a COMPLETED session on the same shift date — prevents re-clocking in after clock-out
+            if (HasCompletedSessionOnDate(employeeId, shiftDate))
+            {
+                LogHelper.Write($"⛔ {employeeId} already completed a session on {shiftDate} — re-clock-in not allowed");
+                return new ClockInResult(false, $"Already clocked in and out today. Cannot clock in again.");
+            }
+
             // Attendance date = shift start date (not clock-in date)
             string attendanceDate = window.ShiftStart.ToString("yyyy-MM-dd");
 
-            // Determine status: Late if past shift start
-            string status = now > window.ShiftStart ? "Late" : "IN";
+            // Determine status: Present if within grace period, Late if past grace period
+            var lateThreshold = window.ShiftStart.AddMinutes(ClockInGraceMinutes);
+            string status = now > lateThreshold ? "Late" : "Present";
 
-            long sessionId = InsertSession(employeeId, attendanceDate, now, null, 0, status, window.ShiftName);
+            LogHelper.Write($"⏱️ Clock-in status check: now={now:HH:mm}, shiftStart={window.ShiftStart:HH:mm}, " +
+                            $"grace={ClockInGraceMinutes}min, lateThreshold={lateThreshold:HH:mm} → {status}");
+
+            long sessionId = InsertSession(employeeId, attendanceDate, now, null, 0, status, window.ShiftName,
+                window.ShiftStart.ToString("HH:mm"), window.ShiftEnd.ToString("HH:mm"));
 
             LogHelper.Write($"✅ Clock-in: {employeeId} | Shift: {window.ShiftName} " +
                             $"| Window: {window.ShiftStart:HH:mm}–{window.ShiftEnd:HH:mm} " +
@@ -188,6 +239,14 @@ namespace BiometricEnrollmentApp.Services
             var session = GetLatestOpenSession(employeeId);
             if (session == null)
                 return new ClockOutResult(false, "No open clock-in session found");
+
+            // Block clock-out if the session was already marked as Missed Clock-out
+            // — the shift window has closed and the record is finalised
+            if (session.Status == "Missed Clock-out")
+            {
+                LogHelper.Write($"⛔ {employeeId} session {session.Id} is Missed Clock-out — shift has ended, clock-out not allowed");
+                return new ClockOutResult(false, "Shift has ended. Your attendance was marked as Missed Clock-out.");
+            }
 
             ShiftWindow window;
 
@@ -294,6 +353,8 @@ namespace BiometricEnrollmentApp.Services
         {
             int absent = 0, missed = 0;
 
+            LogHelper.Write($"🔍 EvaluateShifts START — now={now:yyyy-MM-dd HH:mm:ss}, daysBack={daysBack}");
+
             for (int i = 0; i <= daysBack; i++)
             {
                 var anchorDate = now.AddDays(-i);
@@ -301,14 +362,19 @@ namespace BiometricEnrollmentApp.Services
 
                 var schedules = GetSchedulesForDate(dateStr);
 
+                LogHelper.Write($"🔍 [{dateStr}] Found {schedules.Count} schedule(s)");
+
                 foreach (var s in schedules)
                 {
                     // Load overtime for this shift date — extends evaluation_time
                     double overtimeHours = _dataService.GetOvertimeHours(s.EmployeeId, anchorDate.ToString("yyyy-MM-dd"));
                     var window = ResolveShiftWindow(s.EmployeeId, s.ShiftName, s.StartTime, s.EndTime, anchorDate, overtimeHours);
 
+                    LogHelper.Write($"🔍   {s.EmployeeId} [{s.ShiftName}] " +
+                                    $"window={window.AllowedStart:MM-dd HH:mm}→{window.AllowedEnd:MM-dd HH:mm} " +
+                                    $"shiftStart={window.ShiftStart:MM-dd HH:mm} shiftEnd={window.ShiftEnd:MM-dd HH:mm}");
+
                     // ── CRITICAL: Only evaluate AFTER the shift window has fully closed ──
-                    // evaluation_time = shift_end + late_buffer + overtime_hours
                     if (now <= window.AllowedEnd)
                     {
                         LogHelper.Write($"  ⏳ {s.EmployeeId} [{s.ShiftName}] window not closed yet " +
@@ -319,15 +385,21 @@ namespace BiometricEnrollmentApp.Services
                     }
 
                     var session = GetSessionInWindow(s.EmployeeId, window);
+                    LogHelper.Write($"🔍   session={( session == null ? "NULL" : $"id={session.Id} status={session.Status} clockIn={session.ClockIn:HH:mm} clockOut={(session.ClockOut.HasValue ? session.ClockOut.Value.ToString("HH:mm") : "null")}" )}");
 
                     if (session == null)
                     {
-                        // No session at all → ABSENT
-                        if (!AbsentRecordExists(s.EmployeeId, window.ShiftStart.ToString("yyyy-MM-dd"), s.ShiftName))
+                        bool alreadyExists = AbsentRecordExists(s.EmployeeId, window.ShiftStart.ToString("yyyy-MM-dd"), s.ShiftName);
+                        LogHelper.Write($"🔍   absentExists={alreadyExists}");
+                        if (!alreadyExists)
                         {
                             CreateAbsentRecord(s.EmployeeId, window.ShiftStart.ToString("yyyy-MM-dd"), s.ShiftName);
                             absent++;
                             LogHelper.Write($"  ❌ ABSENT: {s.EmployeeId} [{s.ShiftName}] on {dateStr}");
+                        }
+                        else
+                        {
+                            LogHelper.Write($"  ✅ Absent already recorded for {s.EmployeeId} on {window.ShiftStart:yyyy-MM-dd}");
                         }
                     }
                     else if (session.ClockOut == null)
@@ -344,7 +416,7 @@ namespace BiometricEnrollmentApp.Services
                 }
             }
 
-            LogHelper.Write($"📊 Evaluation complete: {absent} absent, {missed} missed clock-out");
+            LogHelper.Write($"📊 EvaluateShifts END: {absent} absent, {missed} missed clock-out");
             return (absent, missed);
         }
 
@@ -500,6 +572,31 @@ namespace BiometricEnrollmentApp.Services
             return Convert.ToInt64(obj);
         }
 
+        /// <summary>
+        /// Returns true if the employee already has a completed (clocked-out) session
+        /// on the given shift date. Prevents re-clocking in after a successful clock-out.
+        /// </summary>
+        private bool HasCompletedSessionOnDate(string employeeId, string date)
+        {
+            using var conn = new SqliteConnection(_connString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT COUNT(1) FROM AttendanceSessions
+                WHERE employee_id = $emp
+                  AND date        = $date
+                  AND clock_in    IS NOT NULL
+                  AND clock_out   IS NOT NULL
+                  AND clock_out   <> ''
+                  AND status NOT IN ('Absent', 'Missed Clock-out')
+            ";
+            cmd.Parameters.AddWithValue("$emp",  employeeId);
+            cmd.Parameters.AddWithValue("$date", date);
+
+            var obj = cmd.ExecuteScalar();
+            return obj != null && Convert.ToInt32(obj) > 0;
+        }
+
         private SessionRow? GetLatestOpenSession(string employeeId)
         {
             using var conn = new SqliteConnection(_connString);
@@ -539,15 +636,16 @@ namespace BiometricEnrollmentApp.Services
         private long InsertSession(
             string employeeId, string date,
             DateTime clockIn, DateTime? clockOut,
-            double totalHours, string status, string shiftName)
+            double totalHours, string status, string shiftName,
+            string shiftStartTime = "", string shiftEndTime = "")
         {
             using var conn = new SqliteConnection(_connString);
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
                 INSERT INTO AttendanceSessions
-                    (employee_id, date, clock_in, clock_out, total_hours, status, shift_name)
-                VALUES ($emp, $date, $ci, $co, $hrs, $status, $shift);
+                    (employee_id, date, clock_in, clock_out, total_hours, status, shift_name, shift_start_time, shift_end_time)
+                VALUES ($emp, $date, $ci, $co, $hrs, $status, $shift, $sstart, $send);
                 SELECT last_insert_rowid();
             ";
             cmd.Parameters.AddWithValue("$emp",    employeeId);
@@ -557,6 +655,8 @@ namespace BiometricEnrollmentApp.Services
             cmd.Parameters.AddWithValue("$hrs",    totalHours);
             cmd.Parameters.AddWithValue("$status", status);
             cmd.Parameters.AddWithValue("$shift",  shiftName);
+            cmd.Parameters.AddWithValue("$sstart", shiftStartTime);
+            cmd.Parameters.AddWithValue("$send",   shiftEndTime);
 
             var obj = cmd.ExecuteScalar();
             return obj != null && obj != DBNull.Value ? Convert.ToInt64(obj) : -1;
@@ -598,14 +698,14 @@ namespace BiometricEnrollmentApp.Services
             using var conn = new SqliteConnection(_connString);
             conn.Open();
             using var cmd = conn.CreateCommand();
+            // Check by employee + date only — shift_name may differ between web and biometric
             cmd.CommandText = @"
                 SELECT COUNT(1) FROM AttendanceSessions
                 WHERE employee_id = $emp AND date = $date
-                  AND shift_name = $shift AND status = 'Absent'
+                  AND status = 'Absent'
             ";
             cmd.Parameters.AddWithValue("$emp",   employeeId);
             cmd.Parameters.AddWithValue("$date",  date);
-            cmd.Parameters.AddWithValue("$shift", shiftName);
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
 
@@ -617,7 +717,7 @@ namespace BiometricEnrollmentApp.Services
             cmd.CommandText = @"
                 INSERT INTO AttendanceSessions
                     (employee_id, date, clock_in, clock_out, total_hours, status, shift_name)
-                VALUES ($emp, $date, NULL, NULL, 0, 'Absent', $shift)
+                VALUES ($emp, $date, '', NULL, 0, 'Absent', $shift)
             ";
             cmd.Parameters.AddWithValue("$emp",   employeeId);
             cmd.Parameters.AddWithValue("$date",  date);

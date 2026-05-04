@@ -236,6 +236,19 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="80"/>
                                     </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Early Clock-In Buffer (hours)" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource TextMainBrush}"/>
+                                    <TextBox Grid.Column="1" x:Name="EarlyClockInBufferInput" Text="2" TextAlignment="Center"/>
+                                </Grid>
+                                <TextBlock Text="Hours before shift start that employees are allowed to clock in. E.g. If set to 2, an 8:00 AM shift allows clock-in from 6:00 AM." 
+                                           FontSize="12" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" LineHeight="18"/>
+                            </StackPanel>
+
+                            <StackPanel Margin="0,0,0,20">
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="80"/>
+                                    </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Clock-In Grace Period" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{StaticResource TextMainBrush}"/>
                                     <TextBox Grid.Column="1" x:Name="ClockInGraceInput" Text="10" TextAlignment="Center"/>
                                 </Grid>

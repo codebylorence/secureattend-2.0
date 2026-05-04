@@ -74,8 +74,36 @@ namespace BiometricEnrollmentApp
                     {
                         Dispatcher.Invoke(() => 
                         {
+                            // Update footer status
                             if (StatusText != null)
                                 StatusText.Text = msg;
+
+                            // Update the in-panel instruction text
+                            if (ScanInstructionText != null)
+                                ScanInstructionText.Text = msg;
+
+                            // Parse attempt progress from messages like "👉 Please place finger #2"
+                            // or "✅ Captured 2/3"
+                            int attemptsDone = 0;
+                            if (msg.Contains("Captured 1") || msg.Contains("finger #2"))
+                                attemptsDone = 1;
+                            else if (msg.Contains("Captured 2") || msg.Contains("finger #3"))
+                                attemptsDone = 2;
+                            else if (msg.Contains("Captured 3") || msg.Contains("Enrollment success") || msg.Contains("Merge"))
+                                attemptsDone = 3;
+
+                            // Update dots and counter
+                            var activeBrush   = new System.Windows.Media.SolidColorBrush(
+                                System.Windows.Media.Color.FromRgb(16, 185, 129));  // green
+                            var inactiveBrush = new System.Windows.Media.SolidColorBrush(
+                                System.Windows.Media.Color.FromRgb(203, 213, 225)); // gray
+
+                            if (Dot1 != null) Dot1.Fill = attemptsDone >= 1 ? activeBrush : inactiveBrush;
+                            if (Dot2 != null) Dot2.Fill = attemptsDone >= 2 ? activeBrush : inactiveBrush;
+                            if (Dot3 != null) Dot3.Fill = attemptsDone >= 3 ? activeBrush : inactiveBrush;
+
+                            if (AttemptCountText != null)
+                                AttemptCountText.Text = $"{attemptsDone} / 3 scans";
                         });
                         LogHelper.Write($"[ENROLLMENT] {msg}");
                     }
@@ -840,6 +868,12 @@ namespace BiometricEnrollmentApp
                 Dispatcher.Invoke(() => 
                 {
                     StatusText.Text = "🖐️ Please place your finger 3 times...";
+                    if (ScanInstructionText != null) ScanInstructionText.Text = "🖐️ Place finger to begin...";
+                    if (AttemptCountText != null) AttemptCountText.Text = "0 / 3 scans";
+                    var gray = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(203, 213, 225));
+                    if (Dot1 != null) Dot1.Fill = gray;
+                    if (Dot2 != null) Dot2.Fill = gray;
+                    if (Dot3 != null) Dot3.Fill = gray;
                     SetControlsEnabled(false);
                 });
 

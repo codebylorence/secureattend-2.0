@@ -200,6 +200,7 @@ export const getDTR = async (req, res) => {
             hours = 0;
           } else if (att.status === 'Overtime') {
             remarks = 'OT';
+            lateMin = computeLate(att.clock_in, shift?.start_time);
             undertimeMin = computeUndertime(att.clock_out, shift?.end_time, shift?.start_time);
           } else {
             remarks = 'P';
@@ -217,6 +218,7 @@ export const getDTR = async (req, res) => {
             hours = 0;
           } else if (att.status === 'Overtime') {
             remarks = 'OT';
+            lateMin = computeLate(att.clock_in, shift?.start_time);
             undertimeMin = computeUndertime(att.clock_out, shift?.end_time, shift?.start_time);
           } else {
             remarks = 'P';
@@ -244,6 +246,7 @@ export const getDTR = async (req, res) => {
           undertimeMin = computeUndertime(att.clock_out, shift?.end_time, shift?.start_time);
         } else if (status === 'Overtime') {
           remarks = 'OT';
+          lateMin = computeLate(att.clock_in, shift?.start_time);
           undertimeMin = computeUndertime(att.clock_out, shift?.end_time, shift?.start_time);
         } else {
           remarks = 'P';

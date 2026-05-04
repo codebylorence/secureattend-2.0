@@ -271,6 +271,151 @@ export default function AttendanceReports() {
     wb.created  = now;
     wb.modified = now;
 
+    // ── Summary sheet (batch mode — one row per employee) ───────────────────
+    if (dtrList.length > 1) {
+      const period0 = dtrList[0]?.period;
+      const cutoffLabel = period0 ? `${period0.start_date} to ${period0.end_date}` : "";
+      const NCOLS = 8;
+
+      const ws = wb.addWorksheet("Summary", {
+        pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+      });
+
+      ws.columns = [
+        { key: "empId",     width: 16 },
+        { key: "empName",   width: 28 },
+        { key: "present",   width: 14 },
+        { key: "hours",     width: 14 },
+        { key: "late",      width: 14 },
+        { key: "undertime", width: 16 },
+        { key: "overtime",  width: 14 },
+        { key: "absences",  width: 12 },
+      ];
+
+      // Title
+      const r1 = ws.addRow([companyName]);
+      ws.mergeCells(1, 1, 1, NCOLS);
+      const r1c = r1.getCell(1);
+      r1c.value     = companyName;
+      r1c.font      = { name: "Calibri", bold: true, size: 16, color: { argb: "FF" + WHITE } };
+      r1c.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_BLUE } };
+      r1c.alignment = { horizontal: "center", vertical: "middle" };
+      r1.height     = 32;
+
+      // Subtitle
+      const r2 = ws.addRow(["Attendance Summary Report"]);
+      ws.mergeCells(2, 1, 2, NCOLS);
+      const r2c = r2.getCell(1);
+      r2c.value     = "Attendance Summary Report";
+      r2c.font      = { name: "Calibri", bold: true, size: 12, color: { argb: "FF" + WHITE } };
+      r2c.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + MID_BLUE } };
+      r2c.alignment = { horizontal: "center", vertical: "middle" };
+      r2.height     = 22;
+
+      // Meta row
+      ws.addRow([]);
+      const r4 = ws.addRow([]); r4.height = 18;
+      r4.getCell(1).value = "Cut-Off Period:";
+      r4.getCell(1).font  = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + MID_BLUE } };
+      r4.getCell(2).value = cutoffLabel;
+      r4.getCell(2).font  = { name: "Calibri", size: 10 };
+      ws.mergeCells(4, 2, 4, 4);
+      r4.getCell(6).value = "Generated:";
+      r4.getCell(6).font  = { name: "Calibri", bold: true, size: 10, color: { argb: "FF" + MID_BLUE } };
+      r4.getCell(7).value = `${dateStr}  ${timeStr}`;
+      r4.getCell(7).font  = { name: "Calibri", size: 10 };
+      ws.mergeCells(4, 7, 4, NCOLS);
+      ws.addRow([]);
+
+      // Header row
+      const HEADERS = [
+        "Employee ID", "Employee Name",
+        "Days Present", "Total Hours", "Late (min)",
+        "Undertime (min)", "Overtime (hrs)", "Absences",
+      ];
+      const rH = ws.addRow(HEADERS);
+      rH.height = 22;
+      rH.eachCell((cell) => {
+        cell.font      = { name: "Calibri", bold: true, size: 11, color: { argb: "FF" + WHITE } };
+        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + DARK_BLUE } };
+        cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        cell.border    = thinBorder(MID_BLUE);
+      });
+
+      const parseSummaryMin = (str) => {
+        if (!str || str === "0") return 0;
+        let total = 0;
+        const hMatch = str.match(/(\d+)h/);
+        const mMatch = str.match(/(\d+)m/);
+        if (hMatch) total += parseInt(hMatch[1]) * 60;
+        if (mMatch) total += parseInt(mMatch[1]);
+        return total;
+      };
+
+      // Data rows
+      dtrList.forEach((dtr, idx) => {
+        const { employee, summary, rows } = dtr;
+        const isEven  = idx % 2 === 0;
+        const rowBg   = isEven ? LIGHT_BLUE : WHITE;
+
+        const daysPresent = rows.filter(r => ["P", "L", "OT", "HW"].includes(r.remarks)).length;
+        const absences    = rows.filter(r => r.remarks === "A").length;
+        const overtimeHrs = rows
+          .filter(r => r.remarks === "OT")
+          .reduce((sum, r) => sum + (parseFloat(r.hours) || 0), 0);
+        const lateMin = parseSummaryMin(summary.totalLate);
+        const utMin   = parseSummaryMin(summary.totalUndertime);
+
+        const dr = ws.addRow([
+          employee.employee_id,
+          `${employee.firstname} ${employee.lastname}`,
+          daysPresent,
+          parseFloat(summary.totalHours).toFixed(2),
+          lateMin,
+          utMin,
+          overtimeHrs.toFixed(2),
+          absences,
+        ]);
+        dr.height = 18;
+        dr.eachCell({ includeEmpty: true }, (cell, colNum) => {
+          cell.font      = { name: "Calibri", size: 11 };
+          cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + rowBg } };
+          cell.border    = thinBorder();
+          cell.alignment = { horizontal: colNum <= 2 ? "left" : "center", vertical: "middle" };
+        });
+        if (lateMin > 0)      dr.getCell(5).font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFB45309" } };
+        if (utMin > 0)        dr.getCell(6).font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF1D4ED8" } };
+        if (overtimeHrs > 0)  dr.getCell(7).font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF166534" } };
+        if (absences > 0)     dr.getCell(8).font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF991B1B" } };
+      });
+
+      // Totals row
+      const totRow = ws.addRow([
+        "", `${dtrList.length} employees`,
+        dtrList.reduce((s, d) => s + d.rows.filter(r => ["P","L","OT","HW"].includes(r.remarks)).length, 0),
+        dtrList.reduce((s, d) => s + parseFloat(d.summary.totalHours || 0), 0).toFixed(2),
+        "", "", "", "",
+      ]);
+      totRow.height = 20;
+      totRow.eachCell({ includeEmpty: true }, (cell) => {
+        cell.font      = { name: "Calibri", bold: true, size: 11 };
+        cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + LIGHT_BLUE } };
+        cell.border    = thinBorder(MID_BLUE);
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+      });
+      totRow.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+
+      // Footer
+      ws.addRow([]);
+      const footerRow = ws.addRow([`Report generated by ${systemName}  •  ${dateStr} at ${timeStr}`]);
+      ws.mergeCells(footerRow.number, 1, footerRow.number, NCOLS);
+      const fc = footerRow.getCell(1);
+      fc.font      = { name: "Calibri", italic: true, size: 9, color: { argb: "FF" + FOOTER_FG } };
+      fc.alignment = { horizontal: "center", vertical: "middle" };
+      footerRow.height = 16;
+    }
+    // ── End summary sheet ────────────────────────────────────────────────────
+
     dtrList.forEach((dtr, sheetIdx) => {
       const { employee, period, summary, rows } = dtr;
       const sheetName = `${employee.lastname}_${employee.firstname}`.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 31);
@@ -835,8 +980,8 @@ export default function AttendanceReports() {
                 <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.timeIn||"—"}</td>
                 <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.timeOut||"—"}</td>
                 <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.hours||"—"}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center text-orange-600 font-medium">{row.late||"—"}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center text-blue-600 font-medium">{row.undertime||"—"}</td>
+                <td className={`border border-gray-200 px-2 py-1 text-center font-medium ${row.late ? 'text-orange-600' : 'text-gray-400'}`}>{row.late||"—"}</td>
+                <td className={`border border-gray-200 px-2 py-1 text-center font-medium ${row.undertime ? 'text-blue-600' : 'text-gray-400'}`}>{row.undertime||"—"}</td>
                 <td className="border border-gray-200 px-2 py-1 text-center">
                   {row.isHoliday && row.remarks==="H"
                     ? <span className="text-red-600 font-bold text-[10px]" title={row.holidayName}>H — {row.holidayName}</span>

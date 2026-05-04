@@ -255,18 +255,58 @@ namespace BiometricEnrollmentApp
                 // ── Use ShiftAttendanceEngine for all clock-in/out logic ──
                 long openSessionId = _dataService.GetOpenSessionId(employeeId, now);
 
+                // ── Fetch the open session — check today AND recent days (overnight/closing shifts) ──
+                (long Id, string EmployeeId, string Date, string ClockIn, string ClockOut, double TotalHours, string Status) openSession = default;
                 if (openSessionId > 0)
                 {
+                    var todaySessions = _dataService.GetTodaySessions();
+                    openSession = todaySessions.FirstOrDefault(s => s.Id == openSessionId);
+
+                    if (openSession.Id == 0)
+                    {
+                        var recentSessions = _dataService.GetRecentSessions(2, includeTomorrow: true);
+                        var recent = recentSessions.FirstOrDefault(s => s.Id == openSessionId);
+                        if (recent.Id > 0)
+                            openSession = (recent.Id, recent.EmployeeId, recent.Date,
+                                           recent.ClockIn, recent.ClockOut,
+                                           recent.TotalHours, recent.Status);
+                    }
+                }
+
+                // Determine if the open session is a past Missed Clock-out that should be ignored
+                bool hasPastMissedClockout = openSessionId > 0
+                    && openSession.Id > 0
+                    && openSession.Status == "Missed Clock-out"
+                    && openSession.Date != now.ToString("yyyy-MM-dd")
+                    && openSession.Date != now.AddDays(1).ToString("yyyy-MM-dd");
+
+                // Block current-shift Missed Clock-out attempts
+                if (openSessionId > 0 && openSession.Id > 0
+                    && openSession.Status == "Missed Clock-out"
+                    && !hasPastMissedClockout)
+                {
+                    LogHelper.Write($"⛔ {employeeId} session {openSessionId} is Missed Clock-out for today — shift has ended");
+                    Dispatcher.Invoke(() =>
+                    {
+                        UpdateInstruction("⛔ Shift has ended. Attendance marked as Missed Clock-out.");
+                        ShowEmployeeResult(employeeId, employeeName, "Shift Ended", now);
+                    });
+                    Thread.Sleep(3000);
+                    return;
+                }
+
+                if (openSessionId > 0 && !hasPastMissedClockout)
+                {
                     // ── CLOCK-OUT ──
+                    if (hasPastMissedClockout)
+                        LogHelper.Write($"ℹ️ {employeeId} past Missed Clock-out on {openSession.Date} — skipping to clock-in");
+
                     // Show confirmation dialog if enabled
                     if (IsClockOutConfirmationEnabled())
                     {
                         bool shouldClockOut = false;
                         DateTime clockInTime = DateTime.MinValue;
 
-                        // Get clock-in time for the dialog
-                        var sessions = _dataService.GetTodaySessions();
-                        var openSession = sessions.FirstOrDefault(s => s.Id == openSessionId);
                         if (openSession.Id > 0 && !string.IsNullOrEmpty(openSession.ClockIn))
                             DateTime.TryParse(openSession.ClockIn, out clockInTime);
 
@@ -279,9 +319,7 @@ namespace BiometricEnrollmentApp
                                     var confirmDialog = new ConfirmationDialog();
                                     var parentWindow = Window.GetWindow(this) ?? Application.Current.MainWindow;
                                     if (parentWindow != null)
-                                    {
                                         confirmDialog.Owner = parentWindow;
-                                    }
                                     confirmDialog.Topmost = true;
                                     confirmDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
                                     confirmDialog.ShowInTaskbar = true;
@@ -345,6 +383,9 @@ namespace BiometricEnrollmentApp
                 else
                 {
                     // ── CLOCK-IN ──
+                    if (hasPastMissedClockout)
+                        LogHelper.Write($"ℹ️ {employeeId} has past Missed Clock-out on {openSession.Date} — proceeding to clock-in for new shift");
+
                     var result = _shiftEngine.ClockIn(employeeId, now);
 
                     if (!result.Success)
@@ -359,7 +400,7 @@ namespace BiometricEnrollmentApp
                         return;
                     }
 
-                    string status = result.Message.Contains("Late") ? "Late" : "IN";
+                    string status = result.Message.Contains("Late") ? "Late" : "Present";
                     Task.Run(async () => await _syncService.QueueAttendanceSync(
                         employeeId, result.SessionId, now, null, status));
 

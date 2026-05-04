@@ -50,6 +50,20 @@ namespace BiometricEnrollmentApp.Services
                 ";
                 cmd.ExecuteNonQuery();
 
+                // Set default clock-out confirmation if not exists
+                cmd.CommandText = @"
+                    INSERT OR IGNORE INTO Settings (key, value)
+                    VALUES ('clock_out_confirmation', 'True');
+                ";
+                cmd.ExecuteNonQuery();
+
+                // Set default early clock-in buffer if not exists
+                cmd.CommandText = @"
+                    INSERT OR IGNORE INTO Settings (key, value)
+                    VALUES ('early_clock_in_buffer_hours', '2');
+                ";
+                cmd.ExecuteNonQuery();
+
                 // Set default API URL if not exists
                 cmd.CommandText = @"
                     INSERT OR IGNORE INTO Settings (key, value)
@@ -203,6 +217,47 @@ namespace BiometricEnrollmentApp.Services
             catch (Exception ex)
             {
                 LogHelper.Write($"💥 Error setting clock-out grace period: {ex.Message}");
+                return false;
+            }
+        }
+
+        public int GetEarlyClockInBufferHours()
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT value FROM Settings WHERE key = 'early_clock_in_buffer_hours'";
+                var result = cmd.ExecuteScalar();
+                if (result != null && int.TryParse(result.ToString(), out int hours))
+                    return hours;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error getting early clock-in buffer: {ex.Message}");
+            }
+            return 2; // Default 2 hours
+        }
+
+        public bool SetEarlyClockInBufferHours(int hours)
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT OR REPLACE INTO Settings (key, value)
+                    VALUES ('early_clock_in_buffer_hours', $value);
+                ";
+                cmd.Parameters.AddWithValue("$value", hours.ToString());
+                cmd.ExecuteNonQuery();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Write($"💥 Error setting early clock-in buffer: {ex.Message}");
                 return false;
             }
         }

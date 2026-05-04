@@ -444,12 +444,26 @@ export const getBiometricSchedules = async (req, res) => {
     const { default: ScheduleTemplate } = await import("../models/scheduleTemplate.js");
     const { default: Employee } = await import("../models/employee.js");
     const { Op } = await import("sequelize");
-    
+    const { getCurrentDateInTimezone } = await import("../utils/timezone.js");
+
+    // Include Active templates AND past templates from the last 7 days
+    // so the biometric app can still mark absent/missed clock-out for recent shifts
+    const today = getCurrentDateInTimezone();
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
     // Get all active templates with assigned employees
     const templates = await ScheduleTemplate.findAll({
       where: { 
-        status: "Active",
-        assigned_employees: { [Op.ne]: null }
+        assigned_employees: { [Op.ne]: null },
+        [Op.or]: [
+          { status: "Active" },
+          // Include past templates whose specific_date is within the last 7 days
+          {
+            specific_date: { [Op.gte]: sevenDaysAgoStr }
+          }
+        ]
       },
       order: [["specific_date", "ASC"], ["createdAt", "DESC"]],
     });

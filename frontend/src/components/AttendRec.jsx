@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { FaClock, FaEdit, FaTrash } from "react-icons/fa";
+import { FaClock } from "react-icons/fa";
 import { MdDelete } from "react-icons/md";
 import { getAttendances, deleteAttendance } from "../api/AttendanceApi";
 import { formatDateTime24 } from "../utils/timeFormat";
-import OvertimeHoursModal from "./OvertimeHoursModal";
 import ConfirmationModal from "./ConfirmationModal";
 import { toast } from "react-toastify";
 
@@ -13,7 +12,6 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [overtimeHoursModal, setOvertimeHoursModal] = useState({ isOpen: false, attendance: null });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, attendance: null });
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -94,20 +92,6 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
 
   const formatTime = (dateString) => {
     return formatDateTime24(dateString);
-  };
-
-  const handleEditOvertimeHours = (attendance) => {
-    setOvertimeHoursModal({ isOpen: true, attendance });
-  };
-
-  const handleOvertimeHoursUpdate = (updatedAttendance) => {
-    // Update the attendance in the local state
-    setAttendances(prev => prev.map(att => 
-      att.id === updatedAttendance.id 
-        ? { ...att, overtime_hours: updatedAttendance.new_overtime_hours }
-        : att
-    ));
-    setOvertimeHoursModal({ isOpen: false, attendance: null });
   };
 
   const handleDelete = async () => {
@@ -206,23 +190,15 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_out)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {(() => {
-                            // Calculate total hours including overtime
-                            let totalHours = 0;
-                            
-                            // Regular hours from clock in/out
+                            // Show actual worked hours from clock in/out only
+                            // overtime_hours is stored separately and NOT added to total display
                             if (attendance.clock_in && attendance.clock_out) {
                               const clockIn = new Date(attendance.clock_in);
                               const clockOut = new Date(attendance.clock_out);
-                              const regularHours = (clockOut - clockIn) / (1000 * 60 * 60);
-                              totalHours += regularHours;
+                              const workedHours = (clockOut - clockIn) / (1000 * 60 * 60);
+                              return workedHours > 0 ? `${workedHours.toFixed(2)} hrs` : "-";
                             }
-                            
-                            // Add overtime hours if status is Overtime and employee has clocked out
-                            if (attendance.status === 'Overtime' && attendance.overtime_hours && attendance.clock_out) {
-                              totalHours += parseFloat(attendance.overtime_hours);
-                            }
-                            
-                            return totalHours > 0 ? `${totalHours.toFixed(2)} hrs` : "-";
+                            return "-";
                           })()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{attendance.department || "-"}</td>
@@ -233,7 +209,7 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                               'Late': { label: 'Late', color: 'bg-orange-100 text-orange-800' },
                               'Absent': { label: 'Absent', color: 'bg-red-100 text-red-800' },
                               'Overtime': { label: 'Overtime', color: 'bg-purple-100 text-purple-800' },
-                              'IN': { label: 'Clocked In', color: 'bg-primary-100 text-primary-800' },
+                              'IN': { label: 'Present', color: 'bg-green-100 text-green-800' },
                               'COMPLETED': { label: 'Completed', color: 'bg-green-100 text-green-800' },
                             };
                             const display = statusDisplay[attendance.status] || { label: attendance.status, color: 'bg-gray-100 text-gray-800' };
@@ -246,15 +222,6 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <div className="flex items-center gap-2">
-                            {attendance.status === 'Overtime' && attendance.clock_out && (
-                              <button
-                                onClick={() => handleEditOvertimeHours(attendance)}
-                                className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-all shadow-sm shadow-blue-100"
-                                title="Edit overtime hours"
-                              >
-                                <FaEdit size={12} />
-                              </button>
-                            )}
                             {isAdmin && (
                               <button
                                 onClick={() => setDeleteModal({ isOpen: true, attendance })}
@@ -348,14 +315,6 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
         </div>
       </div>
       
-      {/* Overtime Hours Modal */}
-      <OvertimeHoursModal
-        isOpen={overtimeHoursModal.isOpen}
-        onClose={() => setOvertimeHoursModal({ isOpen: false, attendance: null })}
-        attendance={overtimeHoursModal.attendance}
-        onUpdate={handleOvertimeHoursUpdate}
-      />
-
       {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={deleteModal.isOpen}
