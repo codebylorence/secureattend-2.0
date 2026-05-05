@@ -2092,7 +2092,11 @@ export default function CalendarScheduleView() {
         const shiftsByDate = {};
         freshTemplates.forEach(template => {
           if (!template.specific_date) return;
-          const dateKey = template.specific_date;
+          // Normalize to yyyy-MM-dd regardless of whether it's a Date object or ISO string
+          const dateKey = typeof template.specific_date === 'string'
+            ? template.specific_date.slice(0, 10)
+            : new Date(template.specific_date).toISOString().slice(0, 10);
+
           if (!shiftsByDate[dateKey]) shiftsByDate[dateKey] = {};
           if (!shiftsByDate[dateKey][template.shift_name]) {
             shiftsByDate[dateKey][template.shift_name] = {
@@ -2116,8 +2120,13 @@ export default function CalendarScheduleView() {
             department: template.department, template_id: template.id, member_limit: template.member_limit, assigned_count: templateAssignedEmployees.length, members: templateAssignedEmployees
           });
         });
-        
-        const updatedShiftData = shiftsByDate[selectedShiftData.date]?.[selectedShiftData.shift_name];
+
+        // Also normalize the selected date for the lookup
+        const selectedDateKey = typeof selectedShiftData.date === 'string'
+          ? selectedShiftData.date.slice(0, 10)
+          : new Date(selectedShiftData.date).toISOString().slice(0, 10);
+
+        const updatedShiftData = shiftsByDate[selectedDateKey]?.[selectedShiftData.shift_name];
         if (updatedShiftData) setSelectedShiftData(updatedShiftData);
       }
     } catch (error) {
@@ -2192,7 +2201,11 @@ export default function CalendarScheduleView() {
     templates.forEach(template => {
       if (!template.specific_date) return;
 
-      const dateKey = template.specific_date;
+      // Normalize to yyyy-MM-dd (PostgreSQL may return full ISO string)
+      const dateKey = typeof template.specific_date === 'string'
+        ? template.specific_date.slice(0, 10)
+        : new Date(template.specific_date).toISOString().slice(0, 10);
+
       if (!shiftsByDate[dateKey]) shiftsByDate[dateKey] = {};
       if (!shiftsByDate[dateKey][template.shift_name]) {
         shiftsByDate[dateKey][template.shift_name] = {
