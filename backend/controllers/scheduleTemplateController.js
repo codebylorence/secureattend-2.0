@@ -446,11 +446,16 @@ export const getBiometricSchedules = async (req, res) => {
     const { Op } = await import("sequelize");
     const { getCurrentDateInTimezone } = await import("../utils/timezone.js");
 
-    // Include Active templates AND past templates from the last 7 days
+    // Include Active templates AND templates with specific_date within ±30 days
+    // (past 7 days for recent history, future 30 days for upcoming schedules)
     const today = getCurrentDateInTimezone();
     const sevenDaysAgo = new Date(today);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+    const thirtyDaysAhead = new Date(today);
+    thirtyDaysAhead.setDate(thirtyDaysAhead.getDate() + 30);
+    const thirtyDaysAheadStr = thirtyDaysAhead.toISOString().split('T')[0];
 
     // ── Fetch all active employees in ONE query ──────────────────────────────
     // Avoids N+1 queries (previously: one Employee.findOne per assignment row)
@@ -467,7 +472,13 @@ export const getBiometricSchedules = async (req, res) => {
         assigned_employees: { [Op.ne]: null },
         [Op.or]: [
           { status: "Active" },
-          { specific_date: { [Op.gte]: sevenDaysAgoStr } }
+          // Include specific-date templates within the past 7 days AND next 30 days
+          {
+            specific_date: {
+              [Op.gte]: sevenDaysAgoStr,
+              [Op.lte]: thirtyDaysAheadStr
+            }
+          }
         ]
       },
       order: [["specific_date", "ASC"], ["createdAt", "DESC"]],
@@ -497,7 +508,9 @@ export const getBiometricSchedules = async (req, res) => {
           || `Employee ${employee.employee_id}`;
 
         biometricSchedules.push({
-          Id: parseInt(`${template.id}${employee.id}`),
+          // Use a safe composite ID: template_id * 100000 + internal employee pk
+          // Avoids string-concatenation overflow that can exceed int32 max (~2.1B)
+          Id: (template.id * 100000 + employee.id),
           Employee_Id: employee.employee_id,
           Template_Id: template.id,
           Shift_Name: template.shift_name,
