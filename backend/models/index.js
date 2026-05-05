@@ -46,6 +46,25 @@ const runColumnMigrations = async () => {
     allowNull: false,
   });
 
+  // employee_schedules columns added in migration 20260207
+  // (shift_name, start_time, end_time, department, template_id nullable)
+  await addColumnIfMissing("employee_schedules", "shift_name", {
+    type: DataTypes.STRING,
+    allowNull: true,
+  });
+  await addColumnIfMissing("employee_schedules", "start_time", {
+    type: DataTypes.STRING,
+    allowNull: true,
+  });
+  await addColumnIfMissing("employee_schedules", "end_time", {
+    type: DataTypes.STRING,
+    allowNull: true,
+  });
+  await addColumnIfMissing("employee_schedules", "department", {
+    type: DataTypes.STRING,
+    allowNull: true,
+  });
+
   // Holidays table (created if not exists)
   try {
     await sequelize.query(`
