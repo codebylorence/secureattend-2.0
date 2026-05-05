@@ -1377,12 +1377,23 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
           ? JSON.parse(schedule.assigned_employees) 
           : schedule.assigned_employees;
         const employeeIds = assignedEmployees.map(emp => emp.employee_id);
+        console.log('📋 EmployeeAssignmentModal opened:', {
+          department: schedule.department,
+          template_id: schedule.id,
+          assigned_employees_raw: schedule.assigned_employees,
+          parsed_ids: employeeIds,
+        });
         setSelectedEmployees(employeeIds);
         setInitiallyAssignedEmployees(employeeIds); 
       } catch (e) {
         setSelectedEmployees([]);
         setInitiallyAssignedEmployees([]);
       }
+    } else {
+      console.log('📋 EmployeeAssignmentModal opened with NO assigned_employees:', {
+        department: schedule.department,
+        template_id: schedule.id,
+      });
     }
   }, [schedule]);
 
@@ -1394,12 +1405,12 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
     
     const isDepartmentMatch = emp.department === schedule.department || emp.department === "Company-wide";
     
+    // Include team leaders so they appear in the list and are preserved when saving.
+    // Team leaders are auto-assigned when a zone is created; excluding them from the
+    // list caused them to be silently removed on every "Save Assignments" click.
     const isRegularEmployee = emp.position && 
       !emp.position.toLowerCase().includes('supervisor') &&
       !emp.position.toLowerCase().includes('admin') &&
-      !emp.position.toLowerCase().includes('team leader') &&
-      !emp.position.toLowerCase().includes('teamleader') &&
-      !emp.position.toLowerCase().includes('team-leader') &&
       !emp.position.toLowerCase().includes('manager');
     
     return isDepartmentMatch && isRegularEmployee;
@@ -1408,6 +1419,16 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
   const handleEmployeeToggle = (employeeId) => {
     setSelectedEmployees(prev => {
       const isCurrentlySelected = prev.includes(employeeId);
+      
+      // Prevent removing auto-assigned team leaders
+      const employee = employees.find(emp => emp.employee_id === employeeId);
+      const isTeamLeader = employee?.position?.toLowerCase().includes('team leader') ||
+        employee?.position?.toLowerCase().includes('teamleader') ||
+        employee?.position?.toLowerCase().includes('team-leader');
+      if (isCurrentlySelected && isTeamLeader) {
+        toast.warning('Team leaders are automatically assigned and cannot be removed here.');
+        return prev;
+      }
       
       if (!isCurrentlySelected) {
         const hasFingerprint = fingerprintStatus[employeeId];
@@ -1433,7 +1454,14 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
       toast.error(`Cannot assign more than ${schedule.member_limit} employees to this zone.`);
       return;
     }
-    
+
+    // Helper: is this employee a team leader?
+    const isTeamLeaderEmp = (empId) => {
+      const emp = employees.find(e => e.employee_id === empId);
+      const pos = emp?.position?.toLowerCase() ?? '';
+      return pos.includes('team leader') || pos.includes('teamleader') || pos.includes('team-leader');
+    };
+
     const employeesToAdd = selectedEmployees.filter(empId => !initiallyAssignedEmployees.includes(empId));
     const employeesWithoutFingerprints = employeesToAdd.filter(empId => !fingerprintStatus[empId]);
     
@@ -1444,7 +1472,15 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
     
     setLoading(true);
     try {
-      const employeesToRemove = initiallyAssignedEmployees.filter(empId => !selectedEmployees.includes(empId));
+      // Never remove team leaders — they are auto-assigned and must stay.
+      // Only remove non-TL employees that were visible in the list and explicitly unchecked.
+      const visibleEmployeeIds = new Set(departmentEmployees.map(emp => emp.employee_id));
+      const employeesToRemove = initiallyAssignedEmployees.filter(empId =>
+        !isTeamLeaderEmp(empId) &&          // never remove TL
+        visibleEmployeeIds.has(empId) &&     // only remove if they were shown
+        !selectedEmployees.includes(empId)   // only remove if unchecked
+      );
+
       let operationsCompleted = 0;
       
       if (employeesToAdd.length > 0) {
@@ -1538,16 +1574,28 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                     ? `${employee.firstname} ${employee.lastname}`
                     : employee.employee_id;
                   
+                  const isTeamLeader = employee.position?.toLowerCase().includes('team leader') ||
+                    employee.position?.toLowerCase().includes('teamleader') ||
+                    employee.position?.toLowerCase().includes('team-leader');
+
                   return (
-                    <div key={empId} className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 pl-3 pr-1.5 py-1.5 rounded-lg text-sm font-semibold shadow-sm hover:border-blue-300 transition-colors">
+                    <div key={empId} className={`flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-lg text-sm font-semibold shadow-sm transition-colors ${
+                      isTeamLeader
+                        ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                        : 'bg-blue-50 border border-blue-200 text-blue-800 hover:border-blue-300'
+                    }`}>
                       <span>{employeeName}</span>
-                      <button
-                        onClick={() => handleEmployeeToggle(empId)}
-                        className="text-blue-400 hover:text-rose-600 hover:bg-white p-0.5 rounded-md transition-colors"
-                        title="Remove"
-                      >
-                        <MdClose size={14} />
-                      </button>
+                      {isTeamLeader ? (
+                        <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded ml-1">TL</span>
+                      ) : (
+                        <button
+                          onClick={() => handleEmployeeToggle(empId)}
+                          className="text-blue-400 hover:text-rose-600 hover:bg-white p-0.5 rounded-md transition-colors"
+                          title="Remove"
+                        >
+                          <MdClose size={14} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1580,13 +1628,20 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                 const isSelected = selectedEmployees.includes(employee.employee_id);
                 const hasFingerprint = fingerprintStatus[employee.employee_id];
                 
-                const isDisabledForLimit = schedule.department !== 'Role-Based' && schedule.member_limit && selectedEmployees.length >= schedule.member_limit && !isSelected;
+                const isTeamLeader = employee.position?.toLowerCase().includes('team leader') ||
+                  employee.position?.toLowerCase().includes('teamleader') ||
+                  employee.position?.toLowerCase().includes('team-leader');
+
+                // Team leaders are auto-assigned and cannot be manually removed
+                const isDisabledForLimit = !isTeamLeader && schedule.department !== 'Role-Based' && schedule.member_limit && selectedEmployees.length >= schedule.member_limit && !isSelected;
                 const isDisabledForFingerprint = !hasFingerprint && !isSelected;
-                const isDisabled = isDisabledForLimit || isDisabledForFingerprint;
+                const isDisabled = isTeamLeader || isDisabledForLimit || isDisabledForFingerprint;
                 
                 return (
                   <label key={employee.employee_id} className={`flex items-center gap-4 p-4 border-2 rounded-xl transition-all ${
-                    isSelected ? 'border-blue-500 bg-blue-50/50 shadow-sm' : 
+                    isTeamLeader
+                      ? 'border-amber-200 bg-amber-50/40 cursor-not-allowed'
+                      : isSelected ? 'border-blue-500 bg-blue-50/50 shadow-sm' : 
                     isDisabled ? 'border-gray-100 bg-gray-50/50 cursor-not-allowed opacity-60' : 
                     'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm cursor-pointer'
                   }`}>
@@ -1599,11 +1654,14 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`text-base font-bold truncate ${isSelected ? 'text-blue-900' : isDisabled ? 'text-gray-500' : 'text-gray-800'}`}>
+                        <span className={`text-base font-bold truncate ${isTeamLeader ? 'text-amber-900' : isSelected ? 'text-blue-900' : isDisabled ? 'text-gray-500' : 'text-gray-800'}`}>
                           {employeeName}
                         </span>
                         {/* Status Badges */}
                         <div className="flex gap-2 shrink-0">
+                          {isTeamLeader && (
+                            <span className="text-[9px] uppercase font-bold tracking-wider bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Team Leader</span>
+                          )}
                           {loadingFingerprints ? (
                             <span className="text-[9px] uppercase font-bold tracking-wider bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Checking...</span>
                           ) : !hasFingerprint ? (
@@ -1616,6 +1674,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                       </div>
                       <div className={`text-xs font-semibold ${isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
                         ID: <span className="font-mono">{employee.employee_id}</span> • {employee.position || 'Employee'}
+                        {isTeamLeader && <span className="ml-2 text-amber-600 font-bold">· Auto-assigned</span>}
                       </div>
                     </div>
                   </label>
@@ -1678,6 +1737,12 @@ function ShiftDetailsModal({ shiftData, onClose, employees, onSave, onReassign, 
   }] : [];
 
   const handleAssignEmployees = (zone) => {
+    console.log('🔍 handleAssignEmployees zone:', {
+      department: zone.department,
+      template_id: zone.template_id,
+      member_limit: zone.member_limit,
+      members: zone.members,
+    });
     const scheduleData = {
       id: zone.template_id,
       department: zone.department,

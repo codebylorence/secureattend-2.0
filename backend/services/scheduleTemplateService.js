@@ -286,10 +286,30 @@ export const removeEmployeesFromTemplate = async (templateId, employeeIds) => {
   } catch (e) {
     existingAssignments = [];
   }
-  
-  // Remove specified employees
+
+  // Fetch employee positions to protect team leaders from being removed
+  const { default: Employee } = await import("../models/employee.js");
+  const employeesToCheck = await Employee.findAll({
+    where: { employee_id: employeeIds },
+    attributes: ["employee_id", "position"],
+  });
+  const positionMap = new Map(employeesToCheck.map(e => [e.employee_id, e.position ?? ""]));
+
+  const isTeamLeader = (empId) => {
+    const pos = (positionMap.get(empId) ?? "").toLowerCase();
+    return pos.includes("team leader") || pos.includes("teamleader") || pos.includes("team-leader");
+  };
+
+  // Filter out team leaders — they must never be removed via this path
+  const safeToRemove = employeeIds.filter(id => !isTeamLeader(id));
+  const blocked = employeeIds.filter(id => isTeamLeader(id));
+  if (blocked.length > 0) {
+    console.warn(`⚠️ Blocked attempt to remove team leader(s) from template ${templateId}: ${blocked.join(", ")}`);
+  }
+
+  // Remove only the safe employees
   const updatedAssignments = existingAssignments.filter(assignment => 
-    !employeeIds.includes(assignment.employee_id)
+    !safeToRemove.includes(assignment.employee_id)
   );
   
   await template.update({
