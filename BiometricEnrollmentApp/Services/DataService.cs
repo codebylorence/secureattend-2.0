@@ -802,6 +802,8 @@ namespace BiometricEnrollmentApp.Services
             cmd.CommandText = @"
                 SELECT id FROM AttendanceSessions
                 WHERE employee_id = $id AND date = $date AND clock_out IS NULL
+                  AND clock_in IS NOT NULL AND clock_in <> ''
+                  AND status <> 'Absent'
                 ORDER BY id DESC LIMIT 1;
             ";
             cmd.Parameters.AddWithValue("$id", employeeId);
@@ -826,6 +828,8 @@ namespace BiometricEnrollmentApp.Services
                 cmd.CommandText = @"
                     SELECT id FROM AttendanceSessions
                     WHERE employee_id = $id AND date = $yesterday AND clock_out IS NULL
+                      AND clock_in IS NOT NULL AND clock_in <> ''
+                      AND status <> 'Absent'
                     ORDER BY id DESC LIMIT 1;
                 ";
                 cmd.Parameters.Clear();

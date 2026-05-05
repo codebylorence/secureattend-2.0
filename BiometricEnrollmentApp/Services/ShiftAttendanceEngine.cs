@@ -628,6 +628,7 @@ namespace BiometricEnrollmentApp.Services
                 WHERE employee_id = $emp
                   AND clock_out IS NULL
                   AND clock_in IS NOT NULL
+                  AND clock_in <> ''
                 ORDER BY id DESC LIMIT 1
             ";
             cmd.Parameters.AddWithValue("$emp", employeeId);
@@ -736,7 +737,7 @@ namespace BiometricEnrollmentApp.Services
             cmd.CommandText = @"
                 INSERT INTO AttendanceSessions
                     (employee_id, date, clock_in, clock_out, total_hours, status, shift_name)
-                VALUES ($emp, $date, '', NULL, 0, 'Absent', $shift)
+                VALUES ($emp, $date, NULL, NULL, 0, 'Absent', $shift)
             ";
             cmd.Parameters.AddWithValue("$emp",   employeeId);
             cmd.Parameters.AddWithValue("$date",  date);

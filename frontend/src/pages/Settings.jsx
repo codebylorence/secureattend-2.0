@@ -81,7 +81,7 @@ export default function Settings() {
       setTempValue('');
     } catch (error) {
       console.error(`❌ Error updating ${field}:`, error);
-      toast.error(`❌ Failed to update ${field}`);
+      toast.error(`Failed to update ${field}`);
     } finally {
       setSavingField(null);
     }
@@ -96,7 +96,7 @@ export default function Settings() {
       updateContextConfig({ logo: logoData });
       toast.success('Logo updated successfully!');
     } catch (error) {
-      toast.error('❌ Failed to update logo');
+      toast.error('Failed to update logo');
     } finally {
       setSavingField(null);
     }
@@ -122,10 +122,10 @@ export default function Settings() {
       const result = await resetSystemConfig();
       setLocalConfig(result.config);
       updateContextConfig(result.config);
-      toast.success('✅ System reset to defaults!');
+      toast.success('System reset to defaults!');
       setShowResetModal(false);
     } catch (error) {
-      toast.error('❌ Reset failed');
+      toast.error('Reset failed');
     } finally {
       setIsResetting(false);
     }

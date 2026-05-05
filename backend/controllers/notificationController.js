@@ -20,7 +20,7 @@ export const notifyReportGenerated = async (req, res) => {
     };
 
     const label = REPORT_LABELS[reportType] || reportType;
-    const title = `📊 Report Generated: ${label}`;
+    const title = `Report Generated: ${label}`;
     const message = `${generatedBy} generated a ${label} report.${details ? ` ${details}` : ""}`;
 
     await notifyAdmins(title, message, "general", null, generatedBy, io);

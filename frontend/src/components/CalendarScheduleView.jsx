@@ -2265,7 +2265,7 @@ export default function CalendarScheduleView() {
     })();
     const holiday = holidayMap[dateStr];
     if (holiday) {
-      toast.info(`📅 Note: ${dateStr} is a ${holiday.type} — "${holiday.name}"`);
+      toast.info(`Note: ${dateStr} is a ${holiday.type} — "${holiday.name}"`);
     }
     
     setSelectedDate(clickedDate);

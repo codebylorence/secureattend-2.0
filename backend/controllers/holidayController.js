@@ -67,7 +67,7 @@ export const createHoliday = async (req, res) => {
       const io = req.app.get('io');
       const adminName = req.user?.username || "Admin";
       await notifyAllUsers(
-        `🎌 Holiday: ${name}`,
+        `Holiday: ${name}`,
         `${formatHolidayDate(date)} has been declared a ${type}: "${name}". No work required on this day.`,
         "general",
         holiday.id,
@@ -112,7 +112,7 @@ export const updateHoliday = async (req, res) => {
       const updatedName = name || holiday.name;
       const updatedType = type || holiday.type;
       await notifyAllUsers(
-        `🎌 Holiday Updated: ${updatedName}`,
+        `Holiday Updated: ${updatedName}`,
         `The holiday on ${formatHolidayDate(updatedDate)} has been updated to "${updatedName}" (${updatedType}).`,
         "general",
         holiday.id,
@@ -142,7 +142,7 @@ export const deleteHoliday = async (req, res) => {
       const io = req.app.get('io');
       const adminName = req.user?.username || "Admin";
       await notifyAllUsers(
-        `🗓️ Holiday Removed: ${holiday.name}`,
+        `Holiday Removed: ${holiday.name}`,
         `The holiday "${holiday.name}" on ${formatHolidayDate(holiday.date)} has been removed.`,
         "general",
         null,

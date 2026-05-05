@@ -176,7 +176,7 @@ export default function EmployeeRegistration() {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error('📸 Photo size should be less than 5MB');
+        toast.error('Photo size should be less than 5MB');
         return;
       }
 
@@ -267,7 +267,7 @@ export default function EmployeeRegistration() {
         role: getRoleFromPosition(formData.position) // Derive role from position
       });
 
-      toast.success('🎉 Registration request submitted successfully! Please wait for admin approval.');
+      toast.success('Registration request submitted successfully! Please wait for admin approval.');
       
       const currentEmployeeId = formData.employee_id; // Store before reset
       
@@ -294,7 +294,7 @@ export default function EmployeeRegistration() {
     } catch (error) {
       console.error('Registration error:', error);
       console.error('Error details:', error.response?.data || error.message);
-      toast.error(`❌ ${error.response?.data?.message || 'Registration failed'}`);
+      toast.error(error.response?.data?.message || 'Registration failed');
     } finally {
       setLoading(false);
     }

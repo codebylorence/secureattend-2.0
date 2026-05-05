@@ -393,7 +393,7 @@ namespace BiometricEnrollmentApp
                         LogHelper.Write($"🚫 Clock-in denied for {employeeId}: {result.Message}");
                         Dispatcher.Invoke(() =>
                         {
-                            UpdateInstruction($"❌ {result.Message}");
+                            UpdateInstruction("No active shift at this time.");
                             ShowEmployeeResult(employeeId, employeeName, "No Active Shift", now);
                         });
                         Thread.Sleep(3000);

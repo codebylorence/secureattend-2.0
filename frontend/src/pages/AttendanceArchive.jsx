@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
 import { FaArchive, FaSearch } from "react-icons/fa";
-import { MdDelete, MdRestoreFromTrash } from "react-icons/md";
+import { MdRestoreFromTrash } from "react-icons/md";
 import {
   getArchivedAttendances,
   restoreAttendance,
-  permanentlyDeleteAttendance,
 } from "../api/AttendanceApi";
 import ConfirmationModal from "../components/ConfirmationModal";
 import { toast } from "react-toastify";
@@ -38,7 +37,6 @@ export default function AttendanceArchive() {
   const itemsPerPage = 10;
 
   const [restoreModal, setRestoreModal] = useState({ isOpen: false, record: null });
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, record: null });
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -83,22 +81,6 @@ export default function AttendanceArchive() {
       setRestoreModal({ isOpen: false, record: null });
     } catch (error) {
       toast.error("Failed to restore record.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handlePermanentDelete = async () => {
-    const record = deleteModal.record;
-    if (!record) return;
-    setActionLoading(true);
-    try {
-      await permanentlyDeleteAttendance(record.id);
-      setRecords((prev) => prev.filter((r) => r.id !== record.id));
-      toast.success("Record permanently deleted.");
-      setDeleteModal({ isOpen: false, record: null });
-    } catch (error) {
-      toast.error("Failed to permanently delete record.");
     } finally {
       setActionLoading(false);
     }
@@ -240,14 +222,6 @@ export default function AttendanceArchive() {
                           >
                             <MdRestoreFromTrash size={16} />
                           </button>
-                          {/* Permanently delete */}
-                          <button
-                            onClick={() => setDeleteModal({ isOpen: true, record })}
-                            className="w-7 h-7 rounded-lg bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center transition-all shadow-sm shadow-rose-100"
-                            title="Permanently delete"
-                          >
-                            <MdDelete size={16} />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -322,20 +296,6 @@ export default function AttendanceArchive() {
         type="info"
         loading={actionLoading}
         itemDetails={getItemDetails(restoreModal.record)}
-      />
-
-      {/* Permanent Delete Modal */}
-      <ConfirmationModal
-        isOpen={deleteModal.isOpen}
-        onClose={() => setDeleteModal({ isOpen: false, record: null })}
-        onConfirm={handlePermanentDelete}
-        title="Permanently Delete"
-        message="This will permanently remove the record. This action cannot be undone."
-        confirmText="Delete Forever"
-        cancelText="Cancel"
-        type="danger"
-        loading={actionLoading}
-        itemDetails={getItemDetails(deleteModal.record)}
       />
     </div>
   );
