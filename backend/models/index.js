@@ -39,6 +39,13 @@ const runColumnMigrations = async () => {
     allowNull: true,
   });
 
+  // Permanently-deleted tombstone flag for Attendances
+  await addColumnIfMissing("Attendances", "is_permanently_deleted", {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  });
+
   // Holidays table (created if not exists)
   try {
     await sequelize.query(`
