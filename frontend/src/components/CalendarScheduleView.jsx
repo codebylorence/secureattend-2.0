@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -169,7 +169,7 @@ function ViewOnlyScheduleModal({ shiftData, onClose, employees }) {
                 </span>
               </div>
               <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1">
-                {shiftData.date} • {shiftData.start_time} - {shiftData.end_time}
+                {shiftData.date} ÔÇó {shiftData.start_time} - {shiftData.end_time}
               </p>
             </div>
           </div>
@@ -419,7 +419,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
         const status = await getFingerprintStatus();
         setFingerprintStatus(status);
       } catch (error) {
-        console.error('❌ Error fetching fingerprint status:', error);
+        console.error('ÔØî Error fetching fingerprint status:', error);
         setFingerprintStatus({});
       } finally {
         setLoadingFingerprints(false);
@@ -723,7 +723,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                   assigned_by: 'admin'
                 });
               } catch (assignErr) {
-                console.warn(`⚠️ Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
+                console.warn(`ÔÜá´©Å Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
               }
 
               results.push({ success: true, action: 'added', item: department });
@@ -845,7 +845,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                   assigned_by: 'admin'
                 });
               } catch (assignErr) {
-                console.warn(`⚠️ Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
+                console.warn(`ÔÜá´©Å Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
               }
             }
 
@@ -1144,7 +1144,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                                       <input
                                         type="number"
                                         min="1"
-                                        value={zoneLimit}
+                                        value={zoneLimit === '' ? 1 : zoneLimit}
                                         onClick={e => e.stopPropagation()}
                                         onChange={e => {
                                           const val = e.target.value;
@@ -1152,12 +1152,11 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                                             ...prev,
                                             zoneLimits: {
                                               ...prev.zoneLimits,
-                                              [dept.name]: val === '' ? undefined : Math.max(1, parseInt(val) || 1)
+                                              [dept.name]: val === '' ? 1 : Math.max(1, parseInt(val) || 1)
                                             }
                                           }));
                                         }}
                                         className="w-16 text-sm text-center border border-blue-200 bg-white rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-semibold text-blue-900"
-                                        placeholder="—"
                                       />
                                     </div>
                                   )}
@@ -1288,7 +1287,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                                         ID: {employee.employee_id}
                                       </span>
-                                      <span className="text-gray-300">•</span>
+                                      <span className="text-gray-300">ÔÇó</span>
                                       <span className={`text-[10px] font-bold uppercase tracking-widest ${employee.position === 'Supervisor' ? 'text-purple-600' : 'text-blue-600'}`}>
                                         {employee.position}
                                       </span>
@@ -1359,7 +1358,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
         const status = await getFingerprintStatus();
         setFingerprintStatus(status);
       } catch (error) {
-        console.error('❌ Error fetching fingerprint status:', error);
+        console.error('ÔØî Error fetching fingerprint status:', error);
         setFingerprintStatus({});
       } finally {
         setLoadingFingerprints(false);
@@ -1377,23 +1376,12 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
           ? JSON.parse(schedule.assigned_employees) 
           : schedule.assigned_employees;
         const employeeIds = assignedEmployees.map(emp => emp.employee_id);
-        console.log('📋 EmployeeAssignmentModal opened:', {
-          department: schedule.department,
-          template_id: schedule.id,
-          assigned_employees_raw: schedule.assigned_employees,
-          parsed_ids: employeeIds,
-        });
         setSelectedEmployees(employeeIds);
         setInitiallyAssignedEmployees(employeeIds); 
       } catch (e) {
         setSelectedEmployees([]);
         setInitiallyAssignedEmployees([]);
       }
-    } else {
-      console.log('📋 EmployeeAssignmentModal opened with NO assigned_employees:', {
-        department: schedule.department,
-        template_id: schedule.id,
-      });
     }
   }, [schedule]);
 
@@ -1405,12 +1393,12 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
     
     const isDepartmentMatch = emp.department === schedule.department || emp.department === "Company-wide";
     
-    // Include team leaders so they appear in the list and are preserved when saving.
-    // Team leaders are auto-assigned when a zone is created; excluding them from the
-    // list caused them to be silently removed on every "Save Assignments" click.
     const isRegularEmployee = emp.position && 
       !emp.position.toLowerCase().includes('supervisor') &&
       !emp.position.toLowerCase().includes('admin') &&
+      !emp.position.toLowerCase().includes('team leader') &&
+      !emp.position.toLowerCase().includes('teamleader') &&
+      !emp.position.toLowerCase().includes('team-leader') &&
       !emp.position.toLowerCase().includes('manager');
     
     return isDepartmentMatch && isRegularEmployee;
@@ -1419,16 +1407,6 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
   const handleEmployeeToggle = (employeeId) => {
     setSelectedEmployees(prev => {
       const isCurrentlySelected = prev.includes(employeeId);
-      
-      // Prevent removing auto-assigned team leaders
-      const employee = employees.find(emp => emp.employee_id === employeeId);
-      const isTeamLeader = employee?.position?.toLowerCase().includes('team leader') ||
-        employee?.position?.toLowerCase().includes('teamleader') ||
-        employee?.position?.toLowerCase().includes('team-leader');
-      if (isCurrentlySelected && isTeamLeader) {
-        toast.warning('Team leaders are automatically assigned and cannot be removed here.');
-        return prev;
-      }
       
       if (!isCurrentlySelected) {
         const hasFingerprint = fingerprintStatus[employeeId];
@@ -1454,14 +1432,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
       toast.error(`Cannot assign more than ${schedule.member_limit} employees to this zone.`);
       return;
     }
-
-    // Helper: is this employee a team leader?
-    const isTeamLeaderEmp = (empId) => {
-      const emp = employees.find(e => e.employee_id === empId);
-      const pos = emp?.position?.toLowerCase() ?? '';
-      return pos.includes('team leader') || pos.includes('teamleader') || pos.includes('team-leader');
-    };
-
+    
     const employeesToAdd = selectedEmployees.filter(empId => !initiallyAssignedEmployees.includes(empId));
     const employeesWithoutFingerprints = employeesToAdd.filter(empId => !fingerprintStatus[empId]);
     
@@ -1472,15 +1443,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
     
     setLoading(true);
     try {
-      // Never remove team leaders — they are auto-assigned and must stay.
-      // Only remove non-TL employees that were visible in the list and explicitly unchecked.
-      const visibleEmployeeIds = new Set(departmentEmployees.map(emp => emp.employee_id));
-      const employeesToRemove = initiallyAssignedEmployees.filter(empId =>
-        !isTeamLeaderEmp(empId) &&          // never remove TL
-        visibleEmployeeIds.has(empId) &&     // only remove if they were shown
-        !selectedEmployees.includes(empId)   // only remove if unchecked
-      );
-
+      const employeesToRemove = initiallyAssignedEmployees.filter(empId => !selectedEmployees.includes(empId));
       let operationsCompleted = 0;
       
       if (employeesToAdd.length > 0) {
@@ -1499,7 +1462,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
       
       if (operationsCompleted > 0) {
         toast.success('Assignments updated successfully!');
-        await onSave();
+        onSave();
       } else {
         toast.info('No changes made to assignments.');
       }
@@ -1529,7 +1492,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
               <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200">
                 {schedule.shift_name}
               </span>
-              <span className="text-gray-300">•</span>
+              <span className="text-gray-300">ÔÇó</span>
               <span className="text-xs font-semibold text-gray-600">
                 {schedule.start_time} - {schedule.end_time}
               </span>
@@ -1574,28 +1537,16 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                     ? `${employee.firstname} ${employee.lastname}`
                     : employee.employee_id;
                   
-                  const isTeamLeader = employee.position?.toLowerCase().includes('team leader') ||
-                    employee.position?.toLowerCase().includes('teamleader') ||
-                    employee.position?.toLowerCase().includes('team-leader');
-
                   return (
-                    <div key={empId} className={`flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-lg text-sm font-semibold shadow-sm transition-colors ${
-                      isTeamLeader
-                        ? 'bg-amber-50 border border-amber-200 text-amber-800'
-                        : 'bg-blue-50 border border-blue-200 text-blue-800 hover:border-blue-300'
-                    }`}>
+                    <div key={empId} className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 pl-3 pr-1.5 py-1.5 rounded-lg text-sm font-semibold shadow-sm hover:border-blue-300 transition-colors">
                       <span>{employeeName}</span>
-                      {isTeamLeader ? (
-                        <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded ml-1">TL</span>
-                      ) : (
-                        <button
-                          onClick={() => handleEmployeeToggle(empId)}
-                          className="text-blue-400 hover:text-rose-600 hover:bg-white p-0.5 rounded-md transition-colors"
-                          title="Remove"
-                        >
-                          <MdClose size={14} />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleEmployeeToggle(empId)}
+                        className="text-blue-400 hover:text-rose-600 hover:bg-white p-0.5 rounded-md transition-colors"
+                        title="Remove"
+                      >
+                        <MdClose size={14} />
+                      </button>
                     </div>
                   );
                 })}
@@ -1628,20 +1579,13 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                 const isSelected = selectedEmployees.includes(employee.employee_id);
                 const hasFingerprint = fingerprintStatus[employee.employee_id];
                 
-                const isTeamLeader = employee.position?.toLowerCase().includes('team leader') ||
-                  employee.position?.toLowerCase().includes('teamleader') ||
-                  employee.position?.toLowerCase().includes('team-leader');
-
-                // Team leaders are auto-assigned and cannot be manually removed
-                const isDisabledForLimit = !isTeamLeader && schedule.department !== 'Role-Based' && schedule.member_limit && selectedEmployees.length >= schedule.member_limit && !isSelected;
+                const isDisabledForLimit = schedule.department !== 'Role-Based' && schedule.member_limit && selectedEmployees.length >= schedule.member_limit && !isSelected;
                 const isDisabledForFingerprint = !hasFingerprint && !isSelected;
-                const isDisabled = isTeamLeader || isDisabledForLimit || isDisabledForFingerprint;
+                const isDisabled = isDisabledForLimit || isDisabledForFingerprint;
                 
                 return (
                   <label key={employee.employee_id} className={`flex items-center gap-4 p-4 border-2 rounded-xl transition-all ${
-                    isTeamLeader
-                      ? 'border-amber-200 bg-amber-50/40 cursor-not-allowed'
-                      : isSelected ? 'border-blue-500 bg-blue-50/50 shadow-sm' : 
+                    isSelected ? 'border-blue-500 bg-blue-50/50 shadow-sm' : 
                     isDisabled ? 'border-gray-100 bg-gray-50/50 cursor-not-allowed opacity-60' : 
                     'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm cursor-pointer'
                   }`}>
@@ -1654,14 +1598,11 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`text-base font-bold truncate ${isTeamLeader ? 'text-amber-900' : isSelected ? 'text-blue-900' : isDisabled ? 'text-gray-500' : 'text-gray-800'}`}>
+                        <span className={`text-base font-bold truncate ${isSelected ? 'text-blue-900' : isDisabled ? 'text-gray-500' : 'text-gray-800'}`}>
                           {employeeName}
                         </span>
                         {/* Status Badges */}
                         <div className="flex gap-2 shrink-0">
-                          {isTeamLeader && (
-                            <span className="text-[9px] uppercase font-bold tracking-wider bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Team Leader</span>
-                          )}
                           {loadingFingerprints ? (
                             <span className="text-[9px] uppercase font-bold tracking-wider bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Checking...</span>
                           ) : !hasFingerprint ? (
@@ -1673,8 +1614,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                         </div>
                       </div>
                       <div className={`text-xs font-semibold ${isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
-                        ID: <span className="font-mono">{employee.employee_id}</span> • {employee.position || 'Employee'}
-                        {isTeamLeader && <span className="ml-2 text-amber-600 font-bold">· Auto-assigned</span>}
+                        ID: <span className="font-mono">{employee.employee_id}</span> ÔÇó {employee.position || 'Employee'}
                       </div>
                     </div>
                   </label>
@@ -1737,12 +1677,6 @@ function ShiftDetailsModal({ shiftData, onClose, employees, onSave, onReassign, 
   }] : [];
 
   const handleAssignEmployees = (zone) => {
-    console.log('🔍 handleAssignEmployees zone:', {
-      department: zone.department,
-      template_id: zone.template_id,
-      member_limit: zone.member_limit,
-      members: zone.members,
-    });
     const scheduleData = {
       id: zone.template_id,
       department: zone.department,
@@ -2150,26 +2084,14 @@ export default function CalendarScheduleView() {
   const refreshShiftDetailsData = async () => {
     try {
       setLoading(true);
-      // Small delay to allow the remote DB (Render/Postgres) to commit the write
-      // before we re-fetch. Without this, the GET can return stale data in production.
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const [freshTemplates, freshEmployees] = await Promise.all([
-        getTemplates(),
-        fetchEmployees(),
-      ]);
+      const freshTemplates = await getTemplates();
       setTemplates(freshTemplates);
-      const activeEmployees = freshEmployees.filter(emp => emp.status === 'Active');
-      setEmployees(activeEmployees);
       
       if (selectedShiftData && showShiftDetailsModal) {
         const shiftsByDate = {};
         freshTemplates.forEach(template => {
           if (!template.specific_date) return;
-          // Normalize to yyyy-MM-dd regardless of whether it's a Date object or ISO string
-          const dateKey = typeof template.specific_date === 'string'
-            ? template.specific_date.slice(0, 10)
-            : new Date(template.specific_date).toISOString().slice(0, 10);
-
+          const dateKey = template.specific_date;
           if (!shiftsByDate[dateKey]) shiftsByDate[dateKey] = {};
           if (!shiftsByDate[dateKey][template.shift_name]) {
             shiftsByDate[dateKey][template.shift_name] = {
@@ -2193,13 +2115,8 @@ export default function CalendarScheduleView() {
             department: template.department, template_id: template.id, member_limit: template.member_limit, assigned_count: templateAssignedEmployees.length, members: templateAssignedEmployees
           });
         });
-
-        // Also normalize the selected date for the lookup
-        const selectedDateKey = typeof selectedShiftData.date === 'string'
-          ? selectedShiftData.date.slice(0, 10)
-          : new Date(selectedShiftData.date).toISOString().slice(0, 10);
-
-        const updatedShiftData = shiftsByDate[selectedDateKey]?.[selectedShiftData.shift_name];
+        
+        const updatedShiftData = shiftsByDate[selectedShiftData.date]?.[selectedShiftData.shift_name];
         if (updatedShiftData) setSelectedShiftData(updatedShiftData);
       }
     } catch (error) {
@@ -2212,8 +2129,6 @@ export default function CalendarScheduleView() {
   const fetchTemplatesData = async () => {
     try {
       setLoading(true);
-      // Small delay to allow the remote DB to commit writes before re-fetching
-      await new Promise(resolve => setTimeout(resolve, 500));
       const data = await getTemplates();
       setTemplates(data);
     } catch (error) {
@@ -2265,7 +2180,7 @@ export default function CalendarScheduleView() {
       });
       setHolidayMap(map);
     } catch {
-      // Non-critical — calendar still works without holidays
+      // Non-critical ÔÇö calendar still works without holidays
     }
   };
 
@@ -2276,11 +2191,7 @@ export default function CalendarScheduleView() {
     templates.forEach(template => {
       if (!template.specific_date) return;
 
-      // Normalize to yyyy-MM-dd (PostgreSQL may return full ISO string)
-      const dateKey = typeof template.specific_date === 'string'
-        ? template.specific_date.slice(0, 10)
-        : new Date(template.specific_date).toISOString().slice(0, 10);
-
+      const dateKey = template.specific_date;
       if (!shiftsByDate[dateKey]) shiftsByDate[dateKey] = {};
       if (!shiftsByDate[dateKey][template.shift_name]) {
         shiftsByDate[dateKey][template.shift_name] = {
@@ -2353,7 +2264,7 @@ export default function CalendarScheduleView() {
     })();
     const holiday = holidayMap[dateStr];
     if (holiday) {
-      toast.info(`Note: ${dateStr} is a ${holiday.type} — "${holiday.name}"`);
+      toast.info(`Note: ${dateStr} is a ${holiday.type} ÔÇö "${holiday.name}"`);
     }
     
     setSelectedDate(clickedDate);
@@ -2561,7 +2472,7 @@ export default function CalendarScheduleView() {
                     white-space: nowrap;
                   `;
                   label.title = `${holiday.type}: ${holiday.name}`;
-                  label.textContent = `🎌 ${holiday.name}`;
+                  label.textContent = `­ƒÄî ${holiday.name}`;
 
                   // Insert after the day number
                   const dayTop = info.el.querySelector('.fc-daygrid-day-top');

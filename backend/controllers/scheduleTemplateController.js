@@ -1,4 +1,4 @@
-import {
+﻿import {
   getAllTemplates,
   getTemplatesByDepartment,
   getTemplateById,
@@ -107,7 +107,7 @@ export const addTemplate = async (req, res) => {
       }
     }
 
-    console.log("📝 Creating template with data:", {
+    console.log("­ƒôØ Creating template with data:", {
       department: req.body.department,
       shift_name: req.body.shift_name,
       specific_date: req.body.specific_date,
@@ -116,7 +116,7 @@ export const addTemplate = async (req, res) => {
     
     const template = await createTemplate(req.body);
     
-    console.log("✅ Template created successfully:", {
+    console.log("Ô£à Template created successfully:", {
       id: template.id,
       department: template.department,
       shift_name: template.shift_name,
@@ -148,16 +148,16 @@ export const addTemplate = async (req, res) => {
           createdBy,
           io
         );
-        console.log(`📢 Notified team leaders in ${template.department} about new template`);
+        console.log(`­ƒôó Notified team leaders in ${template.department} about new template`);
       } catch (notifError) {
         // Don't fail the request if notification fails
-        console.error("⚠️ Failed to send team leader notifications:", notifError.message);
+        console.error("ÔÜá´©Å Failed to send team leader notifications:", notifError.message);
       }
     }
     
     res.status(201).json(template);
   } catch (error) {
-    console.error("❌ Error creating template:", error);
+    console.error("ÔØî Error creating template:", error);
     res.status(500).json({ message: "Error creating template" });
   }
 };
@@ -197,9 +197,9 @@ export const editTemplate = async (req, res) => {
           updatedBy,
           io
         );
-        console.log(`📢 Notified team leaders in ${template.department} about updated template`);
+        console.log(`­ƒôó Notified team leaders in ${template.department} about updated template`);
       } catch (notifError) {
-        console.error("⚠️ Failed to send team leader notifications:", notifError.message);
+        console.error("ÔÜá´©Å Failed to send team leader notifications:", notifError.message);
       }
     }
     
@@ -261,9 +261,9 @@ export const removeTemplate = async (req, res) => {
           deletedBy,
           io
         );
-        console.log(`📢 Notified team leaders in ${templateDept} about deleted template`);
+        console.log(`­ƒôó Notified team leaders in ${templateDept} about deleted template`);
       } catch (notifError) {
-        console.error("⚠️ Failed to send team leader notifications:", notifError.message);
+        console.error("ÔÜá´©Å Failed to send team leader notifications:", notifError.message);
       }
     }
     
@@ -325,11 +325,11 @@ export const assignEmployees = async (req, res) => {
     
     const assignedBy = assigned_by || req.user?.username || "System";
 
-    console.log("📤 Assigning employees to template:", { template_id, employee_ids, assigned_by: assignedBy });
+    console.log("­ƒôñ Assigning employees to template:", { template_id, employee_ids, assigned_by: assignedBy });
     
     const template = await assignEmployeesToTemplate(template_id, employee_ids, assignedBy);
     
-    console.log("✅ Employees assigned successfully to template:", template_id);
+    console.log("Ô£à Employees assigned successfully to template:", template_id);
     
     const io = req.app.get('io');
     if (io) {
@@ -351,9 +351,9 @@ export const assignEmployees = async (req, res) => {
         assignedBy,
         io
       );
-      console.log(`📧 Notified ${employee_ids.length} employee(s) about schedule assignment`);
+      console.log(`­ƒôº Notified ${employee_ids.length} employee(s) about schedule assignment`);
     } catch (notifError) {
-      console.error("⚠️ Failed to send employee notifications:", notifError.message);
+      console.error("ÔÜá´©Å Failed to send employee notifications:", notifError.message);
     }
     
     res.status(200).json({ 
@@ -363,7 +363,7 @@ export const assignEmployees = async (req, res) => {
       assigned_count: employee_ids.length
     });
   } catch (error) {
-    console.error("❌ Error assigning employees to template:", error);
+    console.error("ÔØî Error assigning employees to template:", error);
     res.status(500).json({ 
       message: "Error assigning employees to template",
       error: error.message 
@@ -387,11 +387,11 @@ export const removeEmployees = async (req, res) => {
     const { default: ScheduleTemplate } = await import("../models/scheduleTemplate.js");
     const template = await ScheduleTemplate.findByPk(id);
 
-    console.log("🗑️ Removing employees from template:", { template_id: id, employee_ids });
+    console.log("­ƒùæ´©Å Removing employees from template:", { template_id: id, employee_ids });
     
     await removeEmployeesFromTemplate(id, employee_ids);
     
-    console.log("✅ Employees removed successfully from template:", id);
+    console.log("Ô£à Employees removed successfully from template:", id);
     
     const io = req.app.get('io');
     if (io) {
@@ -415,9 +415,9 @@ export const removeEmployees = async (req, res) => {
           removedBy,
           io
         );
-        console.log(`📧 Notified ${employee_ids.length} employee(s) about schedule removal`);
+        console.log(`­ƒôº Notified ${employee_ids.length} employee(s) about schedule removal`);
       } catch (notifError) {
-        console.error("⚠️ Failed to send employee notifications:", notifError.message);
+        console.error("ÔÜá´©Å Failed to send employee notifications:", notifError.message);
       }
     }
     
@@ -428,7 +428,7 @@ export const removeEmployees = async (req, res) => {
       removed_count: employee_ids.length
     });
   } catch (error) {
-    console.error("❌ Error removing employees from template:", error);
+    console.error("ÔØî Error removing employees from template:", error);
     res.status(500).json({ 
       message: "Error removing employees from template",
       error: error.message 
@@ -439,45 +439,29 @@ export const removeEmployees = async (req, res) => {
 // GET /api/schedules/biometric - Get schedules formatted for biometric app
 export const getBiometricSchedules = async (req, res) => {
   try {
-    console.log("📱 Biometric app requesting schedules...");
+    console.log("­ƒô▒ Biometric app requesting schedules...");
     
     const { default: ScheduleTemplate } = await import("../models/scheduleTemplate.js");
     const { default: Employee } = await import("../models/employee.js");
     const { Op } = await import("sequelize");
     const { getCurrentDateInTimezone } = await import("../utils/timezone.js");
 
-    // Include Active templates AND templates with specific_date within ±30 days
-    // (past 7 days for recent history, future 30 days for upcoming schedules)
+    // Include Active templates AND past templates from the last 7 days
+    // so the biometric app can still mark absent/missed clock-out for recent shifts
     const today = getCurrentDateInTimezone();
     const sevenDaysAgo = new Date(today);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
 
-    const thirtyDaysAhead = new Date(today);
-    thirtyDaysAhead.setDate(thirtyDaysAhead.getDate() + 30);
-    const thirtyDaysAheadStr = thirtyDaysAhead.toISOString().split('T')[0];
-
-    // ── Fetch all active employees in ONE query ──────────────────────────────
-    // Avoids N+1 queries (previously: one Employee.findOne per assignment row)
-    const allEmployees = await Employee.findAll({
-      where: { status: "Active" },
-      attributes: ["id", "employee_id", "firstname", "lastname"],
-    });
-    // Build a fast lookup map: employee_id → employee row
-    const employeeMap = new Map(allEmployees.map(e => [e.employee_id, e]));
-
-    // ── Fetch all relevant templates in ONE query ────────────────────────────
+    // Get all active templates with assigned employees
     const templates = await ScheduleTemplate.findAll({
       where: { 
         assigned_employees: { [Op.ne]: null },
         [Op.or]: [
           { status: "Active" },
-          // Include specific-date templates within the past 7 days AND next 30 days
+          // Include past templates whose specific_date is within the last 7 days
           {
-            specific_date: {
-              [Op.gte]: sevenDaysAgoStr,
-              [Op.lte]: thirtyDaysAheadStr
-            }
+            specific_date: { [Op.gte]: sevenDaysAgoStr }
           }
         ]
       },
@@ -489,49 +473,49 @@ export const getBiometricSchedules = async (req, res) => {
     for (const template of templates) {
       let assignedEmployees = [];
       try {
-        const raw = template.assigned_employees;
-        assignedEmployees = typeof raw === "string" ? JSON.parse(raw) : (raw || []);
+        assignedEmployees = template.assigned_employees ? JSON.parse(template.assigned_employees) : [];
       } catch (e) {
-        console.warn(`⚠️ Failed to parse assigned_employees for template ${template.id}`);
+        console.warn(`ÔÜá´©Å Failed to parse assigned_employees for template ${template.id}`);
         continue;
       }
       
+      // Get employee details for each assigned employee
       for (const empAssignment of assignedEmployees) {
-        // In-memory lookup — no DB query per employee
-        const employee = employeeMap.get(empAssignment.employee_id);
-        if (!employee) {
-          console.warn(`⚠️ Employee ${empAssignment.employee_id} not found or inactive - skipping`);
-          continue;
+        try {
+          const employee = await Employee.findOne({
+            where: { employee_id: empAssignment.employee_id, status: "Active" }
+          });
+          
+          if (employee) {
+            biometricSchedules.push({
+              Id: parseInt(`${template.id}${employee.id}`), // Unique ID for biometric app
+              Employee_Id: employee.employee_id,
+              Template_Id: template.id,
+              Shift_Name: template.shift_name,
+              Start_Time: template.start_time,
+              End_Time: template.end_time,
+              Days: template.days || [],
+              Specific_Date: template.specific_date,
+              Department: template.department,
+              Employee_Name: employee.fullname || `Employee ${employee.employee_id}`,
+              Assigned_By: empAssignment.assigned_by,
+              Assigned_Date: empAssignment.assigned_date,
+              Created_At: template.createdAt,
+              Updated_At: template.updatedAt
+            });
+          } else {
+            console.warn(`ÔÜá´©Å Employee ${empAssignment.employee_id} not found or inactive - skipping schedule assignment`);
+          }
+        } catch (empError) {
+          console.warn(`ÔÜá´©Å Failed to get employee details for ${empAssignment.employee_id}:`, empError.message);
         }
-
-        const fullName = [employee.firstname, employee.lastname].filter(Boolean).join(" ")
-          || `Employee ${employee.employee_id}`;
-
-        biometricSchedules.push({
-          // Use a safe composite ID: template_id * 100000 + internal employee pk
-          // Avoids string-concatenation overflow that can exceed int32 max (~2.1B)
-          Id: (template.id * 100000 + employee.id),
-          Employee_Id: employee.employee_id,
-          Template_Id: template.id,
-          Shift_Name: template.shift_name,
-          Start_Time: template.start_time,
-          End_Time: template.end_time,
-          Days: template.days || [],
-          Specific_Date: template.specific_date,
-          Department: template.department,
-          Employee_Name: fullName,
-          Assigned_By: empAssignment.assigned_by,
-          Assigned_Date: empAssignment.assigned_date,
-          Created_At: template.createdAt,
-          Updated_At: template.updatedAt
-        });
       }
     }
     
-    console.log(`✅ Retrieved ${biometricSchedules.length} schedule(s) for biometric app`);
+    console.log(`Ô£à Retrieved ${biometricSchedules.length} schedule(s) for biometric app`);
     res.status(200).json(biometricSchedules);
   } catch (error) {
-    console.error("❌ Error fetching biometric schedules:", error);
+    console.error("ÔØî Error fetching biometric schedules:", error);
     res.status(500).json({ 
       message: "Error fetching schedules for biometric app",
       error: error.message 
@@ -543,14 +527,14 @@ export const getBiometricSchedules = async (req, res) => {
 export const getEmployeeSchedules = async (req, res) => {
   try {
     const { employeeId } = req.params;
-    console.log(`📅 Fetching schedules for employee: ${employeeId}`);
+    console.log(`­ƒôà Fetching schedules for employee: ${employeeId}`);
     
     const schedules = await getEmployeeSchedulesFromTemplates(employeeId);
     
-    console.log(`✅ Found ${schedules.length} schedule(s) for employee ${employeeId}`);
+    console.log(`Ô£à Found ${schedules.length} schedule(s) for employee ${employeeId}`);
     res.status(200).json(schedules);
   } catch (error) {
-    console.error("❌ Error fetching employee schedules:", error);
+    console.error("ÔØî Error fetching employee schedules:", error);
     res.status(500).json({ 
       message: "Error fetching employee schedules",
       error: error.message 

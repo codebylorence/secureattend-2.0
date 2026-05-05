@@ -1,4 +1,4 @@
-import ScheduleTemplate from "../models/scheduleTemplate.js";
+﻿import ScheduleTemplate from "../models/scheduleTemplate.js";
 import { Op } from "sequelize";
 
 // Helper function to check if employee has fingerprint enrolled
@@ -10,7 +10,7 @@ const checkEmployeeFingerprintStatus = async (employeeId) => {
     // Path to biometric app's local database
     const dbPath = process.env.BIOMETRIC_DB_PATH || '../BiometricEnrollmentApp/bin/Debug/net9.0-windows/biometric_local.db';
     
-    console.log(`🔍 Checking fingerprint status for employee ${employeeId}`);
+    console.log(`­ƒöì Checking fingerprint status for employee ${employeeId}`);
     
     // Open connection to biometric database
     const db = await open({
@@ -27,11 +27,11 @@ const checkEmployeeFingerprintStatus = async (employeeId) => {
     await db.close();
     
     const hasFingerprint = !!enrollment;
-    console.log(`👆 Employee ${employeeId} fingerprint status: ${hasFingerprint ? 'ENROLLED' : 'NOT ENROLLED'}`);
+    console.log(`­ƒæå Employee ${employeeId} fingerprint status: ${hasFingerprint ? 'ENROLLED' : 'NOT ENROLLED'}`);
     
     return hasFingerprint;
   } catch (error) {
-    console.error(`❌ Error checking fingerprint status for employee ${employeeId}:`, error);
+    console.error(`ÔØî Error checking fingerprint status for employee ${employeeId}:`, error);
     // If we can't check the database, assume no fingerprint for safety
     return false;
   }
@@ -198,14 +198,14 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
     throw new Error("Template not found");
   }
   
-  console.log(`🎯 Starting assignment process for template ${templateId} (${template.department} - ${template.shift_name})`);
-  console.log(`📋 Original employee IDs to assign:`, employeeIds);
+  console.log(`­ƒÄ» Starting assignment process for template ${templateId} (${template.department} - ${template.shift_name})`);
+  console.log(`­ƒôï Original employee IDs to assign:`, employeeIds);
   
   // TEMPORARILY DISABLED: Fingerprint validation
   // This was blocking all assignments. Re-enable later with proper logic for management roles.
   /*
   // Validate that all employees have fingerprints enrolled before proceeding
-  console.log("🔍 Checking fingerprint status for all employees...");
+  console.log("­ƒöì Checking fingerprint status for all employees...");
   const fingerprintValidation = await Promise.all(
     employeeIds.map(async (employeeId) => {
       const hasFingerprint = await checkEmployeeFingerprintStatus(employeeId);
@@ -218,14 +218,14 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
   
   if (employeesWithoutFingerprints.length > 0) {
     const missingEmployeeIds = employeesWithoutFingerprints.map(result => result.employeeId);
-    console.log(`❌ Cannot assign employees without fingerprints: ${missingEmployeeIds.join(', ')}`);
+    console.log(`ÔØî Cannot assign employees without fingerprints: ${missingEmployeeIds.join(', ')}`);
     throw new Error(`Cannot schedule employees ${missingEmployeeIds.join(', ')}. These employees must have fingerprints enrolled in the biometric system before being scheduled.`);
   }
   
-  console.log(`✅ All employees have fingerprints enrolled, proceeding with assignment...`);
+  console.log(`Ô£à All employees have fingerprints enrolled, proceeding with assignment...`);
   */
   
-  console.log(`✅ Proceeding with assignment (fingerprint validation temporarily disabled)...`);
+  console.log(`Ô£à Proceeding with assignment (fingerprint validation temporarily disabled)...`);
   
   // Get existing assignments
   let existingAssignments = [];
@@ -235,12 +235,12 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
     existingAssignments = [];
   }
   
-  console.log(`📊 Existing assignments:`, existingAssignments.map(a => a.employee_id));
+  console.log(`­ƒôè Existing assignments:`, existingAssignments.map(a => a.employee_id));
   
-  // Add new assignments — only the explicitly requested employee IDs
+  // Add new assignments ÔÇö only the explicitly requested employee IDs
   const finalEmployeeIds = [...employeeIds];
   
-  console.log(`📋 Final employee IDs to assign:`, finalEmployeeIds);
+  console.log(`­ƒôï Final employee IDs to assign:`, finalEmployeeIds);
   
   // Add new assignments
   const now = new Date().toISOString();
@@ -256,18 +256,18 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
     const exists = allAssignments.find(existing => existing.employee_id === newAssignment.employee_id);
     if (!exists) {
       allAssignments.push(newAssignment);
-      console.log(`✅ Added assignment: ${newAssignment.employee_id}`);
+      console.log(`Ô£à Added assignment: ${newAssignment.employee_id}`);
     } else {
-      console.log(`ℹ️ Skipped duplicate assignment: ${newAssignment.employee_id}`);
+      console.log(`Ôä╣´©Å Skipped duplicate assignment: ${newAssignment.employee_id}`);
     }
   });
   
   await template.update({
-    assigned_employees: allAssignments
+    assigned_employees: JSON.stringify(allAssignments)
   });
   
-  console.log(`✅ Successfully assigned ${newAssignments.length} employees to template ${templateId} (${template.department} - ${template.shift_name})`);
-  console.log(`📊 Total assignments now: ${allAssignments.length}`);
+  console.log(`Ô£à Successfully assigned ${newAssignments.length} employees to template ${templateId} (${template.department} - ${template.shift_name})`);
+  console.log(`­ƒôè Total assignments now: ${allAssignments.length}`);
   
   return template;
 };
@@ -286,34 +286,14 @@ export const removeEmployeesFromTemplate = async (templateId, employeeIds) => {
   } catch (e) {
     existingAssignments = [];
   }
-
-  // Fetch employee positions to protect team leaders from being removed
-  const { default: Employee } = await import("../models/employee.js");
-  const employeesToCheck = await Employee.findAll({
-    where: { employee_id: employeeIds },
-    attributes: ["employee_id", "position"],
-  });
-  const positionMap = new Map(employeesToCheck.map(e => [e.employee_id, e.position ?? ""]));
-
-  const isTeamLeader = (empId) => {
-    const pos = (positionMap.get(empId) ?? "").toLowerCase();
-    return pos.includes("team leader") || pos.includes("teamleader") || pos.includes("team-leader");
-  };
-
-  // Filter out team leaders — they must never be removed via this path
-  const safeToRemove = employeeIds.filter(id => !isTeamLeader(id));
-  const blocked = employeeIds.filter(id => isTeamLeader(id));
-  if (blocked.length > 0) {
-    console.warn(`⚠️ Blocked attempt to remove team leader(s) from template ${templateId}: ${blocked.join(", ")}`);
-  }
-
-  // Remove only the safe employees
+  
+  // Remove specified employees
   const updatedAssignments = existingAssignments.filter(assignment => 
-    !safeToRemove.includes(assignment.employee_id)
+    !employeeIds.includes(assignment.employee_id)
   );
   
   await template.update({
-    assigned_employees: updatedAssignments
+    assigned_employees: JSON.stringify(updatedAssignments)
   });
   
   return template;
