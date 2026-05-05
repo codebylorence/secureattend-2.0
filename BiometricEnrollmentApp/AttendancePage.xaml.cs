@@ -453,8 +453,24 @@ namespace BiometricEnrollmentApp
                     }
                 }
                 
-                // Mark absent employees and missed clock-outs locally
-                var result = _dataService.MarkAbsentEmployees();
+                // Mark absent employees and missed clock-outs using the shift-aware engine
+                // This correctly handles consecutive shifts (e.g. Closing → Graveyard)
+                var shiftEngine = MainWindow.GlobalShiftEngine;
+                int markedAbsent = 0, markedMissed = 0;
+                if (shiftEngine != null)
+                {
+                    var evalResult = shiftEngine.EvaluateShifts(TimezoneHelper.Now, daysBack: 7);
+                    markedAbsent = evalResult.markedAbsent;
+                    markedMissed = evalResult.markedMissedClockOut;
+                }
+                else
+                {
+                    // Fallback to legacy path if engine not available
+                    var legacyResult = _dataService.MarkAbsentEmployees();
+                    markedAbsent = legacyResult.markedAbsent;
+                    markedMissed = legacyResult.markedMissedClockout;
+                }
+                var result = (markedAbsent: markedAbsent, markedMissedClockout: markedMissed);
                 
                 LogHelper.Write($"📊 Result: {result.markedAbsent} absent, {result.markedMissedClockout} missed clock-outs");
                 

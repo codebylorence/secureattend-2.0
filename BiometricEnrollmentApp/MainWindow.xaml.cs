@@ -73,6 +73,9 @@ namespace BiometricEnrollmentApp
             {
                 LogHelper.Write($"⏰ Running shift-based evaluation (last {daysToCheck} day(s))...");
 
+                // Reload settings so buffer changes take effect without restart
+                _shiftEngine.ReloadSettings();
+
                 // Force a schedule sync first so we have up-to-date schedule data
                 // before evaluating absences — this ensures past shifts are included
                 try

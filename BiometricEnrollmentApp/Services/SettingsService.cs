@@ -45,8 +45,8 @@ namespace BiometricEnrollmentApp.Services
                 cmd.ExecuteNonQuery();
 
                 cmd.CommandText = @"
-                    INSERT OR IGNORE INTO Settings (key, value)
-                    VALUES ('clock_out_grace_period_minutes', '10');
+                    INSERT OR REPLACE INTO Settings (key, value)
+                    VALUES ('clock_out_grace_period_minutes', '120');
                 ";
                 cmd.ExecuteNonQuery();
 
@@ -194,7 +194,7 @@ namespace BiometricEnrollmentApp.Services
                 LogHelper.Write($"💥 Error getting clock-out grace period: {ex.Message}");
             }
 
-            return 10; // Default to 10 minutes
+            return 120; // Default to 120 minutes (2 hours) — prevents premature Missed Clock-out marking
         }
 
         public bool SetClockOutGracePeriodMinutes(int minutes)
