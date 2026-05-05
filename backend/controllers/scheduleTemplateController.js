@@ -447,22 +447,27 @@ export const getBiometricSchedules = async (req, res) => {
     const { getCurrentDateInTimezone } = await import("../utils/timezone.js");
 
     // Include Active templates AND past templates from the last 7 days
-    // so the biometric app can still mark absent/missed clock-out for recent shifts
     const today = getCurrentDateInTimezone();
     const sevenDaysAgo = new Date(today);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
 
-    // Get all active templates with assigned employees
+    // ── Fetch all active employees in ONE query ──────────────────────────────
+    // Avoids N+1 queries (previously: one Employee.findOne per assignment row)
+    const allEmployees = await Employee.findAll({
+      where: { status: "Active" },
+      attributes: ["id", "employee_id", "firstname", "lastname"],
+    });
+    // Build a fast lookup map: employee_id → employee row
+    const employeeMap = new Map(allEmployees.map(e => [e.employee_id, e]));
+
+    // ── Fetch all relevant templates in ONE query ────────────────────────────
     const templates = await ScheduleTemplate.findAll({
       where: { 
         assigned_employees: { [Op.ne]: null },
         [Op.or]: [
           { status: "Active" },
-          // Include past templates whose specific_date is within the last 7 days
-          {
-            specific_date: { [Op.gte]: sevenDaysAgoStr }
-          }
+          { specific_date: { [Op.gte]: sevenDaysAgoStr } }
         ]
       },
       order: [["specific_date", "ASC"], ["createdAt", "DESC"]],
@@ -473,42 +478,40 @@ export const getBiometricSchedules = async (req, res) => {
     for (const template of templates) {
       let assignedEmployees = [];
       try {
-        assignedEmployees = template.assigned_employees ? JSON.parse(template.assigned_employees) : [];
+        const raw = template.assigned_employees;
+        assignedEmployees = typeof raw === "string" ? JSON.parse(raw) : (raw || []);
       } catch (e) {
         console.warn(`⚠️ Failed to parse assigned_employees for template ${template.id}`);
         continue;
       }
       
-      // Get employee details for each assigned employee
       for (const empAssignment of assignedEmployees) {
-        try {
-          const employee = await Employee.findOne({
-            where: { employee_id: empAssignment.employee_id, status: "Active" }
-          });
-          
-          if (employee) {
-            biometricSchedules.push({
-              Id: parseInt(`${template.id}${employee.id}`), // Unique ID for biometric app
-              Employee_Id: employee.employee_id,
-              Template_Id: template.id,
-              Shift_Name: template.shift_name,
-              Start_Time: template.start_time,
-              End_Time: template.end_time,
-              Days: template.days || [],
-              Specific_Date: template.specific_date,
-              Department: template.department,
-              Employee_Name: employee.fullname || `Employee ${employee.employee_id}`,
-              Assigned_By: empAssignment.assigned_by,
-              Assigned_Date: empAssignment.assigned_date,
-              Created_At: template.createdAt,
-              Updated_At: template.updatedAt
-            });
-          } else {
-            console.warn(`⚠️ Employee ${empAssignment.employee_id} not found or inactive - skipping schedule assignment`);
-          }
-        } catch (empError) {
-          console.warn(`⚠️ Failed to get employee details for ${empAssignment.employee_id}:`, empError.message);
+        // In-memory lookup — no DB query per employee
+        const employee = employeeMap.get(empAssignment.employee_id);
+        if (!employee) {
+          console.warn(`⚠️ Employee ${empAssignment.employee_id} not found or inactive - skipping`);
+          continue;
         }
+
+        const fullName = [employee.firstname, employee.lastname].filter(Boolean).join(" ")
+          || `Employee ${employee.employee_id}`;
+
+        biometricSchedules.push({
+          Id: parseInt(`${template.id}${employee.id}`),
+          Employee_Id: employee.employee_id,
+          Template_Id: template.id,
+          Shift_Name: template.shift_name,
+          Start_Time: template.start_time,
+          End_Time: template.end_time,
+          Days: template.days || [],
+          Specific_Date: template.specific_date,
+          Department: template.department,
+          Employee_Name: fullName,
+          Assigned_By: empAssignment.assigned_by,
+          Assigned_Date: empAssignment.assigned_date,
+          Created_At: template.createdAt,
+          Updated_At: template.updatedAt
+        });
       }
     }
     
