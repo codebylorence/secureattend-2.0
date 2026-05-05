@@ -1463,7 +1463,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
       
       if (operationsCompleted > 0) {
         toast.success('Assignments updated successfully!');
-        onSave();
+        await onSave();
       } else {
         toast.info('No changes made to assignments.');
       }
@@ -2085,8 +2085,16 @@ export default function CalendarScheduleView() {
   const refreshShiftDetailsData = async () => {
     try {
       setLoading(true);
-      const freshTemplates = await getTemplates();
+      // Small delay to allow the remote DB (Render/Postgres) to commit the write
+      // before we re-fetch. Without this, the GET can return stale data in production.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const [freshTemplates, freshEmployees] = await Promise.all([
+        getTemplates(),
+        fetchEmployees(),
+      ]);
       setTemplates(freshTemplates);
+      const activeEmployees = freshEmployees.filter(emp => emp.status === 'Active');
+      setEmployees(activeEmployees);
       
       if (selectedShiftData && showShiftDetailsModal) {
         const shiftsByDate = {};
@@ -2139,6 +2147,8 @@ export default function CalendarScheduleView() {
   const fetchTemplatesData = async () => {
     try {
       setLoading(true);
+      // Small delay to allow the remote DB to commit writes before re-fetching
+      await new Promise(resolve => setTimeout(resolve, 500));
       const data = await getTemplates();
       setTemplates(data);
     } catch (error) {

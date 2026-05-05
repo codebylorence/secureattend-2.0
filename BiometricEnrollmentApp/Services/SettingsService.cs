@@ -45,7 +45,7 @@ namespace BiometricEnrollmentApp.Services
                 cmd.ExecuteNonQuery();
 
                 cmd.CommandText = @"
-                    INSERT OR REPLACE INTO Settings (key, value)
+                    INSERT OR IGNORE INTO Settings (key, value)
                     VALUES ('clock_out_grace_period_minutes', '120');
                 ";
                 cmd.ExecuteNonQuery();

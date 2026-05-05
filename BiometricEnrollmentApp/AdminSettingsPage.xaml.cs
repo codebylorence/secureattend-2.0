@@ -75,9 +75,9 @@ namespace BiometricEnrollmentApp
                     return;
                 }
 
-                if (!int.TryParse(ClockOutGraceInput.Text.Trim(), out int clockOutGrace) || clockOutGrace < 0 || clockOutGrace > 60)
+                if (!int.TryParse(ClockOutGraceInput.Text.Trim(), out int clockOutGrace) || clockOutGrace < 0 || clockOutGrace > 480)
                 {
-                    MessageBox.Show("Clock-out grace period must be a number between 0 and 60 minutes.", "Invalid Input", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show("Clock-out grace period must be a number between 0 and 480 minutes.", "Invalid Input", MessageBoxButton.OK, MessageBoxImage.Warning);
                     ClockOutGraceInput.Focus();
                     return;
                 }
