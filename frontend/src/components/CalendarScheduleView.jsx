@@ -169,7 +169,7 @@ function ViewOnlyScheduleModal({ shiftData, onClose, employees }) {
                 </span>
               </div>
               <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1">
-                {shiftData.date} ÔÇó {shiftData.start_time} - {shiftData.end_time}
+                {shiftData.date} • {shiftData.start_time} - {shiftData.end_time}
               </p>
             </div>
           </div>
@@ -723,7 +723,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                   assigned_by: 'admin'
                 });
               } catch (assignErr) {
-                console.warn(`ÔÜá´©Å Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
+                console.warn(`⚠️ Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
               }
 
               results.push({ success: true, action: 'added', item: department });
@@ -845,7 +845,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                   assigned_by: 'admin'
                 });
               } catch (assignErr) {
-                console.warn(`ÔÜá´©Å Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
+                console.warn(`⚠️ Template created but failed to auto-assign team leader for ${department}:`, assignErr.message);
               }
             }
 
@@ -1287,7 +1287,7 @@ function ScheduleModal({ selectedDate, reassignShiftData, onClose, onSave, depar
                                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                                         ID: {employee.employee_id}
                                       </span>
-                                      <span className="text-gray-300">ÔÇó</span>
+                                      <span className="text-gray-300">•</span>
                                       <span className={`text-[10px] font-bold uppercase tracking-widest ${employee.position === 'Supervisor' ? 'text-purple-600' : 'text-blue-600'}`}>
                                         {employee.position}
                                       </span>
@@ -1492,7 +1492,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
               <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200">
                 {schedule.shift_name}
               </span>
-              <span className="text-gray-300">ÔÇó</span>
+              <span className="text-gray-300">•</span>
               <span className="text-xs font-semibold text-gray-600">
                 {schedule.start_time} - {schedule.end_time}
               </span>
@@ -1614,7 +1614,7 @@ function EmployeeAssignmentModal({ schedule, employees, onClose, onSave }) {
                         </div>
                       </div>
                       <div className={`text-xs font-semibold ${isDisabled ? 'text-gray-400' : 'text-gray-500'}`}>
-                        ID: <span className="font-mono">{employee.employee_id}</span> ÔÇó {employee.position || 'Employee'}
+                        ID: <span className="font-mono">{employee.employee_id}</span> • {employee.position || 'Employee'}
                       </div>
                     </div>
                   </label>
@@ -2180,7 +2180,7 @@ export default function CalendarScheduleView() {
       });
       setHolidayMap(map);
     } catch {
-      // Non-critical ÔÇö calendar still works without holidays
+      // Non-critical — calendar still works without holidays
     }
   };
 
@@ -2264,7 +2264,7 @@ export default function CalendarScheduleView() {
     })();
     const holiday = holidayMap[dateStr];
     if (holiday) {
-      toast.info(`Note: ${dateStr} is a ${holiday.type} ÔÇö "${holiday.name}"`);
+      toast.info(`Note: ${dateStr} is a ${holiday.type} — "${holiday.name}"`);
     }
     
     setSelectedDate(clickedDate);
@@ -2472,7 +2472,7 @@ export default function CalendarScheduleView() {
                     white-space: nowrap;
                   `;
                   label.title = `${holiday.type}: ${holiday.name}`;
-                  label.textContent = `­ƒÄî ${holiday.name}`;
+                  label.textContent = `🎌 ${holiday.name}`;
 
                   // Insert after the day number
                   const dayTop = info.el.querySelector('.fc-daygrid-day-top');
@@ -2654,3 +2654,4 @@ export default function CalendarScheduleView() {
     </div>
   );
 }
+
