@@ -62,8 +62,16 @@ namespace BiometricEnrollmentApp.Services
         {
             _connString  = connString;
             _dataService = new DataService();
+            ReloadSettings();
+        }
 
-            // Load grace period from persisted settings so the UI value is respected
+        /// <summary>
+        /// Reload configurable buffers from SettingsService.
+        /// Call this after the admin saves new attendance settings so changes
+        /// take effect immediately without restarting the app.
+        /// </summary>
+        public void ReloadSettings()
+        {
             try
             {
                 var settings = new SettingsService();
@@ -72,7 +80,7 @@ namespace BiometricEnrollmentApp.Services
                 LateClockOutBuffer  = TimeSpan.FromMinutes(clockOutGrace);
                 int earlyBuffer     = settings.GetEarlyClockInBufferHours();
                 EarlyClockInBuffer  = TimeSpan.FromHours(earlyBuffer);
-                LogHelper.Write($"⚙️ ShiftAttendanceEngine loaded settings — " +
+                LogHelper.Write($"⚙️ ShiftAttendanceEngine settings loaded — " +
                                 $"ClockInGrace: {ClockInGraceMinutes}min, " +
                                 $"ClockOutGrace: {clockOutGrace}min, " +
                                 $"EarlyBuffer: {earlyBuffer}h");
@@ -254,16 +262,29 @@ namespace BiometricEnrollmentApp.Services
             // Otherwise fall back to finding the active window from schedules
             if (!string.IsNullOrEmpty(session.ShiftStartTime) && !string.IsNullOrEmpty(session.ShiftEndTime))
             {
-                // Load overtime for the shift date
-                string shiftDateStr = session.ClockIn.ToString("yyyy-MM-dd");
+                // Use the attendance DATE (shift start date) as the reference — NOT the clock-in time.
+                // This is critical for early clock-ins that cross midnight:
+                // e.g. clocked in at 23:57 on 5/4 for a Graveyard shift dated 5/5 (00:00–08:00).
+                // Using clock-in (5/4) as reference anchors shiftStart to 5/4 00:00 and shiftEnd to
+                // 5/4 08:00, making isOvernight=false and AllowedEnd=09:00 on 5/4 — already past.
+                // Using the attendance date (5/5) correctly gives shiftEnd=5/5 08:00, AllowedEnd=09:00 on 5/5.
+                DateTime referenceTime = session.ClockIn; // fallback
+                if (!string.IsNullOrEmpty(session.Date) && DateTime.TryParse(session.Date, out var sessionDate))
+                    referenceTime = sessionDate; // anchor to shift date, not clock-in time
+
+                string shiftDateStr = session.Date ?? session.ClockIn.ToString("yyyy-MM-dd");
                 double ot = _dataService.GetOvertimeHours(employeeId, shiftDateStr);
                 window = ResolveShiftWindow(
                     employeeId,
                     session.ShiftName,
                     session.ShiftStartTime,
                     session.ShiftEndTime,
-                    session.ClockIn,
+                    referenceTime,
                     ot);
+
+                LogHelper.Write($"🔍 ClockOut window: shiftDate={shiftDateStr} ref={referenceTime:yyyy-MM-dd} " +
+                                $"start={window.ShiftStart:MM-dd HH:mm} end={window.ShiftEnd:MM-dd HH:mm} " +
+                                $"allowedEnd={window.AllowedEnd:MM-dd HH:mm} now={now:MM-dd HH:mm}");
             }
             else
             {
@@ -288,37 +309,30 @@ namespace BiometricEnrollmentApp.Services
                 return new ClockOutResult(false,
                     $"Clock-out not allowed. Shift window closed at {window.AllowedEnd:HH:mm}");
 
-            // Cap worked hours at MaxWorkedHours — overtime extends the window, NOT the hours
-            var raw    = now - session.ClockIn;
-            var capped = raw > MaxWorkedHours ? MaxWorkedHours : raw;
-
-            // Resolve overtime before capping so we know whether to extend the cap
+            // Resolve overtime before capping
             string shiftDate = window.ShiftStart.ToString("yyyy-MM-dd");
             double overtimeHours = _dataService.GetOvertimeHours(employeeId, shiftDate);
             bool hasOvertime = overtimeHours > 0;
 
-            // If clocking out after shift end:
-            // - Without overtime: cap at shift end (excess time not counted)
-            // - With overtime: cap at shift end + overtime hours (employee worked the extra time)
-            if (now > window.ShiftEnd)
-            {
-                TimeSpan cap;
-                if (hasOvertime)
-                {
-                    // Allow up to shift duration + assigned overtime hours
-                    var overtimeCap = window.ShiftEnd - session.ClockIn + TimeSpan.FromHours(overtimeHours);
-                    cap = overtimeCap > TimeSpan.Zero ? overtimeCap : capped;
-                }
-                else
-                {
-                    cap = window.ShiftEnd - session.ClockIn;
-                }
+            // ── Hours calculation ──────────────────────────────────────────────
+            // Early clock-ins must not count pre-shift waiting time.
+            // Effective start = max(ClockIn, ShiftStart)
+            // Effective end   = min(now, ShiftEnd)  [or ShiftEnd + OT if overtime assigned]
+            var effectiveStart = session.ClockIn < window.ShiftStart ? window.ShiftStart : session.ClockIn;
+            var shiftCap       = hasOvertime
+                ? window.ShiftEnd + TimeSpan.FromHours(overtimeHours)
+                : window.ShiftEnd;
+            var effectiveEnd   = now < shiftCap ? now : shiftCap;
 
-                if (cap > TimeSpan.Zero && cap < capped)
-                    capped = cap;
-            }
+            var worked = effectiveEnd - effectiveStart;
+            if (worked < TimeSpan.Zero) worked = TimeSpan.Zero;
+            if (worked > MaxWorkedHours) worked = MaxWorkedHours;
 
-            double totalHours = Math.Round(capped.TotalHours, 6);
+            double totalHours = Math.Round(worked.TotalHours, 6);
+
+            LogHelper.Write($"⏱️ Hours calc: clockIn={session.ClockIn:HH:mm} shiftStart={window.ShiftStart:HH:mm} " +
+                            $"effectiveStart={effectiveStart:HH:mm} now={now:HH:mm} shiftCap={shiftCap:HH:mm} " +
+                            $"effectiveEnd={effectiveEnd:HH:mm} worked={totalHours:F2}h");
 
             // Determine final status
             // If employee has overtime assigned for this shift date → mark as Overtime
@@ -429,6 +443,7 @@ namespace BiometricEnrollmentApp.Services
         private record SessionRow(
             long Id,
             string EmployeeId,
+            string Date,
             DateTime ClockIn,
             DateTime? ClockOut,
             string Status,
@@ -492,7 +507,7 @@ namespace BiometricEnrollmentApp.Services
             using var cmd = conn.CreateCommand();
             // Fetch sessions around the window date range
             cmd.CommandText = @"
-                SELECT id, clock_in, clock_out, status, shift_name,
+                SELECT id, date, clock_in, clock_out, status, shift_name,
                        IFNULL(shift_start_time,''), IFNULL(shift_end_time,'')
                 FROM AttendanceSessions
                 WHERE employee_id = $emp
@@ -507,20 +522,22 @@ namespace BiometricEnrollmentApp.Services
             using var r = cmd.ExecuteReader();
             if (!r.Read()) return null;
 
-            var clockInStr = r.IsDBNull(1) ? null : r.GetString(1);
+            var dateStr    = r.IsDBNull(1) ? "" : r.GetString(1);
+            var clockInStr = r.IsDBNull(2) ? null : r.GetString(2);
             if (string.IsNullOrEmpty(clockInStr) || !DateTime.TryParse(clockInStr, out var clockIn))
                 return null;
 
-            DateTime? clockOut = r.IsDBNull(2) ? null : DateTime.Parse(r.GetString(2));
+            DateTime? clockOut = r.IsDBNull(3) ? null : DateTime.Parse(r.GetString(3));
             return new SessionRow(
                 r.GetInt64(0),
                 employeeId,
+                dateStr,
                 clockIn,
                 clockOut,
-                r.GetString(3),
                 r.GetString(4),
                 r.GetString(5),
-                r.GetString(6));
+                r.GetString(6),
+                r.GetString(7));
         }
 
         private long? GetOpenSessionInWindow(string employeeId, ShiftWindow window)
@@ -603,7 +620,7 @@ namespace BiometricEnrollmentApp.Services
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
-                SELECT id, clock_in, clock_out, status,
+                SELECT id, date, clock_in, clock_out, status,
                        IFNULL(shift_name,''),
                        IFNULL(shift_start_time,''),
                        IFNULL(shift_end_time,'')
@@ -618,19 +635,21 @@ namespace BiometricEnrollmentApp.Services
             using var r = cmd.ExecuteReader();
             if (!r.Read()) return null;
 
-            var clockInStr = r.IsDBNull(1) ? null : r.GetString(1);
+            var dateStr    = r.IsDBNull(1) ? "" : r.GetString(1);
+            var clockInStr = r.IsDBNull(2) ? null : r.GetString(2);
             if (string.IsNullOrEmpty(clockInStr) || !DateTime.TryParse(clockInStr, out var clockIn))
                 return null;
 
             return new SessionRow(
                 r.GetInt64(0),
                 employeeId,
+                dateStr,
                 clockIn,
                 null,
-                r.GetString(3),
                 r.GetString(4),
                 r.GetString(5),
-                r.GetString(6));
+                r.GetString(6),
+                r.GetString(7));
         }
 
         private long InsertSession(

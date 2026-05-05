@@ -418,51 +418,66 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                // Show detailed employee information
-                EmployeeNameText.Text = $"{employeeName}\nID: {employeeId}";
-                EmployeeNameText.FontSize = 30;
+                // ── Employee identity ──────────────────────────────────────────
+                EmployeeNameText.Text      = $"{employeeName}  ·  ID: {employeeId}";
+                EmployeeNameText.FontSize  = 22;
+                EmployeeNameText.FontWeight = FontWeights.SemiBold;
                 EmployeeNameText.TextAlignment = TextAlignment.Left;
                 EmployeeNameText.Visibility = Visibility.Visible;
 
-                // Enhanced status message with side-by-side layout
+                // ── Resolve status display info ────────────────────────────────
                 var timeStr = TimezoneHelper.FormatTimeDisplay(timestamp);
-                var (statusColor, statusIcon, mainMessage, detailMessage) = GetOptimizedStatusInfo(status, timeStr, employeeId);
-                
-                // Set status icon
-                if (StatusIcon != null)
-                {
-                    StatusIcon.Text = statusIcon;
-                    StatusIcon.Visibility = Visibility.Visible;
-                }
-                
-                // Set main status message
-                StatusMessage.Text = mainMessage;
-                StatusMessage.FontSize = 22;
-                StatusMessage.TextAlignment = TextAlignment.Left;
-                StatusMessage.Foreground = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(statusColor));
+                var info    = GetStatusDisplayInfo(status, timeStr, employeeId);
+
+                // ── Status card colours ────────────────────────────────────────
+                var bgColor     = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(info.BgHex);
+                var borderColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(info.BorderHex);
+                var titleColor  = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(info.TitleHex);
+                var subColor    = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(info.SubHex);
+
+                StatusPanel.Background   = new System.Windows.Media.SolidColorBrush(bgColor);
+                StatusPanel.BorderBrush  = new System.Windows.Media.SolidColorBrush(borderColor);
+                StatusPanel.Visibility   = Visibility.Visible;
+
+                // ── Icon ──────────────────────────────────────────────────────
+                StatusIcon.Text       = info.Icon;
+                StatusIcon.Foreground = new System.Windows.Media.SolidColorBrush(titleColor);
+                StatusIcon.Visibility = Visibility.Visible;
+
+                // ── Title ─────────────────────────────────────────────────────
+                StatusMessage.Text       = info.Title;
+                StatusMessage.Foreground = new System.Windows.Media.SolidColorBrush(titleColor);
                 StatusMessage.Visibility = Visibility.Visible;
-                
-                // Set additional details
-                if (StatusDetails != null && !string.IsNullOrEmpty(detailMessage))
+
+                // ── Description ───────────────────────────────────────────────
+                StatusDetails.Text       = info.Description;
+                StatusDetails.Foreground = new System.Windows.Media.SolidColorBrush(subColor);
+                StatusDetails.Visibility = string.IsNullOrEmpty(info.Description)
+                    ? Visibility.Collapsed : Visibility.Visible;
+
+                // ── Extra info (e.g. next shift) ──────────────────────────────
+                if (StatusExtra != null)
                 {
-                    StatusDetails.Text = detailMessage;
-                    StatusDetails.Visibility = Visibility.Visible;
-                }
-                
-                // Show the status panel
-                if (StatusPanel != null)
-                {
-                    StatusPanel.Visibility = Visibility.Visible;
+                    StatusExtra.Text       = info.Extra;
+                    StatusExtra.Foreground = new System.Windows.Media.SolidColorBrush(subColor);
+                    StatusExtra.Visibility = string.IsNullOrEmpty(info.Extra)
+                        ? Visibility.Collapsed : Visibility.Visible;
                 }
 
-                // Try to load employee photo (skip for cancelled)
+                // ── Guidance hint ─────────────────────────────────────────────
+                if (StatusGuidance != null)
+                {
+                    StatusGuidance.Text       = info.Guidance;
+                    StatusGuidance.Foreground = new System.Windows.Media.SolidColorBrush(subColor);
+                    StatusGuidance.Visibility = string.IsNullOrEmpty(info.Guidance)
+                        ? Visibility.Collapsed : Visibility.Visible;
+                }
+
+                // ── Photo ─────────────────────────────────────────────────────
                 if (status != "Cancelled")
-                {
                     LoadEmployeePhoto(employeeId);
-                }
 
-                // Hide the result after appropriate delay
+                // ── Auto-hide ─────────────────────────────────────────────────
                 var hideDelay = status == "Cancelled" ? 4000 : 7000;
                 Task.Delay(hideDelay).ContinueWith(_ => Dispatcher.Invoke(HideEmployeeResult));
             }
@@ -472,21 +487,136 @@ namespace BiometricEnrollmentApp
             }
         }
 
-        private (string color, string icon, string mainMessage, string detailMessage) GetOptimizedStatusInfo(string status, string timeStr, string employeeId)
+        /// <summary>
+        /// All display strings and colours for each attendance status.
+        /// Only UI/display logic lives here — no backend changes.
+        /// </summary>
+        private record StatusDisplayInfo(
+            string Icon,
+            string Title,
+            string Description,
+            string Extra,
+            string Guidance,
+            string BgHex,
+            string BorderHex,
+            string TitleHex,
+            string SubHex);
+
+        private StatusDisplayInfo GetStatusDisplayInfo(string status, string timeStr, string employeeId)
         {
             return status switch
             {
-                "Present"          => ("#4CAF50", "✅", $"Successfully clocked in at {timeStr}", "Status: Present"),
-                "Late"             => ("#FF9800", "⏰", $"Clocked in late at {timeStr}", "Status: Late Arrival"),
-                "Clock-out"        => ("#2196F3", "👋", $"Successfully clocked out at {timeStr}", "Shift ended"),
-                "Clock-out Denied" => ("#FF5722", "🚫", "Shift has ended", "Clock-out not allowed"),
-                "Overtime"         => ("#9C27B0", "⭐", $"Clocked out during overtime at {timeStr}", "Overtime hours recorded"),
-                "Missed Clock-out" => ("#FFC107", "⚠️", $"Late clock-out at {timeStr}", "Beyond scheduled shift time"),
-                "DoubleTap"        => ("#FF5722", "⏳", "Please wait before scanning again", "Cooldown period active"),
-                "Cancelled"        => ("#9E9E9E", "❌", "Clock-out cancelled", "No changes made"),
-                "Not Scheduled"    => ("#FF5722", "📅", $"Not scheduled today", $"Employee {employeeId} — contact supervisor"),
-                "Outside Hours"    => ("#FF5722", "🕐", "Outside shift hours", "Not within scheduled work time"),
-                _                  => ("#4CAF50", "✅", $"Action completed at {timeStr}", $"Status: {status}")
+                // ── Success states (green) ────────────────────────────────────
+                "Present" => new StatusDisplayInfo(
+                    Icon:        "✔",
+                    Title:       "Time In Recorded",
+                    Description: $"Clocked in at {timeStr}  ·  Status: Present",
+                    Extra:       "",
+                    Guidance:    "",
+                    BgHex:       "#F0FDF4", BorderHex: "#86EFAC",
+                    TitleHex:    "#15803D", SubHex:    "#166534"),
+
+                "Late" => new StatusDisplayInfo(
+                    Icon:        "⏰",
+                    Title:       "Time In Recorded — Late",
+                    Description: $"Clocked in at {timeStr}  ·  Status: Late Arrival",
+                    Extra:       "",
+                    Guidance:    "",
+                    BgHex:       "#FFFBEB", BorderHex: "#FCD34D",
+                    TitleHex:    "#B45309", SubHex:    "#92400E"),
+
+                "Clock-out" => new StatusDisplayInfo(
+                    Icon:        "✔",
+                    Title:       "Time Out Recorded",
+                    Description: $"Clocked out at {timeStr}  ·  Shift complete",
+                    Extra:       "",
+                    Guidance:    "",
+                    BgHex:       "#EFF6FF", BorderHex: "#93C5FD",
+                    TitleHex:    "#1D4ED8", SubHex:    "#1E40AF"),
+
+                "Overtime" => new StatusDisplayInfo(
+                    Icon:        "⭐",
+                    Title:       "Time Out Recorded — Overtime",
+                    Description: $"Clocked out at {timeStr}  ·  Overtime hours logged",
+                    Extra:       "",
+                    Guidance:    "",
+                    BgHex:       "#F5F3FF", BorderHex: "#C4B5FD",
+                    TitleHex:    "#6D28D9", SubHex:    "#5B21B6"),
+
+                // ── Warning states (yellow / orange) ──────────────────────────
+                "No Active Shift" or "Not Scheduled" => new StatusDisplayInfo(
+                    Icon:        "⚠",
+                    Title:       "No Active Shift Found",
+                    Description: "You are not scheduled at this time.",
+                    Extra:       $"No shift scheduled at {timeStr}",
+                    Guidance:    "Please contact HR if this is incorrect.",
+                    BgHex:       "#FFFBEB", BorderHex: "#FCD34D",
+                    TitleHex:    "#B45309", SubHex:    "#92400E"),
+
+                "Outside Hours" => new StatusDisplayInfo(
+                    Icon:        "⚠",
+                    Title:       "Outside Shift Hours",
+                    Description: "You are not within your scheduled work time.",
+                    Extra:       $"Scan attempted at {timeStr}",
+                    Guidance:    "Check your assigned schedule or contact HR.",
+                    BgHex:       "#FFFBEB", BorderHex: "#FCD34D",
+                    TitleHex:    "#B45309", SubHex:    "#92400E"),
+
+                "Missed Clock-out" => new StatusDisplayInfo(
+                    Icon:        "⚠",
+                    Title:       "Missed Clock-Out",
+                    Description: $"Your previous shift ended without a clock-out.",
+                    Extra:       $"Recorded at {timeStr}",
+                    Guidance:    "Please contact HR to correct your attendance record.",
+                    BgHex:       "#FFFBEB", BorderHex: "#FCD34D",
+                    TitleHex:    "#B45309", SubHex:    "#92400E"),
+
+                "Shift Ended" => new StatusDisplayInfo(
+                    Icon:        "⚠",
+                    Title:       "Shift Has Ended",
+                    Description: "Your attendance was marked as Missed Clock-Out.",
+                    Extra:       "",
+                    Guidance:    "Please contact HR if this is incorrect.",
+                    BgHex:       "#FFFBEB", BorderHex: "#FCD34D",
+                    TitleHex:    "#B45309", SubHex:    "#92400E"),
+
+                // ── Error states (red) ────────────────────────────────────────
+                "Clock-out Denied" => new StatusDisplayInfo(
+                    Icon:        "✖",
+                    Title:       "Clock-Out Not Allowed",
+                    Description: "The shift window has already closed.",
+                    Extra:       "",
+                    Guidance:    "Please contact HR if this is incorrect.",
+                    BgHex:       "#FFF1F2", BorderHex: "#FCA5A5",
+                    TitleHex:    "#B91C1C", SubHex:    "#991B1B"),
+
+                "DoubleTap" => new StatusDisplayInfo(
+                    Icon:        "✖",
+                    Title:       "Scan Too Soon",
+                    Description: "Please wait a moment before scanning again.",
+                    Extra:       "",
+                    Guidance:    "",
+                    BgHex:       "#FFF1F2", BorderHex: "#FCA5A5",
+                    TitleHex:    "#B91C1C", SubHex:    "#991B1B"),
+
+                "Cancelled" => new StatusDisplayInfo(
+                    Icon:        "✖",
+                    Title:       "Clock-Out Cancelled",
+                    Description: "No changes were made to your attendance.",
+                    Extra:       "",
+                    Guidance:    "",
+                    BgHex:       "#F8FAFC", BorderHex: "#CBD5E1",
+                    TitleHex:    "#475569", SubHex:    "#64748B"),
+
+                // ── Fallback ──────────────────────────────────────────────────
+                _ => new StatusDisplayInfo(
+                    Icon:        "✔",
+                    Title:       "Attendance Recorded",
+                    Description: $"Recorded at {timeStr}  ·  Status: {status}",
+                    Extra:       "",
+                    Guidance:    "",
+                    BgHex:       "#F0FDF4", BorderHex: "#86EFAC",
+                    TitleHex:    "#15803D", SubHex:    "#166534"),
             };
         }
 
@@ -494,26 +624,26 @@ namespace BiometricEnrollmentApp
         {
             try
             {
-                EmployeeNameText.Visibility = Visibility.Collapsed;
-                StatusMessage.Visibility = Visibility.Collapsed;
-                EmployeePhoto.Visibility = Visibility.Collapsed;
-                DefaultUserIcon.Visibility = Visibility.Visible;
-                
-                // Hide the status panel and its components
-                if (StatusPanel != null)
-                {
-                    StatusPanel.Visibility = Visibility.Collapsed;
-                }
-                if (StatusIcon != null)
-                {
-                    StatusIcon.Visibility = Visibility.Collapsed;
-                }
-                if (StatusDetails != null)
-                {
-                    StatusDetails.Visibility = Visibility.Collapsed;
-                }
-                
-                UpdateInstruction("Place your finger to Clock-In/Clock-Out.");
+                // Reset name/ID label back to idle prompt
+                EmployeeNameText.Text       = "Awaiting scan...";
+                EmployeeNameText.FontSize   = 28;
+                EmployeeNameText.FontWeight = FontWeights.Bold;
+                EmployeeNameText.Visibility = Visibility.Visible;
+
+                // Hide photo
+                EmployeePhoto.Visibility    = Visibility.Collapsed;
+                DefaultUserIcon.Visibility  = Visibility.Visible;
+
+                // Hide status card and all its children
+                StatusPanel.Visibility      = Visibility.Collapsed;
+                StatusIcon.Visibility       = Visibility.Collapsed;
+                StatusMessage.Visibility    = Visibility.Collapsed;
+                StatusDetails.Visibility    = Visibility.Collapsed;
+
+                if (StatusExtra    != null) StatusExtra.Visibility    = Visibility.Collapsed;
+                if (StatusGuidance != null) StatusGuidance.Visibility = Visibility.Collapsed;
+
+                UpdateInstruction("Place finger to scan");
             }
             catch { }
         }

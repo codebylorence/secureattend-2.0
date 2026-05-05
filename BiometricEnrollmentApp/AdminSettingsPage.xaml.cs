@@ -102,6 +102,9 @@ namespace BiometricEnrollmentApp
                     MessageBox.Show("Attendance settings saved successfully!", "Settings Saved", MessageBoxButton.OK, MessageBoxImage.Information);
                     LogHelper.Write($"✅ Attendance settings updated - Late: {lateThreshold}min, Clock-in Grace: {clockInGrace}min, Clock-out Grace: {clockOutGrace}min, Early Buffer: {earlyBuffer}h, Clock-out Confirmation: {ClockOutConfirmationCheckBox.IsChecked == true}");
                     
+                    // Reload settings in the global ShiftAttendanceEngine so changes take effect immediately
+                    MainWindow.GlobalShiftEngine?.ReloadSettings();
+                    
                     // Clear configuration cache so new settings take effect immediately
                     ClearConfigurationCache();
                 }

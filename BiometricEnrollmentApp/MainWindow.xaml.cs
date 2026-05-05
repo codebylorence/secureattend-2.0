@@ -18,6 +18,8 @@ namespace BiometricEnrollmentApp
 
         private readonly ShiftAttendanceEngine _shiftEngine;
 
+        public static ShiftAttendanceEngine? GlobalShiftEngine { get; private set; }
+
         public MainWindow()
         {
             InitializeComponent();
@@ -25,6 +27,7 @@ namespace BiometricEnrollmentApp
             // Initialize global sync service
             _syncService = new SyncService(_dataService, _apiService);
             _shiftEngine = new ShiftAttendanceEngine(_dataService.ConnectionString);
+            GlobalShiftEngine = _shiftEngine;
             
             InitializeApp();
         }

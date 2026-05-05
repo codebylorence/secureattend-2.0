@@ -190,8 +190,11 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatTime(attendance.clock_out)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {(() => {
-                            // Show actual worked hours from clock in/out only
-                            // overtime_hours is stored separately and NOT added to total display
+                            // Use total_hours from DB (set by biometric app with correct capping logic).
+                            // Fall back to clock_out - clock_in only if total_hours is not available.
+                            if (attendance.total_hours != null && attendance.total_hours > 0) {
+                              return `${parseFloat(attendance.total_hours).toFixed(2)} hrs`;
+                            }
                             if (attendance.clock_in && attendance.clock_out) {
                               const clockIn = new Date(attendance.clock_in);
                               const clockOut = new Date(attendance.clock_out);
