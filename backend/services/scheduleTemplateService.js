@@ -263,7 +263,7 @@ export const assignEmployeesToTemplate = async (templateId, employeeIds, assigne
   });
   
   await template.update({
-    assigned_employees: JSON.stringify(allAssignments)
+    assigned_employees: allAssignments
   });
   
   console.log(`✅ Successfully assigned ${newAssignments.length} employees to template ${templateId} (${template.department} - ${template.shift_name})`);
@@ -293,7 +293,7 @@ export const removeEmployeesFromTemplate = async (templateId, employeeIds) => {
   );
   
   await template.update({
-    assigned_employees: JSON.stringify(updatedAssignments)
+    assigned_employees: updatedAssignments
   });
   
   return template;
