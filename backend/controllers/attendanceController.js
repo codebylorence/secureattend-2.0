@@ -436,7 +436,7 @@ export const getAttendances = async (req, res) => {
 
         // Use raw query to join Attendances with schedule_templates
         // Schedules are stored in schedule_templates with assigned_employees JSON
-        const templateTable = isPostgres ? '"ScheduleTemplates"' : 'schedule_templates';
+        const templateTable = isPostgres ? 'schedule_templates' : 'schedule_templates';
         const attendancesTable = isPostgres ? '"Attendances"' : '`Attendances`';
         const empMatch = isPostgres
           ? `st.assigned_employees::text LIKE '%' || a.employee_id || '%'`

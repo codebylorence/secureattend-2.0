@@ -120,7 +120,7 @@ export const getDTR = async (req, res) => {
     // Fetch shift info for the range via schedule_templates
     const dialect = sequelize.getDialect();
     const isPostgres = dialect === 'postgres';
-    const templateTable = isPostgres ? '"ScheduleTemplates"' : 'schedule_templates';
+    const templateTable = isPostgres ? 'schedule_templates' : 'schedule_templates';
     const empMatch = isPostgres
       ? `st.assigned_employees::text LIKE '%' || $1 || '%'`
       : `st.assigned_employees LIKE CONCAT('%', :emp_id, '%')`;
