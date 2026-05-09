@@ -1,6 +1,29 @@
 /**
- * Utility functions for consistent 24-hour time formatting across the app
+ * Utility functions for consistent time formatting across the app
  */
+
+/**
+ * Format a datetime string to 12-hour format (hh:MM AM/PM) — for clock in/out display
+ * @param {string} dateTimeString - DateTime string (ISO format or Date string)
+ * @returns {string} - Time in "hh:MM AM/PM" format e.g. "08:30 AM"
+ */
+export const formatDateTime12 = (dateTimeString) => {
+  if (!dateTimeString) return "-";
+
+  try {
+    const date = new Date(dateTimeString);
+    if (isNaN(date.getTime())) return "-";
+
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch (error) {
+    console.warn('Error formatting datetime:', dateTimeString, error);
+    return "-";
+  }
+};
 
 /**
  * Format time string to 24-hour format (HH:MM:SS)

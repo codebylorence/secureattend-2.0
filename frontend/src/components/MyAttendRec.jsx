@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa6";
 import { getAttendances } from "../api/AttendanceApi";
-import { formatDateTime24 } from "../utils/timeFormat";
+import { formatDateTime12 } from "../utils/timeFormat";
 
 export default function MyAttendRec() {
   const [attendances, setAttendances] = useState([]);
@@ -49,7 +49,7 @@ export default function MyAttendRec() {
   };
 
   const formatTime = (dateString) => {
-    return formatDateTime24(dateString);
+    return formatDateTime12(dateString);
   };
 
   const getDayOfWeek = (dateString) => {

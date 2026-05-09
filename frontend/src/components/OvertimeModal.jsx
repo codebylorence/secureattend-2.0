@@ -51,13 +51,13 @@ const OvertimeModal = ({ isOpen, onClose }) => {
         console.error('❌ Failed to fetch eligible employees:', response.status, response.statusText);
         const errorText = await response.text();
         console.error('❌ Error response:', errorText);
-        toast.error('No available employees. Employees must be scheduled today and have clocked in.', {
+        toast.error('No available employees. Employees must be scheduled today and have clocked in but not yet clocked out.', {
           autoClose: 5000
         });
       }
     } catch (error) {
       console.error('❌ Error fetching eligible employees:', error);
-      toast.error('No available employees. Please check if employees are scheduled and have clocked in today.', {
+      toast.error('No available employees. Please check if employees are clocked in and have not yet clocked out.', {
         autoClose: 5000
       });
     }
@@ -265,7 +265,7 @@ const OvertimeModal = ({ isOpen, onClose }) => {
                         </div>
                         <p className="text-gray-900 font-semibold mb-1">No eligible employees</p>
                         <p className="text-sm text-gray-500 max-w-sm mx-auto mb-4">
-                          Employees must have clocked in today (Present/Late) and not already have overtime assigned.
+                          Employees must have clocked in today and not yet clocked out to be eligible for overtime.
                         </p>
                       </div>
                     ) : (

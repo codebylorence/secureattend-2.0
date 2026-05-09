@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { FaClock, FaSync, FaExclamationTriangle } from "react-icons/fa";
 import { getTodayAttendances } from "../api/AttendanceApi";
 import { isAuthenticated } from "../utils/auth";
-import { formatDateTime24 } from "../utils/timeFormat";
+import { formatDateTime12 } from "../utils/timeFormat";
 
 export default function TodaysAttendance({ statusFilter, zoneFilter, searchTerm, supervisorView = false }) {
   const [attendances, setAttendances] = useState([]);
@@ -77,7 +77,7 @@ export default function TodaysAttendance({ statusFilter, zoneFilter, searchTerm,
   };
 
   const formatTime = (dateString) => {
-    return formatDateTime24(dateString);
+    return formatDateTime12(dateString);
   };
 
   // Filter attendances based on props

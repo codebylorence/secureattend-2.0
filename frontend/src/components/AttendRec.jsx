@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa";
 import { MdDelete } from "react-icons/md";
 import { getAttendances, deleteAttendance } from "../api/AttendanceApi";
-import { formatDateTime24 } from "../utils/timeFormat";
+import { formatDateTime12 } from "../utils/timeFormat";
 import ConfirmationModal from "./ConfirmationModal";
 import { toast } from "react-toastify";
 
@@ -91,7 +91,7 @@ export default function AttendRec({ zoneFilter = "All Zone", searchTerm = "", st
   };
 
   const formatTime = (dateString) => {
-    return formatDateTime24(dateString);
+    return formatDateTime12(dateString);
   };
 
   const handleDelete = async () => {

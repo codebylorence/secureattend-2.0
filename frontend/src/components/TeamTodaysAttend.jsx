@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaClock } from "react-icons/fa6";
 import { getTodayAttendances, getAttendances } from "../api/AttendanceApi";
-import { formatDateTime24 } from "../utils/timeFormat";
+import { formatDateTime12 } from "../utils/timeFormat";
 
 export default function TeamTodaysAttend({ department, statusFilter, searchTerm }) {
   const [attendances, setAttendances] = useState([]);
@@ -48,7 +48,7 @@ export default function TeamTodaysAttend({ department, statusFilter, searchTerm 
   };
 
   const formatTime = (dateString) => {
-    return formatDateTime24(dateString);
+    return formatDateTime12(dateString);
   };
 
   // Apply additional filters (status and search)

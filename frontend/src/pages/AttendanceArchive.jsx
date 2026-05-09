@@ -7,7 +7,7 @@ import {
 } from "../api/AttendanceApi";
 import ConfirmationModal from "../components/ConfirmationModal";
 import { toast } from "react-toastify";
-import { formatDateTime24 } from "../utils/timeFormat";
+import { formatDateTime12 } from "../utils/timeFormat";
 
 const statusColors = {
   Present: "bg-green-100 text-green-800",
@@ -194,10 +194,10 @@ export default function AttendanceArchive() {
                         {record.employee_name || record.employee_id}
                       </td>
                       <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">
-                        {formatDateTime24(record.clock_in) || "—"}
+                        {formatDateTime12(record.clock_in) || "—"}
                       </td>
                       <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">
-                        {formatDateTime24(record.clock_out) || "—"}
+                        {formatDateTime12(record.clock_out) || "—"}
                       </td>
                       <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">
                         {record.department || "—"}

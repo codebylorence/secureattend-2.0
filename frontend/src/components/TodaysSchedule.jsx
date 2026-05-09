@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { FaClock, FaCalendarAlt, FaUserCheck } from "react-icons/fa";
 import { getTodayAttendances } from "../api/AttendanceApi";
 import { getEmployeeScheduleById } from "../api/ScheduleApi";
-import { formatDateTime24, formatTime24Short } from "../utils/timeFormat";
+import { formatDateTime12, formatTime24Short } from "../utils/timeFormat";
 
 export default function TodaysSchedule() {
   const [status, setStatus] = useState("Not Clocked In");
@@ -156,7 +156,7 @@ export default function TodaysSchedule() {
 
   const formatTime = (date) => {
     if (!date) return "-";
-    return formatDateTime24(date);
+    return formatDateTime12(date);
   };
 
   const getStatusColor = () => {

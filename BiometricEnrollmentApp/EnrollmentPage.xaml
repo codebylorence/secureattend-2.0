@@ -270,7 +270,7 @@
                                 <Button Grid.Column="1" x:Name="RefreshRecordsBtn" Click="RefreshRecordsBtn_Click" Content="Refresh List" Height="38"/>
                             </Grid>
 
-                            <DataGrid x:Name="EnrollmentsGrid" Grid.Row="1" 
+                            <DataGrid x:Name="EnrollmentsGrid" Grid.Row="1"
                                     AutoGenerateColumns="False" 
                                     IsReadOnly="True" 
                                     CanUserResizeRows="False"
@@ -286,7 +286,10 @@
                                     FontSize="13"
                                     SelectionMode="Single"
                                     SelectionUnit="FullRow"
-                                    AlternatingRowBackground="#F8FAFC">
+                                    AlternatingRowBackground="#F8FAFC"
+                                    ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                    MaxHeight="500">
                                 
                                 <DataGrid.Resources>
                                     <Style TargetType="DataGridColumnHeader">

@@ -956,8 +956,8 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
     
     console.log(`📅 [OVERTIME] Fetching overtime eligible employees for ${today} (${todayWeekday}) in timezone ${timezone}`);
     
-    // Step 1: Get all employees who have clocked in today (Present or Late), with or without clock out
-    console.log(`🔍 [OVERTIME] Step 1: Querying attendances for date=${today}, status IN (Present, Late), clock_in NOT NULL`);
+    // Step 1: Get all employees who have clocked in today (Present or Late) and have NOT yet clocked out
+    console.log(`🔍 [OVERTIME] Step 1: Querying attendances for date=${today}, status IN (Present, Late), clock_in NOT NULL, clock_out IS NULL`);
     
     const todayAttendances = await Attendance.findAll({
       where: {
@@ -967,19 +967,20 @@ export const getOvertimeEligibleEmployees = async (req, res) => {
         },
         clock_in: {
           [Op.not]: null
-        }
+        },
+        clock_out: null
       }
     });
 
-    console.log(`📊 [OVERTIME] Found ${todayAttendances.length} employees who clocked in today`);
+    console.log(`📊 [OVERTIME] Found ${todayAttendances.length} employees who are currently clocked in (no clock-out yet)`);
     if (todayAttendances.length > 0) {
       todayAttendances.forEach(a => {
-        console.log(`   👤 ${a.employee_id}: ${a.status}, in: ${a.clock_in}, out: ${a.clock_out || 'not yet'}`);
+        console.log(`   👤 ${a.employee_id}: ${a.status}, in: ${a.clock_in}, out: ${a.clock_out || 'still clocked in'}`);
       });
     }
 
     if (todayAttendances.length === 0) {
-      console.log(`⚠️ [OVERTIME] No employees have clocked in today, returning empty array`);
+      console.log(`⚠️ [OVERTIME] No employees are currently clocked in without a clock-out, returning empty array`);
       console.log('='.repeat(80));
       return res.status(200).json([]);
     }

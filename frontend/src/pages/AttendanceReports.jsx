@@ -944,7 +944,7 @@ export default function AttendanceReports() {
     const { employee, period, summary, rows } = dtr;
     const fullName = `${employee.lastname}, ${employee.firstname}`.toUpperCase();
     return (
-      <div className="dtr-block mb-10 page-break-after">
+      <div className="dtr-block mb-10">
         <div className="text-center mb-3">
           <p className="text-[10px] text-gray-500 uppercase tracking-widest">Civil Service Form No. 48</p>
           <h2 className="text-base font-bold uppercase tracking-wide">Daily Time Record</h2>
@@ -965,7 +965,7 @@ export default function AttendanceReports() {
           <thead>
             <tr className="bg-gray-100">
               {["Day","","Shift","Shift Start","Shift End","Time In","Time Out","Hours","Late","Undertime","Remarks"].map((h,i) => (
-                <th key={i} className="border border-gray-300 px-2 py-1.5 text-center">{h}</th>
+                <th key={i} className="border border-gray-300 px-2 py-1.5 text-center uppercase">{h}</th>
               ))}
             </tr>
           </thead>
@@ -973,16 +973,16 @@ export default function AttendanceReports() {
             {rows.map(row => (
               <tr key={row.date} className={`${row.isHoliday?"bg-red-50":""} hover:bg-blue-50/30`}>
                 <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.day}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center text-gray-500">{row.dayName.slice(0,3)}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center text-gray-600">{row.shift||"—"}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center font-mono text-gray-600">{row.shiftStart||"—"}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center font-mono text-gray-600">{row.shiftEnd||"—"}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.timeIn||"—"}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.timeOut||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-left text-gray-500">{row.dayName.slice(0,3)}</td>
+                <td className="border border-gray-200 px-2 py-1 text-left text-gray-600">{row.shift||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-left font-mono text-gray-600">{row.shiftStart||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-left font-mono text-gray-600">{row.shiftEnd||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-left font-mono">{row.timeIn||"—"}</td>
+                <td className="border border-gray-200 px-2 py-1 text-left font-mono">{row.timeOut||"—"}</td>
                 <td className="border border-gray-200 px-2 py-1 text-center font-mono">{row.hours||"—"}</td>
                 <td className={`border border-gray-200 px-2 py-1 text-center font-medium ${row.late ? 'text-orange-600' : 'text-gray-400'}`}>{row.late||"—"}</td>
                 <td className={`border border-gray-200 px-2 py-1 text-center font-medium ${row.undertime ? 'text-blue-600' : 'text-gray-400'}`}>{row.undertime||"—"}</td>
-                <td className="border border-gray-200 px-2 py-1 text-center">
+                <td className="border border-gray-200 px-2 py-1 text-left">
                   {row.isHoliday && row.remarks==="H"
                     ? <span className="text-red-600 font-bold text-[10px]" title={row.holidayName}>H — {row.holidayName}</span>
                     : <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${DTR_REMARK_STYLE[row.remarks]||"bg-gray-100 text-gray-600"}`}>{row.remarks}</span>
@@ -1006,7 +1006,7 @@ export default function AttendanceReports() {
             <span key={k} className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${DTR_REMARK_STYLE[k]}`}>{k} = {v}</span>
           ))}
         </div>
-        <div className="mt-6 flex justify-between text-xs">
+        <div className="dtr-signatures mt-6 flex justify-between text-xs">
           {["Employee Signature","Verified by (Supervisor)","Approved by (HR/Admin)"].map(label => (
             <div key={label} className="text-center w-48">
               <div className="border-b border-gray-400 mb-1 h-8"></div>
@@ -1035,19 +1035,18 @@ export default function AttendanceReports() {
     return matchesSearch && matchesStatus;
   });
 
-  // Helper function to format time in 24-hour format
+  // Helper function to format time in 12-hour format (hh:MM AM/PM)
   const formatTime = (timeString) => {
     if (!timeString || timeString === "N/A") return "N/A";
-    
+
     try {
       const date = new Date(timeString);
       if (isNaN(date.getTime())) return "N/A";
-      
-      // Format as HH:MM in 24-hour format
+
       return date.toLocaleTimeString('en-US', {
-        hour12: false,
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true,
       });
     } catch (error) {
       return "N/A";
@@ -2206,10 +2205,48 @@ export default function AttendanceReports() {
             @media print {
               body * { visibility: hidden !important; }
               #dtr-print-area, #dtr-print-area * { visibility: visible !important; }
-              #dtr-print-area { position: fixed; top: 0; left: 0; width: 100%; }
-              .page-break-after { page-break-after: always; }
+              #dtr-print-area {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                background: white;
+              }
+              .dtr-employee-page {
+                width: 210mm;
+                min-height: 297mm;
+                height: 297mm;
+                box-sizing: border-box;
+                padding: 15mm;
+                page-break-after: always;
+                break-after: page;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                display: flex;
+                flex-direction: column;
+                background: white;
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                margin: 0 !important;
+              }
+              .dtr-employee-page:last-child {
+                page-break-after: auto;
+                break-after: auto;
+              }
+              .dtr-employee-page .dtr-block {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+              }
+              .dtr-employee-page .dtr-block table {
+                flex: 1;
+              }
+              .dtr-employee-page .dtr-signatures {
+                margin-top: auto !important;
+              }
               .no-print { display: none !important; }
-              @page { size: A4 portrait; margin: 15mm; }
+              @page { size: A4 portrait; margin: 0; }
             }
           `}</style>
 
@@ -2330,9 +2367,12 @@ export default function AttendanceReports() {
               </div>
             )}
             {!dtrLoading && dtrBatchData.length > 0 && (
-              <div className="space-y-6">
-                {dtrBatchData.map(dtr => (
-                  <div key={dtr.employee.employee_id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+              <div>
+                {dtrBatchData.map((dtr) => (
+                  <div
+                    key={dtr.employee.employee_id}
+                    className="dtr-employee-page bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6"
+                  >
                     <DTRTableComponent dtr={dtr} />
                   </div>
                 ))}
